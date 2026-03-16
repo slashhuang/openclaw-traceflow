@@ -98,7 +98,7 @@ def get_quote_from_futu(
         
         # 如果有 websocket_key，先进行认证
         if futu_config and futu_config.get("websocket_key"):
-            from futu import RET_OK, TrdAccType
+            from futu import TrdAccType
             ws_key = futu_config.get("websocket_key")
             # 使用 set_auth 进行认证（futu-api 9.x+）
             try:
