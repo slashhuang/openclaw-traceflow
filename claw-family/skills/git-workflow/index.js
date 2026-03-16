@@ -210,15 +210,6 @@ function createPullRequest(branchName, title, body) {
   }
 }
 
-/**
- * 生成 PR 创建链接（fallback 方案）
- */
-function generatePRLink(branchName, title, body) {
-  const encodedTitle = encodeURIComponent(title);
-  const encodedBody = encodeURIComponent(body);
-  return `https://github.com/${REPO_OWNER}/${REPO_NAME}/compare/main...${REPO_OWNER}:${branchName}?expand=1&title=${encodedTitle}&body=${encodedBody}`;
-}
-
 // 存储当前活动的 worktree 信息
 const activeWorktrees = new Map();
 
@@ -333,25 +324,9 @@ module.exports = {
         try {
           prUrl = createPullRequest(worktreeInfo.branch, prTitle, prBody);
         } catch (apiError) {
-          // API 失败，生成手动创建链接
-          prUrl = generatePRLink(worktreeInfo.branch, prTitle, prBody);
-          return {
-            reply: `✅ 代码已提交并推送！
-
-🔀 分支：\`${worktreeInfo.branch}\`
-👤 Commit Author: ${GIT_AUTHOR_NAME} <${GIT_AUTHOR_EMAIL}>
-
-⚠️ 自动创建 PR 失败：${apiError.message}
-
-请手动创建 PR，点击链接：
-${prUrl}
-
----
-💡 配置 GITHUB_TOKEN 后可自动创建 PR:
-1. 访问 https://github.com/settings/tokens 创建具有 repo 权限的 token
-2. 在运行 OpenClaw 的环境中设置：openclaw.env.json 中添加 "GITHUB_TOKEN":"ghp_xxx"，或启动前 export GITHUB_TOKEN=xxx
-3. 详见 docs/PR-WORKFLOW.md §6`
-          };
+          // API 失败，直接报错，不提供手动创建链接
+          activeWorktrees.delete(session.id || 'default');
+          throw new Error(`自动创建 PR 失败：${apiError.message}\n\n请确保已配置 GITHUB_TOKEN：\n1. 在 ~/.zshrc 中添加 export GH_TOKEN="ghp_xxx"\n2. 或在仓库根目录 .env 文件中添加 GITHUB_TOKEN=ghp_xxx\n3. 重启 OpenClaw 后重试`);
         }
 
         // 4. 清理 session
@@ -424,8 +399,7 @@ ${prUrl}
         const prUrl = createPullRequest(branchName, prTitle, prBody);
         return { reply: `✅ PR 创建成功！\n\n🔗 ${prUrl}` };
       } catch (error) {
-        const fallbackUrl = generatePRLink(branchName, prTitle, prBody);
-        return { reply: `⚠️ API 创建失败：${error.message}\n\n请手动创建：${fallbackUrl}` };
+        return { reply: `❌ API 创建失败：${error.message}\n\n请确保已配置 GITHUB_TOKEN：\n1. 在 ~/.zshrc 中添加 export GH_TOKEN="ghp_xxx"\n2. 或在仓库根目录 .env 文件中添加 GITHUB_TOKEN=ghp_xxx\n3. 重启 OpenClaw 后重试` };
       }
     }
   },
