@@ -5,30 +5,60 @@
 set -e
 
 # 获取 GITHUB_TOKEN
-# 严格只从 .env 文件读取（不从 openclaw.env.json 读取）
+# 优先级：全局环境变量 > 项目 .env 文件 > ~/.zshrc 中的 GH_TOKEN
 get_token() {
-    # 优先级：环境变量 > .env 文件
+    # 1️⃣ 优先使用全局环境变量 GITHUB_TOKEN 或 GH_TOKEN
+    #    这两个变量可以在 ~/.zshrc、~/.bashrc 或启动脚本中设置
     if [ -n "$GITHUB_TOKEN" ]; then
         echo "$GITHUB_TOKEN"
-        return
+        return 0
     fi
-    
+
+    if [ -n "$GH_TOKEN" ]; then
+        echo "$GH_TOKEN"
+        return 0
+    fi
+
+    # 2️⃣ 从项目 .env 文件读取（本地开发备用）
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local repo_root="$(cd "$script_dir/../../.." && pwd)"
-    
-    # 从 .env 读取（唯一来源）
     local env_file="$repo_root/.env"
+
     if [ -f "$env_file" ]; then
-        local token=$(grep -o 'GITHUB_TOKEN=[^[:space:]]*' "$env_file" | cut -d'=' -f2)
+        local token=$(grep -o 'GITHUB_TOKEN=[^[:space:]]*' "$env_file" 2>/dev/null | cut -d'=' -f2)
         if [ -n "$token" ]; then
             echo "$token"
-            return
+            return 0
         fi
     fi
-    
+
+    # 3️⃣ 从 ~/.zshrc 或 ~/.bashrc 读取（云端服务器备用）
+    local home_rc=""
+    if [ -f "$HOME/.zshrc" ]; then
+        home_rc="$HOME/.zshrc"
+    elif [ -f "$HOME/.bashrc" ]; then
+        home_rc="$HOME/.bashrc"
+    fi
+
+    if [ -n "$home_rc" ]; then
+        local token=$(grep -o 'GH_TOKEN=[^[:space:]]*' "$home_rc" 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+        if [ -n "$token" ]; then
+            echo "$token"
+            return 0
+        fi
+    fi
+
+    # 全部失败则报错
     echo "" >&2
-    echo "Error: GITHUB_TOKEN not found in .env file" >&2
-    echo "Please create .env file in repo root with: GITHUB_TOKEN=ghp_xxx" >&2
+    cat >&2 << 'EOF'
+Error: GITHUB_TOKEN not found.
+
+Please set GITHUB_TOKEN in one of these ways:
+1. Global env: export GITHUB_TOKEN="ghp_xxx" in ~/.zshrc or ~/.bashrc
+2. Project .env: Create .env file in repo root with GITHUB_TOKEN=ghp_xxx
+3. Startup script: Set before running openclaw
+
+EOF
     return 1
 }
 

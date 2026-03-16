@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: PRD 驱动的仓库修改自动化流程。自动创建 worktree 分支、推送代码、调用 GitHub API 自动创建 PR。
+description: PRD 驱动的仓库修改自动化流程。自动创建 worktree 分支、推送代码、调用 GitHub API 自动创建 PR。**涉及 OpenClaw 修改时必须查阅源码**。
 metadata:
   {
     "openclaw": {
@@ -33,9 +33,42 @@ metadata:
 
 ## 核心原则
 1. **自动创建 PR**：推送分支后必须调用 GitHub API 自动创建 PR，**禁止**让用户手动在浏览器创建
-2. **Token 获取**：优先级：环境变量 `GITHUB_TOKEN` > `.env` 文件 > 报错
+2. **Token 获取**：优先级：环境变量 `GITHUB_TOKEN`/`GH_TOKEN` > `.env` 文件 > `~/.zshrc` 中的配置 > 报错
 3. **直接返回 PR 链接**：给用户的结果必须是已创建的 PR 链接（如 `https://github.com/slashhuang/claw-family/pull/66`）
 4. **失败处理**：如 API 创建失败，必须报错并说明原因（如 Token 无效、权限不足），不能降级为手动流程
+5. **OpenClaw 源码优先**：涉及 OpenClaw 核心逻辑的修改，**必须**先查阅 openclaw 源码，不能靠猜测
+
+## OpenClaw 源码查阅指引
+
+**何时需要查阅源码**：
+- 修改 OpenClaw 配置（`config/openclaw.partial.json`）
+- 修改 skills 配置或添加新 skill
+- 修改 gateway、agent、hooks 相关配置
+- 修改 channel（飞书）集成配置
+- 修改 browser、tools 配置
+- 遇到报错需要定位 OpenClaw 核心逻辑
+
+**源码位置**：
+- 本地：`/Users/huangxiaogang/claw-sources/external-refs/openclaw/src/`
+- 云端：根据部署路径，通常在 `/data/claw-family/openclaw/src/` 或类似位置
+
+**核心模块路径**：
+| 模块 | 路径 | 用途 |
+|------|------|------|
+| 工具系统 | `src/agents/tools/` | web-search、browser、fs、exec 等工具 |
+| 配置 Schema | `src/config/types.tools.ts` | 工具配置类型定义 |
+| 配置帮助 | `src/config/schema.help.ts` | 配置项说明 |
+| Gateway | `src/gateway/` | Gateway 服务、RPC 通信 |
+| Agent 核心 | `src/agents/` | Agent 创建、会话管理 |
+| Skills 系统 | `src/skills/` | Skill 加载、执行 |
+| 飞书 Channel | `src/channels/feishu/` | 飞书集成 |
+| 配置合并 | `src/config/config-loader.ts` | 配置加载与合并逻辑 |
+
+**查阅流程**：
+1. 先用 `Glob` 或 `Grep` 搜索相关代码
+2. 阅读核心逻辑文件，确认机制
+3. 基于源码理解进行修改
+4. 不要靠记忆或猜测修改
 
 ## 安全守则
 - ✅ 自动校验主工作区是否为 clean `main`

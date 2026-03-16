@@ -165,12 +165,14 @@ function pushBranch(branchName, worktreePath) {
 
 /**
  * 使用 GitHub API 创建 Pull Request
+ * Token 获取优先级：GITHUB_TOKEN > GH_TOKEN > 报错
  */
 function createPullRequest(branchName, title, body) {
-  const githubToken = process.env.GITHUB_TOKEN;
+  // 支持全局 GH_TOKEN 环境变量（与 openclaw 的 gh-issues skill 保持一致）
+  const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
   if (!githubToken) {
-    throw new Error('未设置 GITHUB_TOKEN 环境变量，无法自动创建 PR');
+    throw new Error('未设置 GITHUB_TOKEN 或 GH_TOKEN 环境变量。\n\n配置方式:\n1. 全局环境变量：在 ~/.zshrc 或 ~/.bashrc 中添加 export GH_TOKEN="ghp_xxx"\n2. 项目 .env 文件：在仓库根目录创建 .env 文件，添加 GITHUB_TOKEN=ghp_xxx\n3. 启动前设置：export GITHUB_TOKEN=ghp_xxx 然后启动 openclaw');
   }
 
   const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/pulls`;
