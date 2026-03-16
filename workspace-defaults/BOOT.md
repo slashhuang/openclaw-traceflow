@@ -58,7 +58,7 @@
 
 - **是否涉及本仓库**：本次指令是否会修改 claw-family 的代码/配置；
 - **是否先写 PRD**：功能扩展则说明「先写 PRD 供确认」；修 bug 则说明「按 fix 流程，不写 PRD」；
-- **worktree 路径**：若已创建 worktree，给出路径（如 `../claw-family--feat-xxx`）；
+- **worktree 路径**：若已创建 worktree，给出路径（如 `../claw-sources--feat-xxx`）；
 - **PR 链接**：完成开发并创建 PR 后，必须把 GitHub PR 链接回复给用户。
 
 **当不涉及本仓库时**：只需说明「本次不涉及本仓库修改」，其余三项可省略或标「不适用」。

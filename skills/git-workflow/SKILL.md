@@ -16,7 +16,7 @@ metadata:
 ## 描述
 为严格遵循 `docs/prd-workflow-2025-03-07.md`（需求三）与 `docs/PR-WORKFLOW.md` 而设计的技能。自动执行：
 - 按需求生成规范分支名（`feat/<name>`）
-- 安全创建 Git worktree（推荐 external 模式：`../claw-family--feat-xxx`）
+- 安全创建 Git worktree（推荐 external 模式：`../claw-sources--feat-xxx`）
 - 主工作区永不切分支，保障 `main` 干净
 - 支持一键推送 + 生成 GitHub PR 链接（或调用 `gh` CLI）
 
@@ -94,7 +94,7 @@ metadata:
 git fetch origin main
 
 # 创建 worktree（推荐 external 模式）
-git worktree add ../claw-family--{分支名} -b {分支名} origin/main
+git worktree add ../claw-sources--{分支名} -b {分支名} origin/main
 ```
 
 ### 4. 在 worktree 中开发
@@ -139,7 +139,7 @@ git push -u origin {分支名}
 ### 7. 清理 worktree（可选）
 合并后可删除 worktree：
 ```bash
-git worktree remove ../claw-family--{分支名}
+git worktree remove ../claw-sources--{分支名}
 ```
 
 ## 分支命名规范
@@ -212,8 +212,8 @@ delete_branch "feat/branch"
 
 1. 生成分支名：`feat/startup-env-check`
 2. 获取最新 main...
-3. 创建 worktree：`../claw-family--feat-startup-env-check`
-4. worktree 创建好啦！路径：`/root/githubRepo/claw-family--feat-startup-env-check`
+3. 创建 worktree：`../claw-sources--feat-startup-env-check`
+4. worktree 创建好啦！路径：`/root/githubRepo/claw-sources--feat-startup-env-check`
 5. 阿布现在去 worktree 里修改代码...
 
 （修改完成，提交后）
