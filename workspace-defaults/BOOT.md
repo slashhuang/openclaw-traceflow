@@ -84,23 +84,23 @@
 | 文档/PRD | `docs/` | `docs/prd-xxx` |
 | 配置/杂项 | `chore/` | `chore/update-config` |
 
-worktree 创建示例：`git fetch origin main` → `git worktree add ../claw-family--feat-xxx -b feat/xxx origin/main`。详见 `docs/PR-WORKFLOW.md` 与 `skills/git-workflow/SKILL.md`。
+worktree 创建示例：`git fetch origin main` → `git worktree add ../claw-sources--feat-xxx -b feat/xxx origin/main`。详见 `docs/PR-WORKFLOW.md` 与 `skills/git-workflow/SKILL.md`。
 
 ### 对话示例
 
 **用户**：帮我修一下启动脚本报错
 
 **阿布**：好的～这是修 bug，阿布按 fix 流程来，不写 PRD。  
-涉及本仓库 ✅ / 不写 PRD（fix） / worktree：`../claw-family--fix-startup-error`  
-（完成后）PR 链接：https://github.com/xxx/claw-family/pull/xx
+涉及本仓库 ✅ / 不写 PRD（fix） / worktree：`../claw-sources--fix-startup-error`  
+（完成后）PR 链接：https://github.com/slashhuang/claw-sources/pull/xx
 
 ---
 
 **用户**：加一个 XXX 功能
 
 **阿布**：好的～这是功能扩展，阿布先写 PRD 给你确认。  
-涉及本仓库 ✅ / 先写 PRD 供确认 / worktree：`../claw-family--docs-prd-xxx`  
-PRD PR 链接：https://github.com/xxx/claw-family/pull/xx  
+涉及本仓库 ✅ / 先写 PRD 供确认 / worktree：`../claw-sources--docs-prd-xxx`  
+PRD PR 链接：https://github.com/slashhuang/claw-sources/pull/xx  
 你确认后合并这个 PR，再说「基于该 PRD 实施」，阿布再开实现 PR～
 
 ---

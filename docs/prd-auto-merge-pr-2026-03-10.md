@@ -14,7 +14,7 @@
 当前 git-workflow 流程中，阿布（Agent）创建 PR 时需要用户手动操作：
 
 1. 阿布推送分支到远程
-2. 阿布在飞书回复中给出 PR 创建链接（如 `https://github.com/slashhuang/claw-family/pull/new/feat/xxx`）
+2. 阿布在飞书回复中给出 PR 创建链接（如 `https://github.com/slashhuang/claw-sources/pull/new/feat/xxx`）
 3. **用户需要点击链接 → 手动填写标题/描述 → 点击「Create pull request」**
 4. 用户回复「可以合并」
 5. 阿布执行合并
@@ -82,7 +82,7 @@
 | ID | 条件 | 说明 |
 |----|------|------|
 | AC-11 | Token 配置 | 使用环境变量 `GITHUB_TOKEN`（推荐） |
-| AC-12 | 仓库配置 | 支持配置目标仓库（默认 `slashhuang/claw-family`） |
+| AC-12 | 仓库配置 | 支持配置目标仓库（默认 `slashhuang/claw-sources`） |
 | AC-13 | 分支保护 | 如分支有保护规则（要求 CI、review），合并失败时提示用户 |
 
 ---
@@ -109,7 +109,7 @@
 curl -X POST \
   -H "Authorization: token $GITHUB_TOKEN" \
   -H "Accept: application/vnd.github.v3+json" \
-  https://api.github.com/repos/slashhuang/claw-family/pulls \
+  https://api.github.com/repos/slashhuang/claw-sources/pulls \
   -d '{
     "title": "feat: 实现分类播报",
     "body": "变更内容...\n\n涉及文件：...\n\n测试：...",
@@ -123,7 +123,7 @@ curl -X POST \
 curl -X PUT \
   -H "Authorization: token $GITHUB_TOKEN" \
   -H "Accept: application/vnd.github.v3+json" \
-  https://api.github.com/repos/slashhuang/claw-family/pulls/{number}/merge \
+  https://api.github.com/repos/slashhuang/claw-sources/pulls/{number}/merge \
   -d '{"merge_method": "merge"}'
 ```
 
@@ -189,7 +189,7 @@ git diff origin/main...HEAD --no-color
 - 新增分类播报功能（按市场分组展示）
 - 更新配置文件（新增 8 只标的）
 
-🔗 PR 链接：https://github.com/slashhuang/claw-family/pull/17
+🔗 PR 链接：https://github.com/slashhuang/claw-sources/pull/17
 ```
 
 **Diff 长度限制**：

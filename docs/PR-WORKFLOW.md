@@ -61,13 +61,13 @@
 git fetch origin main
 
 # 创建 worktree（推荐在仓库外）
-git worktree add ../claw-family--feat-startup-env-check -b feat/startup-env-check origin/main
+git worktree add ../claw-sources--feat-startup-env-check -b feat/startup-env-check origin/main
 ```
 
 ### 5. 在 worktree 中开发
 
 ```bash
-cd ../claw-family--feat-startup-env-check
+cd ../claw-sources--feat-startup-env-check
 
 # 进行修改
 # ... 编辑文件 ...
@@ -113,7 +113,7 @@ git worktree list
 
 ### 删除 worktree
 ```bash
-git worktree remove ../claw-family--feat-startup-env-check
+git worktree remove ../claw-sources--feat-startup-env-check
 ```
 
 ### 清理工作区
@@ -134,8 +134,8 @@ git worktree prune
 
 1. 生成分支名：`feat/startup-env-check`
 2. 获取最新 main... ✅
-3. 创建 worktree：`../claw-family--feat-startup-env-check` ✅
-4. worktree 创建好啦！路径：`/Users/huangxiaogang/claw-family--feat-startup-env-check`
+3. 创建 worktree：`../claw-sources--feat-startup-env-check` ✅
+4. worktree 创建好啦！路径：`/Users/huangxiaogang/claw-sources--feat-startup-env-check`
 5. 阿布现在去 worktree 里修改代码，完成后告诉你推送和创建 PR 的链接～
 
 ---

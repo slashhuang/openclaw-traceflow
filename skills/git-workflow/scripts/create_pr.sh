@@ -96,7 +96,7 @@ main() {
 
     if [ $? -eq 0 ] && [ -n "$pr_number" ]; then
         echo "[git-workflow] ✅ PR 创建成功"
-        echo "[git-workflow] PR 链接：https://github.com/slashhuang/claw-family/pull/$pr_number"
+        echo "[git-workflow] PR 链接：https://github.com/slashhuang/claw-sources/pull/$pr_number"
         # 输出 PR 号供调用方使用
         echo "PR_NUMBER=$pr_number"
     else

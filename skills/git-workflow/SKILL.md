@@ -34,7 +34,7 @@ metadata:
 ## 核心原则
 1. **自动创建 PR**：推送分支后必须调用 GitHub API 自动创建 PR，**禁止**让用户手动在浏览器创建
 2. **Token 获取**：优先级：环境变量 `GITHUB_TOKEN`/`GH_TOKEN` > `.env` 文件 > `~/.zshrc` 中的配置 > 报错
-3. **直接返回 PR 链接**：给用户的结果必须是已创建的 PR 链接（如 `https://github.com/slashhuang/claw-family/pull/66`）
+3. **直接返回 PR 链接**：给用户的结果必须是已创建的 PR 链接（如 `https://github.com/slashhuang/claw-sources/pull/66`）
 4. **失败处理**：如 API 创建失败，必须报错并说明原因（如 Token 无效、权限不足），不能降级为手动流程
 5. **OpenClaw 源码优先**：涉及 OpenClaw 核心逻辑的修改，**必须**先查阅 openclaw 源码，不能靠猜测
 
@@ -117,7 +117,7 @@ git push -u origin {分支名}
 3. 都找不到则报错终止
 
 **PR 创建成功后**：
-- 直接返回已创建的 PR 链接（如 `https://github.com/slashhuang/claw-family/pull/66`）
+- 直接返回已创建的 PR 链接（如 `https://github.com/slashhuang/claw-sources/pull/66`）
 - 飞书通知用户 PR 链接 + 变更摘要
 - 等待用户确认「可以合并」
 
@@ -219,7 +219,7 @@ delete_branch "feat/branch"
 （修改完成，提交后）
 
 **阿布**：代码改好啦！已推送分支并自动创建 PR：
-**https://github.com/slashhuang/claw-family/pull/67**
+**https://github.com/slashhuang/claw-sources/pull/67**
 
 修改内容：
 - `start-openclaw.sh` 增加环境变量检查逻辑
