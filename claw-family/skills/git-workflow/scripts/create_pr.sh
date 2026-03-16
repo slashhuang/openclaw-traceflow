@@ -67,30 +67,33 @@ main() {
     local branch="${1:-$(get_current_branch)}"
     local title="${2:-$(get_last_commit_title)}"
     local body="${3:-}"
-    
+
     echo "[git-workflow] 创建 PR..."
     echo "[git-workflow] 分支：$branch"
     echo "[git-workflow] 标题：$title"
-    
+
     # 验证 Token 是否存在
     local token_check="$(get_token)"
     if [ -z "$token_check" ]; then
         echo "[git-workflow] ❌ 错误：找不到 GITHUB_TOKEN" >&2
         echo "[git-workflow] 请确保：" >&2
-        echo "[git-workflow]   1. 环境变量 GITHUB_TOKEN 已设置，或" >&2
-        echo "[git-workflow]   2. 仓库根目录 .env 文件中有 GITHUB_TOKEN=ghp_xxx" >&2
+        echo "[git-workflow]   1. 全局环境变量：在 ~/.zshrc 中添加 export GH_TOKEN=\"ghp_xxx\"" >&2
+        echo "[git-workflow]   2. 或项目 .env 文件：在仓库根目录创建 .env 文件，添加 GITHUB_TOKEN=ghp_xxx" >&2
+        echo "[git-workflow]   3. 或启动前设置：export GITHUB_TOKEN=ghp_xxx 然后启动 openclaw" >&2
+        echo "" >&2
+        echo "[git-workflow] Token 获取优先级：GITHUB_TOKEN > GH_TOKEN > .env 文件 > ~/.zshrc" >&2
         return 1
     fi
-    
+
     # 生成 PR 描述
     if [ -z "$body" ]; then
         body="$(generate_pr_body)"
     fi
-    
+
     # 调用 API 创建 PR
     local pr_number
     pr_number="$(create_pr "$title" "$body" "$branch" "main")"
-    
+
     if [ $? -eq 0 ] && [ -n "$pr_number" ]; then
         echo "[git-workflow] ✅ PR 创建成功"
         echo "[git-workflow] PR 链接：https://github.com/slashhuang/claw-family/pull/$pr_number"

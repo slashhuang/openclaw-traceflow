@@ -1,6 +1,32 @@
 # claw-family 项目说明（CLAUDE）
 
-本仓库为 **OpenClaw + 飞书** 的封装（wrapper），提供飞书机器人与阿布人设。架构与启动方式以 **docs/prd-bootstrap.md** 为准。
+## 项目定位
+
+**claw-family** 是 OpenClaw + 飞书的封装项目，提供飞书机器人与阿布人设。
+
+### Monorepo 架构
+
+```
+claw-sources/ (monorepo 根目录，Single Source of Truth)
+└── claw-family/  ← 本项目
+    ├── package.json      # 入口
+    ├── config/           # OpenClaw 配置
+    ├── skills/           # 自定义技能
+    └── workspace-defaults/  # Agent 人设
+```
+
+**关键原则**：
+1. **开发在 monorepo**: 所有修改在 `claw-sources/claw-family/` 中进行
+2. **上游是发布目标**: `github.com:slashhuang/claw-family` 是 subtree push 的目标
+3. **统一管控**: 通过 monorepo 统一管理多个一方仓库（claw-family、futu-openD）
+
+### 与 openclaw 的关系
+
+- **依赖关系**: claw-family 依赖 openclaw 作为底层框架
+- **配置方式**: 通过 `config/openclaw.partial.json` 覆盖 openclaw 默认配置
+- **运行时**: openclaw 作为 npm 包运行，配置和技能在 claw-family 中
+
+---
 
 ## 必读
 
@@ -8,6 +34,39 @@
 - **启动**：本地 `./scripts/start-openclaw.sh --env dev`；生产 `./bootstrap.sh`（详见 prd-bootstrap.md §3）。
 - **可改**：`config/openclaw.partial.json`、`scripts/`、`skills/`、`workspace-defaults/`、`docs/`、`hooks/`。
 - **不可改**：`openClawRuntime/`、`.env` 等 .gitignore 路径。
+
+## Git 操作说明
+
+**`claw-family/` 是 monorepo 的一部分**，使用 `claw-sources/.git`。
+
+### 正确操作
+
+```bash
+# 在 claw-family 开发
+cd claw-family
+vim skills/my-skill/index.js
+
+# 在 monorepo 根目录提交
+cd ..
+git add claw-family/
+git commit -m "feat: 新功能"
+git push origin main    # 推送到 claw-sources
+```
+
+### 同步到上游（可选）
+
+只有需要备份或分享时才同步：
+
+```bash
+# 在 monorepo 根目录
+git subtree push --prefix claw-family claw-family-upstream main
+
+# 或使用脚本
+./scripts/subtree-sync.sh sync claw-family push
+
+# 或在 claw-family 目录使用 npm
+npm run git:sync:push
+```
 
 ## 核心原则
 
@@ -20,6 +79,10 @@
   - 配置 Schema：`src/config/types.tools.ts`、`src/config/schema.help.ts`
   - Gateway：`src/gateway/`
   - Agent 核心：`src/agents/`
+  - Skills 系统：`src/skills/`
+  - 飞书 Channel：`src/channels/feishu/`
+  - 配置合并：`src/config/config-loader.ts`
+- **GitHub Token 配置**：使用全局 `GH_TOKEN` 环境变量（在 `~/.zshrc` 中配置），git-workflow skill 和 openclaw 的 gh-issues skill 都会自动读取
 
 ## 重要架构说明
 
@@ -41,10 +104,32 @@
 
 ## 快速参考
 
-### 常用命令
+### npm Scripts（推荐）
+
+所有常用命令已整理在 `package.json` 中，使用 `npm run <command>` 执行：
+
+| 命令 | 说明 | 等价命令 |
+|------|------|----------|
+| `npm run dev` | 本地开发环境 | `./bootstrap.sh --env dev` |
+| `npm run local` | 本地环境 | `./bootstrap.sh --env local` |
+| `npm run prod` | 生产部署 | `./bootstrap.sh` |
+| `npm run start` | 启动开发服务 | `./scripts/start-openclaw.sh --env dev` |
+| `npm run restart` | 重启服务 | `pm2 restart claw-gateway` |
+| `npm run stop` | 停止服务 | `pm2 stop claw-gateway` |
+| `npm run logs` | 查看日志 | `pm2 logs claw-gateway --lines 100` |
+| `npm run status` | 查看状态 | `pm2 status` |
+| `npm run doctor` | 配置检查 | `openclaw doctor` |
+| `npm run git:status` | subtree 状态 | `./scripts/subtree-sync.sh status` |
+| `npm run git:pull` | 拉取 subtree | `./scripts/subtree-sync.sh pull` |
+| `npm run git:push` | 推送 subtree | `./scripts/subtree-sync.sh push` |
+| `npm run git:sync` | 同步单个 subtree | `./scripts/subtree-sync.sh sync <dir>` |
+| `npm run gh:token-check` | 检查 GitHub Token | `echo $GH_TOKEN` |
+| `npm run docs:openclaw` | 查看 OpenClaw 源码指南 | `cat docs/openclaw-source-guide.md` |
+
+### 常用手动命令
 
 ```bash
-# 本地开发
+# 启动开发服务
 ./scripts/start-openclaw.sh --env dev
 
 # 生产部署
@@ -58,14 +143,9 @@ pm2 logs claw-gateway --lines 100
 
 # 重启服务
 pm2 restart claw-gateway
-```
 
-### npm scripts
-
-```bash
-npm run dev    # 本地开发
-npm run prod   # 生产部署
-npm run prepare  # 安装依赖
+# 检查 GitHub Token
+echo $GH_TOKEN
 ```
 
 ### 环境映射
@@ -116,6 +196,9 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 | 飞书无响应 | 检查 `bot.prod.json` 的 `appId`/`appSecret` |
 | 模型调用失败 | 检查 `openclaw.partial.json` 中的 `apiKey` |
 | Browser 配置错误 | 不支持 `userDataDir`、`args` 选项 |
+| **无法创建 PR** | 检查 `GH_TOKEN` 环境变量：`echo $GH_TOKEN` |
+| **GitHub API 失败** | Token 权限不足：需要 `repo` 作用域 |
+| **git-workflow 报错** | 检查 Token 来源：`~/.zshrc`、`.env` 文件 |
 
 详细排查见 [docs/troubleshooting.md](docs/troubleshooting.md)。
 
@@ -130,6 +213,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 | [config/README.md](config/README.md) | 配置说明 |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | 故障排查 |
 | [docs/PR-WORKFLOW.md](docs/PR-WORKFLOW.md) | PR 开发流程 |
+| [docs/openclaw-source-guide.md](docs/openclaw-source-guide.md) | OpenClaw 源码查阅指南 |
 
 ---
 

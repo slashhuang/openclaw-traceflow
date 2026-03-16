@@ -2,73 +2,47 @@
 
 ## 项目结构
 
-这是一个 monorepo 工作空间，包含：
+这是一个 monorepo 工作空间，**单一事实来源是 `claw-sources/.git`**。
 
-| 目录 | 类型 | 上游仓库 |
-|------|------|---------|
-| `claw-family/` | 一方代码 | github.com:slashhuang/claw-family |
-| `futu-openD/` | 一方代码 | github.com:slashhuang/futu-openD |
-| `external-refs/openclaw/` | 外部参考 | github.com:openclaw/openclaw |
+| 目录 | 类型 | 说明 |
+|------|------|------|
+| `claw-family/` | 一方项目 | OpenClaw + 飞书封装（主项目） |
+| `futu-openD/` | 一方项目 | 富途 OpenD 封装 |
+| `external-refs/openclaw/` | 外部参考 | 参考代码，不直接修改 |
 
-## 重要说明
+## 快速开始
 
-1. **外部依赖隔离**: `external-refs/` 目录下的代码仅供阅读和参考，不直接参与构建
-2. **独立可拆分**: 每个子目录都可以独立拆分出来作为独立仓库运行
-3. **git subtree 管理**: 使用 git subtree 与上游仓库同步
-
-## 常用命令
-
-### 使用同步脚本（推荐）
+### 开发流程（简化版）
 
 ```bash
-# 查看所有 subtree 状态
-./scripts/subtree-sync.sh status
+# 1. 在子包目录开发
+cd claw-family
+vim skills/my-skill/index.js
 
-# 从上游拉取所有 subtree 更新
-./scripts/subtree-sync.sh pull
+# 2. 提交到 monorepo
+cd ..
+git add claw-family/
+git commit -m "feat: 新功能"
 
-# 推送所有 subtree 到上游（有确认提示）
-./scripts/subtree-sync.sh push
-
-# 同步单个 subtree
-./scripts/subtree-sync.sh sync claw-family
-./scripts/subtree-sync.sh sync claw-family push
+# 3. 推送到 claw-sources
+git push origin main
 ```
 
-### 手动命令
+**就这么简单！** 不需要复杂的 git 操作。
 
-**同步上游代码**
+### 子包独立性
 
-```bash
-# 拉取 claw-family 更新
-git subtree pull --prefix claw-family claw-family-upstream main --squash
+每个子包都是完整项目，随时可以独立拆分：
+- ✅ 有独立的 `package.json`
+- ✅ 有独立的启动脚本
+- ✅ 可以直接复制出来运行
 
-# 拉取 futu-openD 更新
-git subtree pull --prefix futu-openD futu-openD-upstream main --squash
+---
 
-# 拉取 openclaw 更新（仅参考）
-git subtree pull --prefix external-refs/openclaw openclaw-upstream main --squash
-```
+## 详细文档
 
-### 推送更改
-
-```bash
-# 推送到 claw-family
-git subtree push --prefix claw-family claw-family-upstream main
-
-# 推送到 futu-openD
-git subtree push --prefix futu-openD futu-openD-upstream main
-```
-
-### 查看子目录的变更
-
-```bash
-git log --oneline -- claw-family/
-git diff HEAD -- claw-family/
-```
-
-## 开发注意事项
-
-- 修改一方代码时，考虑是否需要推送到对应的上游仓库
-- 参考 openclaw 代码时，不要直接修改，而是从中汲取设计思路
-- 提交信息应清晰说明修改的目录范围
+| 文档 | 用途 |
+|------|------|
+| [docs/MONOREPO-SIMPLIFIED.md](docs/MONOREPO-SIMPLIFIED.md) | **简化版开发指南（推荐先看这个）** |
+| [docs/monorepo-workflow.md](docs/monorepo-workflow.md) | 完整版 Monorepo 流程（含 subtree 同步） |
+| [claw-family/CLAUDE.md](claw-family/CLAUDE.md) | claw-family 项目说明 |
