@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Futu OpenD
 
 富途 OpenD 独立启动工具，支持前台/后台/PM2 模式，跨环境（Linux 服务器/Mac）一致管理。
