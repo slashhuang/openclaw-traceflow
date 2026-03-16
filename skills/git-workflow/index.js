@@ -15,7 +15,7 @@ const GIT_AUTHOR_EMAIL = 'abu@claw-family.local';
 
 // GitHub 配置
 const REPO_OWNER = 'slashhuang';
-const REPO_NAME = 'claw-family';
+const REPO_NAME = 'claw-sources';
 
 /**
  * 执行 git 命令（设置 author 信息为 abu）
