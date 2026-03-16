@@ -1,0 +1,17 @@
+{
+  "name": "claw-sources",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo - claw-family + futu-openD",
+  "scripts": {
+    "claw:prod": "cd claw-family && npm run prod",
+    "futu": "cd futu-openD && npm run futu"
+  },
+  "keywords": [
+    "monorepo",
+    "claw-family",
+    "futu-openD"
+  ],
+  "author": "slashhuang",
+  "license": "MIT"
+}
