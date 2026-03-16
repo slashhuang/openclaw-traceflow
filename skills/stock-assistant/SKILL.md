@@ -153,7 +153,7 @@ FUTU_WEBSOCKET_KEY=你的OpenD密钥
 
 在 `assistant_config.json` 的 `global_settings.futu` 中修改 host/port 等即可，无需改代码。
 
-**环境兼容**：服务器（Linux）由 bootstrap 自动启动本仓库内 OpenD（见 `macAppAndCentOsFutu/README.md`）；Mac 本地请自行运行富途 Mac OpenD 应用，并将 API 端口设为 **11113**、WebSocket 端口设为 **33333**，与上述默认一致即可双环境共用同一配置。
+**环境兼容**：服务器（Linux）请启动 futu-openD（见 `../../futu-openD/README.md`）；Mac 本地请自行运行富途 Mac OpenD 应用，并将 API 端口设为 **11113**、WebSocket 端口设为 **33333**，与上述默认一致即可双环境共用同一配置。
 
 ---
 
@@ -263,7 +263,7 @@ FUTU_WEBSOCKET_KEY=你的OpenD密钥
 pip3 install websockets aiohttp aiofiles futu-api
 ```
 
-本地需开启富途 OpenD，端口与 `global_settings.futu` 中配置一致（见上方「富途行情配置」）。Mac 本地用官方 OpenD 应用时请将端口设为 11113 / 33333；服务器由 bootstrap 自动启动 OpenD，见 `macAppAndCentOsFutu/README.md`。
+本地需开启富途 OpenD，端口与 `global_settings.futu` 中配置一致（见上方「富途行情配置」）。Mac 本地用官方 OpenD 应用时请将端口设为 11113 / 33333；服务器请启动 futu-openD（见 `../../futu-openD/README.md`）。
 
 ---
 

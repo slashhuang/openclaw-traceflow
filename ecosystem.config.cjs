@@ -118,26 +118,5 @@ module.exports = {
       max_memory_restart: '100M',
       restart_delay: 3000,
     },
-    // 富途 OpenD（已注释，默认不启动）
-    // 如需启动请取消注释
-    // {
-    //   name: 'futu-opend',
-    //   script: './scripts/start-futu-opend.sh',
-    //   cwd: __dirname,
-    //   interpreter: 'bash',
-    //   autorestart: true,
-    //   max_restarts: 10,
-    //   min_uptime: '10s',
-    //   watch: false,
-    //   max_memory_restart: '200M',
-    //   restart_delay: 5000,
-    //   env: {
-    //     NODE_ENV: 'production',
-    //     OPENCLAW_ENV: 'production',
-    //   },
-    //   env_dev: envConfigs.dev,
-    //   env_local: envConfigs.local,
-    //   env_production: envConfigs.production,
-    // },
   ],
 };
