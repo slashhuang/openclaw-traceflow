@@ -1,15 +1,13 @@
 {
   "name": "futu-openD",
   "version": "1.0.0",
-  "description": "富途 OpenD 独立启动工具，支持前台/后台模式，跨环境一致管理",
-  "main": "src/opend.js",
+  "description": "富途 OpenD 独立启动工具，使用 PM2 守护进程",
   "scripts": {
-    "futu": "npm run futu:pm2",
-    "futu:bg": "node scripts/start.js --background",
-    "futu:pm2": "pm2 start ecosystem.config.cjs",
-    "futu:pm2:dev": "pm2 start ecosystem.config.cjs --env dev",
-    "futu:pm2:local": "pm2 start ecosystem.config.cjs --env local",
-    "start": "node scripts/start.js"
+    "futu": "pm2 start ecosystem.config.cjs",
+    "futu:stop": "pm2 stop futu-opend",
+    "futu:restart": "pm2 restart futu-opend",
+    "futu:logs": "pm2 logs futu-opend",
+    "futu:status": "pm2 status"
   },
   "keywords": [
     "futu",
@@ -20,9 +18,6 @@
   ],
   "author": "slashhuang",
   "license": "MIT",
-  "dependencies": {
-    "dotenv": "^16.0.0"
-  },
   "devDependencies": {
     "pm2": "^5.0.0"
   },
