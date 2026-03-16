@@ -1,0 +1,12 @@
+{
+  "name": "git-workflow",
+  "version": "1.0.0",
+  "description": "PRD 驱动的仓库修改自动化流程 - 自动创建 worktree 和分支",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests specified\""
+  },
+  "keywords": ["git", "worktree", "workflow", "prd"],
+  "author": "claw-family",
+  "license": "MIT"
+}

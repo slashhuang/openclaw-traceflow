@@ -1,0 +1,30 @@
+---
+description: 禁止修改 .gitignore 中的路径，改动用模板/可提交文件
+alwaysApply: true
+---
+
+# 不要改到 gitignore 里的路径
+
+所有改动**不得**修改被 `.gitignore` 忽略的文件或目录，否则变更无法被提交、也不应进入版本库。
+
+## 被忽略的路径（不要改）
+
+以项目根目录下的 `.gitignore` 为准，当前包括例如：
+
+- **`openClawRuntime/`** — 运行时根（含 `openclaw.generated.json`、`.workspace`、`.clawStates` 等）
+- **`config/.openclaw.runtime.json`** — 旧版运行时配置（若仍存在）
+- **`.clawStates/`**、**`.workspace/`**、**`.clawhub/`**、**`logs/`** 等
+
+编辑前先确认目标路径是否在 `.gitignore` 中；若在，则不要对该路径做任何写入或修改。
+
+## 正确做法
+
+- 需要改「工作区里阿布用的配置/清单」时，应改**可提交的模板或默认值**，例如：
+  - 改 `workspace-defaults/HEARTBEAT.md`，而不是 `openClawRuntime/.workspace/` 下同名文件
+  - 改 `workspace-defaults/AGENTS.md`、`workspace-defaults/BOOT.md` 等
+- 用户明确说「只改当前环境 / 只改我本地」并接受不提交时，再例外处理；否则默认只改可提交路径。
+
+## 小结
+
+- **可改**：`workspace-defaults/`、`scripts/`、`skills/`、文档等未在 `.gitignore` 中的文件
+- **不可改**：`openClawRuntime/`、`.workspace/`、`config/.openclaw.runtime.json` 等 `.gitignore` 中列出的路径

@@ -1,0 +1,12 @@
+{
+  "name": "claw-family",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenClaw + 飞书封装，飞书机器人与阿布人设",
+  "scripts": {
+    "dev": "./bootstrap.sh --env dev",
+    "local": "./bootstrap.sh --env local",
+    "prod": "./bootstrap.sh",
+    "prepare": "./scripts/install-skill-deps.sh"
+  }
+}

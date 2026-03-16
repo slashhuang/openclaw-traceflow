@@ -1,0 +1,40 @@
+{
+  "name": "claw-family-desktop",
+  "version": "1.0.0",
+  "description": "一键启动阿布：运行 bootstrap 并打开 OpenClaw 控制台",
+  "author": "claw-family",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icon": "bash build-icon.sh",
+    "pack": "npm run icon && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder --dir",
+    "dist": "npm run icon && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.clawfamily.desktop",
+    "productName": "阿布控制台",
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "icon.icns",
+      "target": ["dmg", "zip"]
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "connection.html",
+      "setup.html",
+      "splash.html",
+      "abu.jpg",
+      "icon.icns",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.4.0",
+    "electron-builder": "^24.9.1"
+  }
+}

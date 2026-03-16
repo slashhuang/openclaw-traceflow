@@ -1,0 +1,132 @@
+{
+  "users": {
+    "爸爸": {
+      "feishu_user_id": "ou_3ea312add9031b59971788b123de0dd8",
+      "feishu_account": "slashhuang",
+      "risk_level": "成长型",
+      "watchlist": ["00700.HK", "9988.HK", "9618.HK", "1810.HK", "NVDA", "AAPL"],
+      "holdings": {
+        "腾讯控股": {
+          "symbol": "00700.HK",
+          "market": "HK",
+          "cost": 400.00,
+          "shares": 100,
+          "target_price": 600.00,
+          "stop_loss": 350.00
+        },
+        "阿里巴巴": {
+          "symbol": "9988.HK",
+          "market": "HK",
+          "cost": 80.00,
+          "shares": 200,
+          "target_price": 120.00,
+          "stop_loss": 70.00
+        },
+        "京东集团": {
+          "symbol": "9618.HK",
+          "market": "HK",
+          "cost": 100.00,
+          "shares": 100,
+          "target_price": 150.00,
+          "stop_loss": 85.00
+        },
+        "小米集团": {
+          "symbol": "1810.HK",
+          "market": "HK",
+          "cost": 12.00,
+          "shares": 500,
+          "target_price": 20.00,
+          "stop_loss": 10.00
+        }
+      },
+      "alerts": {
+        "price_change_pct": {
+          "warning": 1,
+          "critical": 2
+        },
+        "stop_loss": {
+          "enabled": true,
+          "pct": 7
+        },
+        "volume_ratio": {
+          "warning": 2,
+          "critical": 5
+        }
+      },
+      "schedule": {
+        "morning_brief": true,
+        "market_close": true,
+        "evening_brief": true,
+        "weekly_review": true
+      }
+    },
+    "妈妈": {
+      "feishu_user_id": "ou_31fd1b6d3639ffaf1e4d70c5de2f5ef4",
+      "feishu_account": "jojo",
+      "risk_level": "稳健型",
+      "watchlist": ["沪深 300ETF", "黄金 ETF", "茅台", "伊利"],
+      "holdings": {
+        "沪深 300ETF": {
+          "symbol": "510300.SS",
+          "market": "CN",
+          "cost": 4.00,
+          "shares": 10000,
+          "target_price": 5.00,
+          "stop_loss": 3.70
+        },
+        "黄金 ETF": {
+          "symbol": "518880.SS",
+          "market": "CN",
+          "cost": 4.50,
+          "shares": 5000,
+          "target_price": 5.50,
+          "stop_loss": 4.20
+        }
+      },
+      "alerts": {
+        "price_change_pct": {
+          "warning": 3,
+          "critical": 5
+        },
+        "stop_loss": {
+          "enabled": true,
+          "pct": 7
+        },
+        "volume_ratio": {
+          "warning": 2,
+          "critical": 5
+        }
+      },
+      "schedule": {
+        "morning_brief": true,
+        "market_close": true,
+        "evening_brief": false,
+        "weekly_review": true
+      }
+    }
+  },
+  "global_settings": {
+    "futu": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 11113,
+      "websocket_port": 33333,
+      "websocket_key": "803689983b4bb0e9"
+    },
+    "data_sources": {
+      "CN": "eastmoney",
+      "US": "eastmoney",
+      "HK": "eastmoney",
+      "CRYPTO": "binance"
+    },
+    "rate_limit": {
+      "max_alerts_per_stock_per_day": 10,
+      "max_alerts_per_user_per_minute": 5,
+      "silent_hours": {
+        "start": "23:00",
+        "end": "07:00"
+      },
+      "merge_interval_seconds": 300
+    }
+  }
+}

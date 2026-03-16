@@ -1,0 +1,29 @@
+
+{
+    "feishu": {
+        "enabled": true,
+        "defaultAccount": "abu-local",
+        "connectionMode": "websocket",
+        "domain": "feishu",
+        "requireMention": true,
+        "accounts": {
+          "abu-local": {
+            "name": "阿布-mac本地",
+            "appId": "cli_a9384dc800f8dcd5",
+            "appSecret": "8nHTWZJCFrGHKOhGj9SV6fa7cGLy5Ffh",
+            "domain": "feishu",
+            "enabled": true,
+            "connectionMode": "websocket",
+            "dmPolicy": "open",
+            "allowFrom": ["*"]
+          },
+          "default": {
+            "dmPolicy": "open",
+            "groupPolicy": "allowlist",
+            "allowFrom": [
+              "*"
+            ]
+          }
+        }
+      }
+}

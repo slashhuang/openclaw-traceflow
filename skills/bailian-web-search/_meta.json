@@ -1,0 +1,5 @@
+{
+  "name": "bailian-web-search",
+  "version": "1.0.4",
+  "description": "AI-optimized web search via Bailian(Alibaba ModelStdio) API. Returns multisourced, concise web search results for LLMs."
+}

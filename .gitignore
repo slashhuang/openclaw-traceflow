@@ -1,0 +1,33 @@
+*.bak
+*.bak.*
+.DS_Store
+config/.openclaw.runtime.json
+openClawRuntime/
+.clawhub/
+
+# 临时/敏感文档（如含密钥的.alivun.json）
+docs/tmp/
+
+# OpenClaw 运行时（脚本默认 .clawStates）
+# .clawStates 含凭证/会话，不提交；生产可用默认 state 目录
+.clawStates/
+.workspace/
+
+# 环境变量文件（含敏感信息）
+.env
+
+# 同步等运行时日志
+logs/
+.last_boot_commit__pycache__/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# Mac 桌面应用 (mac-app)
+mac-app/dist/
+mac-app/node_modules/
+mac-app/icon.icns
+mac-app/icon.iconset/
+mac-app/.icon_*.png
+mac-app/.DS_Store

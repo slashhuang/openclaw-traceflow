@@ -1,0 +1,29 @@
+
+{
+    "feishu": {
+        "enabled": true,
+        "defaultAccount": "test",
+        "connectionMode": "websocket",
+        "domain": "feishu",
+        "requireMention": true,
+        "accounts": {
+          "test": {
+            "name": "阿布-测试",
+            "appId": "cli_a36e0740c238d00e",
+            "appSecret": "o7cFYeUjY3Y0ZzAD6dgXihqBwGpc3PYs",
+            "domain": "feishu",
+            "enabled": true,
+            "connectionMode": "websocket",
+            "dmPolicy": "open",
+            "allowFrom": ["*"]
+          },
+          "default": {
+            "dmPolicy": "open",
+            "groupPolicy": "allowlist",
+            "allowFrom": [
+              "*"
+            ]
+          }
+        }
+      }
+}

@@ -1,0 +1,32 @@
+{
+  "hk_stocks": {
+    "恒生科技指数": { "code": "HSTECH", "em_secid": "116.HSTECH", "sina_code": "hkHSTECH" },
+    "阿里巴巴": { "code": "09988", "em_secid": "116.09988", "sina_code": "hk09988" },
+    "腾讯": { "code": "00700", "em_secid": "116.00700", "sina_code": "hk00700" },
+    "山高控股": { "code": "00412", "em_secid": "116.00412", "sina_code": "hk00412" },
+    "两倍做多海力士": { "code": "07552", "em_secid": "116.07552", "sina_code": "hk07552" },
+    "优必选": { "code": "09880", "em_secid": "116.09880", "sina_code": "hk09880" },
+    "小鹏汽车": { "code": "09868", "em_secid": "116.09868", "sina_code": "hk09868" },
+    "理想汽车": { "code": "02015", "em_secid": "116.02015", "sina_code": "hk02015" },
+    "小米集团": { "code": "01810", "em_secid": "116.01810", "sina_code": "hk01810" }
+  },
+  "us_stocks": {
+    "HIMS": { "code": "HIMS", "em_secid": "105.HIMS", "sina_code": "gb_hims" },
+    "Coinbase": { "code": "COIN", "em_secid": "105.COIN", "sina_code": "gb_coin" },
+    "CLSK": { "code": "CLSK", "em_secid": "105.CLSK", "sina_code": "gb_clsk" },
+    "英伟达": { "code": "NVDA", "em_secid": "105.NVDA", "sina_code": "gb_nvda" },
+    "富途": { "code": "FUTU", "em_secid": "105.FUTU", "sina_code": "gb_futu" },
+    "CoreWeave": { "code": "CRWV", "em_secid": "105.CRWV", "sina_code": "gb_crwv" },
+    "超微电脑": { "code": "SMCI", "em_secid": "105.SMCI", "sina_code": "gb_smci" },
+    "Bitmine": { "code": "BMNR", "em_secid": "105.BMNR", "sina_code": "gb_bmnr" }
+  },
+  "cn_stocks": {
+    "贵州茅台": { "code": "600519", "em_secid": "1.600519", "sina_code": "sh600519" }
+  },
+  "crypto_commodities": {
+    "比特币": { "code": "BTC-USD", "sina_code": "gb_BTCUSD" },
+    "以太坊": { "code": "ETH-USD", "sina_code": "gb_ETHUSD" },
+    "黄金": { "code": "GC=F", "sina_code": "gb_GC" },
+    "白银": { "code": "SI=F", "sina_code": "gb_SI" }
+  }
+}
