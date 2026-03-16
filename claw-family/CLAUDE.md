@@ -17,8 +17,8 @@ claw-sources/ (monorepo 根目录，Single Source of Truth)
 
 **关键原则**：
 1. **开发在 monorepo**: 所有修改在 `claw-sources/claw-family/` 中进行
-2. **上游是发布目标**: `github.com:slashhuang/claw-family` 是 subtree push 的目标
-3. **统一管控**: 通过 monorepo 统一管理多个一方仓库（claw-family、futu-openD）
+2. **PR 直接创建到 claw-sources**: git-workflow 会自动创建 PR 到 `github.com:slashhuang/claw-sources`
+3. **统一管控**: 通过 monorepo 统一管理多个项目（claw-family、futu-openD）
 
 ### 与 openclaw 的关系
 
@@ -53,20 +53,17 @@ git commit -m "feat: 新功能"
 git push origin main    # 推送到 claw-sources
 ```
 
-### 同步到上游（可选）
+### Git 工作流
 
-只有需要备份或分享时才同步：
+所有代码修改通过 git-workflow skill 自动处理：
 
 ```bash
-# 在 monorepo 根目录
-git subtree push --prefix claw-family claw-family-upstream main
-
-# 或使用脚本
-./scripts/subtree-sync.sh sync claw-family push
-
-# 或在 claw-family 目录使用 npm
-npm run git:sync:push
+# 使用 git-workflow skill（推荐）
+/wf start <需求描述>
+# 自动创建 worktree、分支、提交、推送并创建 PR 到 claw-sources
 ```
+
+**历史说明**：早期版本支持 subtree push 到独立仓库，现已不再需要。所有开发直接在 monorepo 中进行，PR 直接创建到 `claw-sources`。
 
 ## 核心原则
 
@@ -119,10 +116,6 @@ npm run git:sync:push
 | `npm run logs` | 查看日志 | `pm2 logs claw-gateway --lines 100` |
 | `npm run status` | 查看状态 | `pm2 status` |
 | `npm run doctor` | 配置检查 | `openclaw doctor` |
-| `npm run git:status` | subtree 状态 | `./scripts/subtree-sync.sh status` |
-| `npm run git:pull` | 拉取 subtree | `./scripts/subtree-sync.sh pull` |
-| `npm run git:push` | 推送 subtree | `./scripts/subtree-sync.sh push` |
-| `npm run git:sync` | 同步单个 subtree | `./scripts/subtree-sync.sh sync <dir>` |
 | `npm run gh:token-check` | 检查 GitHub Token | `echo $GH_TOKEN` |
 | `npm run docs:openclaw` | 查看 OpenClaw 源码指南 | `cat docs/openclaw-source-guide.md` |
 

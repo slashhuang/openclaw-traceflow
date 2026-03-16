@@ -19,7 +19,6 @@
     "logs": "pm2 logs claw-gateway --lines 100",
     "status": "pm2 status",
     "doctor": "openclaw doctor",
-    "git:sync": "cd .. && git subtree push --prefix claw-family claw-family-upstream main",
     "gh:token-check": "echo \"GH_TOKEN: ${GH_TOKEN:0:10}...\" || echo \"GH_TOKEN not set\"",
     "docs:openclaw": "cat docs/openclaw-source-guide.md",
     "docs:prd": "ls docs/prd-*.md 2>/dev/null | head -10 || echo 'No PRD docs found'"
