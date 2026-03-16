@@ -1,0 +1,13 @@
+node_modules/
+.env
+config.json
+Futu_OpenD/
+Futu_OpenD_Linux/
+opend/
+*.log
+.DS_Store
+*.pid
+
+# 保留 Futu_OpenD_Centos7 但忽略运行时文件
+Futu_OpenD_Centos7/AppData.dat
+Futu_OpenD_Centos7/*.log

@@ -1,0 +1,10 @@
+{
+  "futu": {
+    "accno": "你的富途账号",
+    "password": "密码（或使用 authcode 免密登录）",
+    "listenPort": 11113,
+    "websocketPort": 33333,
+    "isMod": 1,
+    "server": "nz-futu-1.futunn.com:9292"
+  }
+}
