@@ -154,7 +154,7 @@ git worktree remove ../claw-sources--{分支名}
 
 ## 依赖
 - `git`（≥2.5，支持 worktree）
-- **自动创建 PR**：运行 OpenClaw 的环境需提供 `GITHUB_TOKEN`（具备 `repo` 权限），否则仅生成「手动创建 PR」链接。配置方式见 `docs/PR-WORKFLOW.md` §6（如 `openclaw.env.json` 或启动前 `export GITHUB_TOKEN=xxx`）。
+- **自动创建 PR**：运行 OpenClaw 的环境需提供 `GITHUB_TOKEN`（具备 `repo` 权限）。配置方式：在 ~/.zshrc 中添加 `export GH_TOKEN="ghp_xxx"` 或在仓库根目录 .env 文件中添加 `GITHUB_TOKEN=ghp_xxx`。
 - 仓库根 `.git` 目录存在
 
 ## 命令接口
