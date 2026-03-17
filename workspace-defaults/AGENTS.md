@@ -68,22 +68,45 @@
 |------|-----------|------|
 | `skills/`、`config/`、`scripts/`、`hooks/` | ✅ **必须** | 代码、配置、脚本 |
 | `workspace-defaults/` | ✅ **必须** | 核心配置（SOUL.md、USER.md 等） |
-| `docs/`、`inspiration/`、`memory/` | ❌ 不需要 | 文档、灵感、记忆 |
+| `claw-family/docs/` | ✅ **必须** | 需求文档（PRD）、架构文档 |
+| `openClawRuntime/.workspace/docs/` | ❌ 不需要 | workspace 文档（MEMORY.md 等） |
+| `inspiration/`、`memory/` | ❌ 不需要 | 灵感、记忆 |
+
+### 判断标准：是否需要 PRD
+
+| 需求类型 | 是否需要 PRD | 说明 |
+|---------|-----------|------|
+| **修 bug（fix）** | ❌ 不需要 | 修复错误、纠正 typo，直接走 worktree + PR |
+| **功能扩展** | ✅ 需要 | 新功能、重构、配置变更，先 PRD → 用户确认 → 实施 PR |
+| **纯文档 typo** | ❌ 不需要 | 仅限不改变逻辑的拼写/文案修正 |
+
+**注意**：
+- `claw-family/docs/` 是需求文档（PRD）存放位置，命名规范：`prd-<英文主题>-YYYY-MM-DD.md`
+- `openClawRuntime/.workspace/` 是 workspace 目录，其下的文档不需要 PRD
 
 ### PR 流程
 
 **需要 PR 的修改**：
 - 一律用 git worktree + 分支，交付物为 GitHub PR 链接
-- **修 bug**：不写 PRD，1 个 PR
-- **功能扩展**：先 PRD（单独 PR）→ 用户确认 → PR 合并 → 用户说「基于该 PRD 实施」→ 实现 PR ②
 
-**飞书回复须含**：
-- 是否涉及本仓库
-- 是否先写 PRD（功能扩展则说明）
-- worktree 路径
-- PR 链接（完成后）
+**修 bug（fix）**：
+- 不写 PRD，直接创建 worktree → 实施 → 创建 PR（1 个 PR）
 
-详见 `BOOT.md` 启动通知、`docs/prd-workflow-2025-03-07.md`。
+**功能扩展**：
+1. **PRD 阶段**：创建 PRD 文档 worktree → 在 `claw-family/docs/` 下写 PRD → 创建 PRD PR → 等待用户确认
+2. **用户确认**：用户在飞书回复「确认」、「可以」等
+3. **合并 PRD**：合并 PRD PR 到 main
+4. **实施阶段**：用户说「基于该 PRD 实施」→ 创建实现 worktree → 实施 → 创建实现 PR（第 2 个 PR）
+
+**飞书回复须含**（涉及本仓库时）：
+- ✅ **是否涉及本仓库**：本次指令是否会修改 claw-family 的代码/配置
+- ✅ **是否先写 PRD**：功能扩展则说明「先写 PRD 供确认」；修 bug 则说明「按 fix 流程，不写 PRD」
+- ✅ **worktree 路径**：创建后给出路径（如 `../claw-sources--feat-xxx`）
+- ✅ **PR 链接**：完成后必须回复 GitHub PR 链接
+
+**不涉及本仓库时**，只需说明「本次不涉及本仓库修改」。
+
+详见 `BOOT.md` 启动通知、`docs/prd-workflow-2025-03-07.md`、`skills/git-workflow/SKILL.md`。
 
 ---
 

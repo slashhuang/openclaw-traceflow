@@ -23,13 +23,26 @@ metadata:
 ## 触发条件（默认行为）
 **任何涉及本仓库代码/配置修改的请求**都自动启用此流程，无需用户明确说明。
 
-判断标准：
-- ✅ 修改代码文件（.js, .sh, .json, .md 等）
-- ✅ 修改配置文件（config/、bot 文件、ecosystem.config.cjs 等）
-- ✅ 修改技能（skills/）
-- ✅ 修改文档（docs/, workspace-defaults/）
-- ✅ 新增/删除文件
-- ❌ 仅查看代码、回答问题、讨论方案 → 不需要
+### 判断标准：是否涉及本仓库修改
+
+| 修改类型 | 目录 | 是否需要 PR | 说明 |
+|---------|------|-----------|------|
+| 代码文件 | `skills/`, `scripts/`, `hooks/` | ✅ 必须 | 技能、脚本、钩子 |
+| 配置文件 | `config/`, `bot.*.json`, `ecosystem.config.cjs` | ✅ 必须 | OpenClaw 配置、PM2 配置 |
+| 核心配置 | `workspace-defaults/` | ✅ 必须 | SOUL.md、USER.md、AGENTS.md 等 |
+| 需求文档 | `claw-family/docs/` | ✅ 必须 | PRD 文档、架构文档 |
+| 文档/灵感/记忆 | `docs/`, `inspiration/`, `memory/` | ❌ 不需要 | workspace 内的文档、灵感、记忆 |
+| 仅查看/回答 | 任意 | ❌ 不需要 | 不修改文件 |
+
+### 判断标准：是否需要 PRD
+
+| 需求类型 | 是否需要 PRD | 说明 |
+|---------|-----------|------|
+| **修 bug（fix）** | ❌ 不需要 | 修复错误、纠正 typo，直接走 worktree + PR |
+| **功能扩展** | ✅ 需要 | 新功能、重构、配置变更，先 PRD → 用户确认 → 实施 PR |
+| **纯文档 typo** | ❌ 不需要 | 仅限不改变逻辑的拼写/文案修正 |
+
+**注意**：`claw-family/docs/` 是需求文档（PRD）存放位置，`openClawRuntime/.workspace/docs/` 是 workspace 文档（不需要 PRD）。
 
 ## 核心原则
 1. **自动创建 PR**：推送分支后必须调用 GitHub API 自动创建 PR，**禁止**让用户手动在浏览器创建
@@ -85,7 +98,17 @@ metadata:
 - 是 → 进入 git-workflow 流程
 - 否 → 直接回答或操作
 
-### 3. 创建分支和 worktree
+### 3. 判断是否需要 PRD
+- **修 bug（fix）**：不需要 PRD，直接进入步骤 4
+- **功能扩展**：需要先写 PRD
+  1. 创建 PRD 文档 worktree（分支名：`docs/prd-<主题>-YYYY-MM-DD`）
+  2. 在 `claw-family/docs/` 下创建 PRD 文档
+  3. 推送并创建 PRD PR
+  4. **等待用户确认**（飞书回复「确认」、「可以」等）
+  5. 合并 PRD PR
+  6. 用户说「基于该 PRD 实施」后，进入步骤 4
+
+### 4. 创建分支和 worktree
 ```bash
 # 生成分支名
 分支名 = "feat/" + 需求英文名（小写，连字符分隔）
@@ -97,12 +120,12 @@ git fetch origin main
 git worktree add ../claw-sources--{分支名} -b {分支名} origin/main
 ```
 
-### 4. 在 worktree 中开发
+### 5. 在 worktree 中开发
 - 切换到 worktree 目录
 - 执行代码修改
 - 提交更改
 
-### 5. 推送并自动创建 PR（必须步骤）
+### 6. 推送并自动创建 PR（必须步骤）
 ```bash
 # 推送分支
 git push -u origin {分支名}
@@ -125,7 +148,7 @@ git push -u origin {分支名}
 - ❌ 返回 `/new/分支名` 链接让用户手动创建
 - ❌ 跳过 API 调用让用户自己点浏览器
 
-### 6. 用户确认后自动合并 PR
+### 7. 用户确认后自动合并 PR
 用户回复「可以合并」后：
 ```bash
 # 自动合并 PR
@@ -136,7 +159,7 @@ git push -u origin {分支名}
 - 飞书通知用户合并结果
 - 可选：删除远程分支
 
-### 7. 清理 worktree（可选）
+### 8. 清理 worktree（可选）
 合并后可删除 worktree：
 ```bash
 git worktree remove ../claw-sources--{分支名}
@@ -144,6 +167,12 @@ git worktree remove ../claw-sources--{分支名}
 
 ## 分支命名规范
 
+### PRD 文档分支
+| 类型 | 前缀 | 示例 |
+|------|------|------|
+| PRD 文档 | `docs/prd-<主题>-YYYY-MM-DD` | `docs/prd-git-workflow-optimization-2026-03-17` |
+
+### 实现分支
 | 需求类型 | 前缀 | 示例 |
 |---------|------|------|
 | 新功能 | `feat/` | `feat/feishu-github-sync` |
@@ -151,6 +180,45 @@ git worktree remove ../claw-sources--{分支名}
 | 文档更新 | `docs/` | `docs/add-architecture` |
 | 配置变更 | `chore/` | `chore/update-model-config` |
 | 重构 | `refactor/` | `refactor/config-loader` |
+
+**注意**：PRD 分支和实现分支是分开的两个 PR。PRD 分支命名必须包含日期，实现分支与 PRD 主题对应。
+
+## 飞书回复格式
+
+**涉及本仓库时**，飞书回复必须包含：
+- ✅ **是否涉及本仓库**：本次指令是否会修改 claw-family 的代码/配置
+- ✅ **是否先写 PRD**：功能扩展则说明「先写 PRD 供确认」；修 bug 则说明「按 fix 流程，不写 PRD」
+- ✅ **worktree 路径**：创建后给出路径（如 `../claw-sources--feat-xxx`）
+- ✅ **PR 链接**：完成后必须回复 GitHub PR 链接
+
+**不涉及本仓库时**，只需说明「本次不涉及本仓库修改」。
+
+### 示例回复
+
+**功能扩展（PRD 阶段）**：
+```
+流程说明：
+- ✅ 是否涉及本仓库：是
+- ✅ 是否先写 PRD：是（功能扩展，先 PRD 后实施）
+- ✅ worktree 路径：/Users/huangxiaogang/claw-sources/claw-sources--docs-prd-xxx
+- ✅ PR 链接：https://github.com/slashhuang/claw-sources/pull/X
+```
+
+**修 bug（直接实施）**：
+```
+流程说明：
+- ✅ 是否涉及本仓库：是
+- ✅ 是否先写 PRD：否（按 fix 流程，直接实施）
+- ✅ worktree 路径：/Users/huangxiaogang/claw-sources/claw-sources--fix-xxx
+- ✅ PR 链接：https://github.com/slashhuang/claw-sources/pull/X
+```
+
+**不涉及本仓库**：
+```
+本次不涉及本仓库修改～
+```
+
+---
 
 ## 依赖
 - `git`（≥2.5，支持 worktree）
