@@ -23,15 +23,33 @@ metadata:
 ## 触发条件（默认行为）
 **任何涉及本仓库代码/配置修改的请求**都自动启用此流程，无需用户明确说明。
 
+### 判断标准：仓库结构认知
+
+**重要**：`claw-sources` 是 monorepo 根目录（git 仓库），包含多个子项目：
+
+```
+claw-sources/  ← git 仓库根目录
+├── docs/  ← PRD 文档存放位置（本仓库的需求文档）
+├── claw-family/  ← 主项目（OpenClaw runtime）
+│   ├── skills/  ← 技能代码
+│   ├── config/  ← 配置
+│   ├── workspace-defaults/  ← bootstrap 模板
+│   └── openClawRuntime/.workspace/  ← workspace（SOUL.md, USER.md 等）
+├── futu-openD/  ← 富途 OpenD 项目
+├── open-openclaw/  ← OpenClaw UI 项目
+└── external-refs/  ← 外部参考代码
+```
+
 ### 判断标准：是否涉及本仓库修改
 
 | 修改类型 | 目录 | 是否需要 PR | 说明 |
 |---------|------|-----------|------|
-| 代码文件 | `skills/`, `scripts/`, `hooks/` | ✅ 必须 | 技能、脚本、钩子 |
-| 配置文件 | `config/`, `bot.*.json`, `ecosystem.config.cjs` | ✅ 必须 | OpenClaw 配置、PM2 配置 |
-| 核心配置 | `workspace-defaults/` | ✅ 必须 | SOUL.md、USER.md、AGENTS.md 等 |
-| 需求文档（PRD） | `docs/` | ✅ 必须 | **claw-sources 根目录的 docs/**，PRD 文档、架构文档 |
-| 文档/灵感/记忆 | `openClawRuntime/.workspace/docs/`, `inspiration/`, `memory/` | ❌ 不需要 | workspace 内的文档、灵感、记忆 |
+| 代码文件 | `claw-family/skills/`, `claw-family/scripts/`, `claw-family/hooks/` | ✅ 必须 | 技能、脚本、钩子 |
+| 配置文件 | `claw-family/config/`, `claw-family/bot.*.json` | ✅ 必须 | OpenClaw 配置 |
+| 核心配置 | `claw-family/workspace-defaults/` | ✅ 必须 | SOUL.md、USER.md、AGENTS.md 等 |
+| 需求文档（PRD） | `docs/` | ✅ 必须 | **claw-sources 根目录的 docs/** |
+| 其他项目 | `futu-openD/`, `open-openclaw/` | ✅ 必须 | 各子项目代码 |
+| workspace 文档 | `claw-family/openClawRuntime/.workspace/` | ❌ 不需要 | 每日记忆、灵感等 |
 | 仅查看/回答 | 任意 | ❌ 不需要 | 不修改文件 |
 
 ### 判断标准：是否需要 PRD
@@ -42,7 +60,10 @@ metadata:
 | **功能扩展** | ✅ 需要 | 新功能、重构、配置变更，先 PRD → 用户确认 → 实施 PR |
 | **纯文档 typo** | ❌ 不需要 | 仅限不改变逻辑的拼写/文案修正 |
 
-**注意**：PRD 文档存放在 **claw-sources 根目录的 `docs/`** 下，命名规范：`prd-<英文主题>-YYYY-MM-DD.md`。`openClawRuntime/.workspace/` 下的文档不需要 PRD。
+**注意**：
+- PRD 文档存放在 **claw-sources 根目录的 `docs/`** 下，命名规范：`prd-<英文主题>-YYYY-MM-DD.md`
+- `claw-family/openClawRuntime/.workspace/` 下的文档（MEMORY.md、inspiration/等）不需要 PRD
+- **worktree 必须基于 claw-sources 根目录创建**，例如：`../claw-sources--feat-xxx`
 
 ## 核心原则
 1. **自动创建 PR**：推送分支后必须调用 GitHub API 自动创建 PR，**禁止**让用户手动在浏览器创建
@@ -102,13 +123,16 @@ metadata:
 - **修 bug（fix）**：不需要 PRD，直接进入步骤 4
 - **功能扩展**：需要先写 PRD
   1. 创建 PRD 文档 worktree（分支名：`docs/prd-<主题>-YYYY-MM-DD`）
-  2. 在 **`docs/`**（claw-sources 根目录）下创建 PRD 文档
+  2. 在 **`claw-sources/docs/`** 下创建 PRD 文档
   3. 推送并创建 PRD PR
   4. **等待用户确认**（飞书回复「确认」、「可以」等）
   5. 合并 PRD PR
   6. 用户说「基于该 PRD 实施」后，进入步骤 4
 
 ### 4. 创建分支和 worktree
+
+**重要**：worktree 必须基于 **claw-sources 根目录** 创建！
+
 ```bash
 # 生成分支名
 分支名 = "feat/" + 需求英文名（小写，连字符分隔）
@@ -116,16 +140,20 @@ metadata:
 # 获取最新 main
 git fetch origin main
 
-# 创建 worktree（推荐 external 模式）
+# 创建 worktree（external 模式，在 claw-sources 同级）
 git worktree add ../claw-sources--{分支名} -b {分支名} origin/main
 ```
 
-### 5. 在 worktree 中开发
+**worktree 路径示例**：
+- ✅ 正确：`/Users/huangxiaogang/claw-sources--feat-xxx`
+- ❌ 错误：`/Users/huangxiaogang/claw-sources/claw-family--feat-xxx`
+
+### 6. 在 worktree 中开发
 - 切换到 worktree 目录
 - 执行代码修改
 - 提交更改
 
-### 6. 推送并自动创建 PR（必须步骤）
+### 7. 推送并自动创建 PR（必须步骤）
 ```bash
 # 推送分支
 git push -u origin {分支名}
@@ -148,7 +176,7 @@ git push -u origin {分支名}
 - ❌ 返回 `/new/分支名` 链接让用户手动创建
 - ❌ 跳过 API 调用让用户自己点浏览器
 
-### 7. 用户确认后自动合并 PR
+### 8. 用户确认后自动合并 PR
 用户回复「可以合并」后：
 ```bash
 # 自动合并 PR
@@ -159,7 +187,7 @@ git push -u origin {分支名}
 - 飞书通知用户合并结果
 - 可选：删除远程分支
 
-### 8. 清理 worktree（可选）
+### 9. 清理 worktree（可选）
 合并后可删除 worktree：
 ```bash
 git worktree remove ../claw-sources--{分支名}
@@ -181,7 +209,11 @@ git worktree remove ../claw-sources--{分支名}
 | 配置变更 | `chore/` | `chore/update-model-config` |
 | 重构 | `refactor/` | `refactor/config-loader` |
 
-**注意**：PRD 分支和实现分支是分开的两个 PR。PRD 分支命名必须包含日期，实现分支与 PRD 主题对应。
+**注意**：
+- PRD 分支和实现分支是分开的两个 PR
+- PRD 分支命名必须包含日期
+- 实现分支与 PRD 主题对应
+- **worktree 路径**：`../claw-sources--{分支名}`（在 claw-sources 同级目录）
 
 ## 飞书回复格式
 
