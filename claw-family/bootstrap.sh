@@ -81,9 +81,15 @@ if pm2 describe stock-assistant &>/dev/null; then
   pm2 delete stock-assistant
 fi
 
-# 要启动的应用：始终含 claw-gateway、stock-assistant
+# 要启动的应用：claw-gateway 必启，stock-assistant 仅在非 macOS 启动
 # futu-opend 仅在本地已安装富途 OpenD 的机器上运行（默认不启动）
-PM2_APPS="claw-gateway,stock-assistant"
+if [[ "$(uname)" == "Darwin" ]]; then
+  # macOS 不启动 stock-assistant
+  PM2_APPS="claw-gateway"
+  echo "[bootstrap] 检测到 macOS，不启动 stock-assistant"
+else
+  PM2_APPS="claw-gateway,stock-assistant"
+fi
 
 # futu-opend 已注释，如需启动请取消注释并添加到 PM2_APPS
 # PM2_APPS="${PM2_APPS},futu-opend"
