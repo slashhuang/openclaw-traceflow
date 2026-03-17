@@ -68,7 +68,7 @@
 |------|-----------|------|
 | `skills/`、`config/`、`scripts/`、`hooks/` | ✅ **必须** | 代码、配置、脚本 |
 | `workspace-defaults/` | ✅ **必须** | 核心配置（SOUL.md、USER.md 等） |
-| `claw-family/docs/` | ✅ **必须** | 需求文档（PRD）、架构文档 |
+| `docs/` | ✅ **必须** | **claw-sources 根目录的 docs/**，需求文档（PRD）、架构文档 |
 | `openClawRuntime/.workspace/docs/` | ❌ 不需要 | workspace 文档（MEMORY.md 等） |
 | `inspiration/`、`memory/` | ❌ 不需要 | 灵感、记忆 |
 
@@ -81,7 +81,7 @@
 | **纯文档 typo** | ❌ 不需要 | 仅限不改变逻辑的拼写/文案修正 |
 
 **注意**：
-- `claw-family/docs/` 是需求文档（PRD）存放位置，命名规范：`prd-<英文主题>-YYYY-MM-DD.md`
+- PRD 文档存放在 **claw-sources 根目录的 `docs/`** 下，命名规范：`prd-<英文主题>-YYYY-MM-DD.md`
 - `openClawRuntime/.workspace/` 是 workspace 目录，其下的文档不需要 PRD
 
 ### PR 流程
@@ -93,7 +93,7 @@
 - 不写 PRD，直接创建 worktree → 实施 → 创建 PR（1 个 PR）
 
 **功能扩展**：
-1. **PRD 阶段**：创建 PRD 文档 worktree → 在 `claw-family/docs/` 下写 PRD → 创建 PRD PR → 等待用户确认
+1. **PRD 阶段**：创建 PRD 文档 worktree → 在 **`docs/`**（claw-sources 根目录）下写 PRD → 创建 PRD PR → 等待用户确认
 2. **用户确认**：用户在飞书回复「确认」、「可以」等
 3. **合并 PRD**：合并 PRD PR 到 main
 4. **实施阶段**：用户说「基于该 PRD 实施」→ 创建实现 worktree → 实施 → 创建实现 PR（第 2 个 PR）

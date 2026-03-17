@@ -30,8 +30,8 @@ metadata:
 | 代码文件 | `skills/`, `scripts/`, `hooks/` | ✅ 必须 | 技能、脚本、钩子 |
 | 配置文件 | `config/`, `bot.*.json`, `ecosystem.config.cjs` | ✅ 必须 | OpenClaw 配置、PM2 配置 |
 | 核心配置 | `workspace-defaults/` | ✅ 必须 | SOUL.md、USER.md、AGENTS.md 等 |
-| 需求文档 | `claw-family/docs/` | ✅ 必须 | PRD 文档、架构文档 |
-| 文档/灵感/记忆 | `docs/`, `inspiration/`, `memory/` | ❌ 不需要 | workspace 内的文档、灵感、记忆 |
+| 需求文档（PRD） | `docs/` | ✅ 必须 | **claw-sources 根目录的 docs/**，PRD 文档、架构文档 |
+| 文档/灵感/记忆 | `openClawRuntime/.workspace/docs/`, `inspiration/`, `memory/` | ❌ 不需要 | workspace 内的文档、灵感、记忆 |
 | 仅查看/回答 | 任意 | ❌ 不需要 | 不修改文件 |
 
 ### 判断标准：是否需要 PRD
@@ -42,7 +42,7 @@ metadata:
 | **功能扩展** | ✅ 需要 | 新功能、重构、配置变更，先 PRD → 用户确认 → 实施 PR |
 | **纯文档 typo** | ❌ 不需要 | 仅限不改变逻辑的拼写/文案修正 |
 
-**注意**：`claw-family/docs/` 是需求文档（PRD）存放位置，`openClawRuntime/.workspace/docs/` 是 workspace 文档（不需要 PRD）。
+**注意**：PRD 文档存放在 **claw-sources 根目录的 `docs/`** 下，命名规范：`prd-<英文主题>-YYYY-MM-DD.md`。`openClawRuntime/.workspace/` 下的文档不需要 PRD。
 
 ## 核心原则
 1. **自动创建 PR**：推送分支后必须调用 GitHub API 自动创建 PR，**禁止**让用户手动在浏览器创建
@@ -102,7 +102,7 @@ metadata:
 - **修 bug（fix）**：不需要 PRD，直接进入步骤 4
 - **功能扩展**：需要先写 PRD
   1. 创建 PRD 文档 worktree（分支名：`docs/prd-<主题>-YYYY-MM-DD`）
-  2. 在 `claw-family/docs/` 下创建 PRD 文档
+  2. 在 **`docs/`**（claw-sources 根目录）下创建 PRD 文档
   3. 推送并创建 PRD PR
   4. **等待用户确认**（飞书回复「确认」、「可以」等）
   5. 合并 PRD PR
