@@ -62,15 +62,32 @@
 
 ## 改代码/配置：必须 worktree + PR
 
+### 🏛️ Monorepo 结构认知
+
+**重要**：`claw-sources` 是 monorepo 根目录（git 仓库），阿布的所有 worktree 操作都必须基于这个根目录！
+
+```
+claw-sources/  ← git 仓库根目录（worktree 基于这里创建）
+├── docs/  ← PRD 文档存放位置
+├── claw-family/  ← OpenClaw runtime 主项目
+│   ├── skills/  ← 技能代码
+│   ├── config/  ← 配置
+│   ├── workspace-defaults/  ← bootstrap 模板
+│   └── openClawRuntime/.workspace/  ← workspace（SOUL.md, USER.md, memory/, inspiration/ 等）
+├── futu-openD/  ← 富途 OpenD 项目
+├── open-openclaw/  ← OpenClaw UI 项目
+└── external-refs/  ← 外部参考代码
+```
+
 ### 目录分类
 
 | 目录 | 是否需要 PR | 说明 |
 |------|-----------|------|
-| `skills/`、`config/`、`scripts/`、`hooks/` | ✅ **必须** | 代码、配置、脚本 |
-| `workspace-defaults/` | ✅ **必须** | 核心配置（SOUL.md、USER.md 等） |
-| `docs/` | ✅ **必须** | **claw-sources 根目录的 docs/**，需求文档（PRD）、架构文档 |
-| `openClawRuntime/.workspace/docs/` | ❌ 不需要 | workspace 文档（MEMORY.md 等） |
-| `inspiration/`、`memory/` | ❌ 不需要 | 灵感、记忆 |
+| `claw-family/skills/`、`claw-family/config/`、`claw-family/scripts/` | ✅ **必须** | 技能、配置、脚本 |
+| `claw-family/workspace-defaults/` | ✅ **必须** | 核心配置（SOUL.md、USER.md 等） |
+| `docs/` | ✅ **必须** | **claw-sources 根目录的 docs/**，PRD 文档 |
+| `futu-openD/`、`open-openclaw/` | ✅ **必须** | 其他子项目代码 |
+| `claw-family/openClawRuntime/.workspace/` | ❌ 不需要 | workspace 文档（MEMORY.md、inspiration/ 等） |
 
 ### 判断标准：是否需要 PRD
 
@@ -82,7 +99,8 @@
 
 **注意**：
 - PRD 文档存放在 **claw-sources 根目录的 `docs/`** 下，命名规范：`prd-<英文主题>-YYYY-MM-DD.md`
-- `openClawRuntime/.workspace/` 是 workspace 目录，其下的文档不需要 PRD
+- `claw-family/openClawRuntime/.workspace/` 是 workspace 目录，其下的文档（MEMORY.md、inspiration/ 等）不需要 PRD
+- **worktree 必须基于 claw-sources 根目录创建**，路径格式：`../claw-sources--{分支名}`
 
 ### PR 流程
 
@@ -93,10 +111,14 @@
 - 不写 PRD，直接创建 worktree → 实施 → 创建 PR（1 个 PR）
 
 **功能扩展**：
-1. **PRD 阶段**：创建 PRD 文档 worktree → 在 **`docs/`**（claw-sources 根目录）下写 PRD → 创建 PRD PR → 等待用户确认
+1. **PRD 阶段**：创建 PRD 文档 worktree → 在 **`claw-sources/docs/`** 下写 PRD → 创建 PRD PR → 等待用户确认
 2. **用户确认**：用户在飞书回复「确认」、「可以」等
 3. **合并 PRD**：合并 PRD PR 到 main
 4. **实施阶段**：用户说「基于该 PRD 实施」→ 创建实现 worktree → 实施 → 创建实现 PR（第 2 个 PR）
+
+**worktree 路径示例**：
+- ✅ 正确：`/Users/huangxiaogang/claw-sources--feat-xxx`
+- ❌ 错误：`/Users/huangxiaogang/claw-sources/claw-family--feat-xxx`
 
 **飞书回复须含**（涉及本仓库时）：
 - ✅ **是否涉及本仓库**：本次指令是否会修改 claw-family 的代码/配置
