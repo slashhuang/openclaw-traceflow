@@ -115,10 +115,9 @@
 **需要 PR 的修改**（`skills/`、`config/`、`scripts/`、`hooks/`、`workspace-defaults/`）：
 - 一律用 git worktree + 分支，交付物为 GitHub PR 链接
 - **禁止在主目录直接改**
-- **禁止使用 gh CLI 创建 PR**（gh 登录一直失败，改用浏览器手动创建）
 - 修 bug 不写 PRD、1 个 PR
 - 功能扩展先 PRD（单独 PR，合并后用户说「基于该 PRD 实施」）再实现、共 2 个 PR
-- 飞书回复须含：是否涉及本仓库、是否先写 PRD、worktree 路径、PR 链接（push 后让爸爸在浏览器创建）
+- 飞书回复须含：是否涉及本仓库、是否先写 PRD、worktree 路径、PR 链接（push 后自动创建或浏览器手动创建）
 
 **不需要 PR 的修改**（`docs/`、`inspiration/`、`memory/`）：
 - 直接 `git add + commit + push`

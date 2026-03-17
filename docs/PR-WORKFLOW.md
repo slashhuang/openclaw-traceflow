@@ -84,9 +84,9 @@ git commit -m "feat: 增加环境变量检查"
 git push -u origin feat/startup-env-check
 ```
 
-**创建 PR**：git-workflow skill 会调用 GitHub API 自动创建 PR。
+**创建 PR**：git-workflow skill 会自动创建 PR（使用 gh CLI 或 GitHub API）。
 
-**所需配置**：需在**运行 OpenClaw 的环境**里提供 `GITHUB_TOKEN`，否则会给出「手动创建 PR」的链接。配置方式（任选其一）：
+**所需配置**：需在**运行 OpenClaw 的环境**里提供 `GITHUB_TOKEN`，否则会自动切换到浏览器手动创建模式。配置方式（任选其一）：
 
 - **推荐**：在 `openclaw.env.json`（仓库根或 `config/`）中增加 `"GITHUB_TOKEN": "ghp_xxx"`。该文件若含敏感信息，不要提交，仅本地或部署机使用。
 - 或在启动前执行 `export GITHUB_TOKEN=ghp_xxx`，再运行 `./scripts/start-openclaw.sh` 或 PM2。
@@ -94,7 +94,7 @@ git push -u origin feat/startup-env-check
 
 Token 需具备 `repo` 权限（GitHub → Settings → Developer settings → Personal access tokens）。
 
-**注意**：不使用 gh CLI（配置复杂且容易失败），直接用 curl + GitHub API 创建 PR。
+**gh CLI 配置**：若已配置 `gh` CLI（`gh auth login` 成功），git-workflow 会优先使用 gh CLI 创建 PR；否则使用 GitHub API（curl）或浏览器手动创建。
 
 ### 7. 评审与合并
 
