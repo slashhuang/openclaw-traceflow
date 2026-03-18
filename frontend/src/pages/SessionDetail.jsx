@@ -40,6 +40,24 @@ export default function SessionDetail() {
     }
   };
 
+  /** 推断 user 消息的实际来源：heartbeat/cron 系统任务 vs 真实用户 */
+  const inferMessageLabel = (msg) => {
+    if (msg.role !== 'user') return msg.role;
+    const content = (msg.content || '').toLowerCase();
+    // heartbeat 任务：Read HEARTBEAT.md、HEARTBEAT_OK、heartbeat poll/wake 等
+    if (content.includes('heartbeat.md') || content.includes('heartbeat_ok') || content.includes('heartbeat poll') || content.includes('heartbeat wake')) {
+      return 'heartbeat';
+    }
+    // 带 Current time 的长系统提示（典型 heartbeat/cron 格式）
+    if (content.includes('current time:') && content.length > 150) {
+      return 'heartbeat';
+    }
+    if (content.includes('cron:') || content.includes('scheduled task')) {
+      return 'cron';
+    }
+    return 'user';
+  };
+
   const formatDuration = (ms) => {
     if (!ms) return 'N/A';
     const seconds = Math.floor(ms / 1000);
@@ -50,43 +68,65 @@ export default function SessionDetail() {
     return `${seconds}s`;
   };
 
-  const formatTokenUsage = (usage) => {
+  const formatTokenUsage = (usage, model, contextTokens) => {
     if (!usage) return null;
+    const limit = usage.limit ?? contextTokens;
+    const hasInputOutput = (usage.input ?? 0) > 0 || (usage.output ?? 0) > 0;
     return (
       <div className="card" style={{ marginTop: '1rem' }}>
-        <h4 className="card-title">Token 使用情况</h4>
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '1rem' }}>
-          <div>
-            <div className="stat-value" style={{ fontSize: '1.5rem' }}>{usage.input || 0}</div>
-            <div className="stat-label">Input Tokens</div>
-          </div>
-          <div>
-            <div className="stat-value" style={{ fontSize: '1.5rem' }}>{usage.output || 0}</div>
-            <div className="stat-label">Output Tokens</div>
-          </div>
+        <h4 className="card-title">
+          Token 使用情况
+          {model && (
+            <span className="text-muted text-sm" style={{ marginLeft: '0.5rem', fontWeight: 'normal' }}>
+              · 模型: {model.split('/').pop()}
+              {limit != null && ` · 阈值: ${(limit / 1000).toFixed(0)}k`}
+            </span>
+          )}
+        </h4>
+        <p className="text-muted" style={{ fontSize: '0.7rem', marginBottom: '0.75rem' }}>
+          Input = 发给模型的 token（提示+上下文） · Output = 模型生成的 token · Total = 累计用量
+        </p>
+        <div className="grid" style={{ gridTemplateColumns: hasInputOutput ? 'repeat(3, 1fr)' : '1fr', marginBottom: '1rem' }}>
+          {hasInputOutput && (
+            <>
+              <div>
+                <div className="stat-value" style={{ fontSize: '1.5rem' }}>{usage.input || 0}</div>
+                <div className="stat-label">Input Tokens</div>
+              </div>
+              <div>
+                <div className="stat-value" style={{ fontSize: '1.5rem' }}>{usage.output || 0}</div>
+                <div className="stat-label">Output Tokens</div>
+              </div>
+            </>
+          )}
           <div>
             <div className="stat-value" style={{ fontSize: '1.5rem' }}>{usage.total || 0}</div>
             <div className="stat-label">Total Tokens</div>
+            {!hasInputOutput && (usage.total ?? 0) > 0 && (
+              <div className="text-muted" style={{ fontSize: '0.65rem', marginTop: '0.25rem' }}>
+                当前数据源仅提供总量，未单独记录 input/output
+              </div>
+            )}
           </div>
         </div>
-        {usage.limit && (
+        {limit && (
           <div>
             <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
               <span className="text-muted text-sm">使用限额</span>
-              <span className="text-muted text-sm">{usage.total} / {usage.limit}</span>
+              <span className="text-muted text-sm">{usage.total} / {limit}</span>
             </div>
             <div className="progress-bar">
               <div
                 className="progress-fill"
                 style={{
-                  width: `${Math.min((usage.total / usage.limit) * 100, 100)}%`,
-                  background: (usage.total / usage.limit) > 0.8 ? 'var(--danger)' : 'var(--primary)',
+                  width: `${Math.min((usage.total / limit) * 100, 100)}%`,
+                  background: (usage.total / limit) > 0.8 ? 'var(--danger)' : 'var(--primary)',
                 }}
               />
             </div>
             <div className="text-muted text-sm mt-2">
-              已使用 {usage.utilization || Math.round((usage.total / usage.limit) * 100)}%
-              {(usage.total / usage.limit) > 0.8 && (
+              已使用 {usage.utilization || Math.round((usage.total / limit) * 100)}%
+              {(usage.total / limit) > 0.8 && (
                 <span style={{ color: 'var(--danger)', marginLeft: '0.5rem' }}>⚠️ 接近限额</span>
               )}
             </div>
@@ -128,7 +168,14 @@ export default function SessionDetail() {
       <div className="flex flex-between" style={{ marginBottom: '1.5rem' }}>
         <div>
           <h2 className="card-title">会话详情</h2>
-          <p className="text-muted text-sm mt-2">ID: {session.sessionId}</p>
+          <div className="flex" style={{ alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+            {session.typeLabel && (
+              <span className="badge" style={{ fontSize: '0.75rem', background: session.typeLabel === 'heartbeat' ? 'rgba(72,187,120,0.3)' : session.typeLabel === 'cron' ? 'rgba(237,137,54,0.3)' : 'rgba(102,126,234,0.3)' }}>
+                {session.typeLabel}
+              </span>
+            )}
+            <span className="text-muted text-sm">ID: {session.sessionId}</span>
+          </div>
         </div>
         <div className="flex">
           <Link to="/sessions" className="btn btn-secondary">返回列表</Link>
@@ -138,12 +185,18 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginBottom: '1.5rem' }}>
         <div className="stat-card">
           <div className="stat-value">
             <span className={`session-status ${session.status}`}>{session.status}</span>
           </div>
           <div className="stat-label">状态</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{ fontSize: '1rem' }}>
+            {(session.typeLabel === 'heartbeat' || session.typeLabel === 'cron') ? session.typeLabel : (session.user || 'unknown')}
+          </div>
+          <div className="stat-label">用户</div>
         </div>
         <div className="stat-card">
           <div className="stat-value" style={{ fontSize: '1.5rem' }}>
@@ -165,7 +218,7 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      {session.tokenUsage && formatTokenUsage(session.tokenUsage)}
+      {session.tokenUsage && formatTokenUsage(session.tokenUsage, session.model, session.contextTokens)}
 
       <div className="card mt-4">
         <div className="flex" style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
@@ -188,26 +241,39 @@ export default function SessionDetail() {
           {activeTab === 'messages' && (
             <div>
               {session.messages && session.messages.length > 0 ? (
-                session.messages.map((msg, idx) => (
+                session.messages.map((msg, idx) => {
+                  const displayRole = inferMessageLabel(msg);
+                  const isSystemTask = displayRole === 'heartbeat' || displayRole === 'cron';
+                  const bgColor = isSystemTask ? 'rgba(237, 137, 54, 0.15)' : msg.role === 'user' ? 'rgba(102, 126, 234, 0.2)' : 'rgba(72, 187, 120, 0.2)';
+                  const borderColor = isSystemTask ? 'var(--warning)' : msg.role === 'user' ? 'var(--primary)' : 'var(--success)';
+                  return (
                   <div
                     key={idx}
                     style={{
                       padding: '1rem',
                       borderRadius: '0.5rem',
                       marginBottom: '1rem',
-                      background: msg.role === 'user' ? 'rgba(102, 126, 234, 0.2)' : 'rgba(72, 187, 120, 0.2)',
-                      border: `1px solid ${msg.role === 'user' ? 'var(--primary)' : 'var(--success)'}`,
+                      background: bgColor,
+                      border: `1px solid ${borderColor}`,
                     }}
                   >
                     <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
-                      <span className="badge">{msg.role}</span>
+                      <span className="badge" style={isSystemTask ? { background: 'rgba(237, 137, 54, 0.4)' } : {}}>
+                        {displayRole}
+                        {msg.sender && (
+                          <span className="text-muted" style={{ marginLeft: '0.5rem', fontWeight: 'normal' }}>
+                            · {msg.sender}
+                          </span>
+                        )}
+                      </span>
                       <span className="text-muted text-sm">
                         {msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : 'N/A'}
                       </span>
                     </div>
                     <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{msg.content || '(no content)'}</div>
                   </div>
-                ))
+                );
+                })
               ) : (
                 <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
                   暂无消息

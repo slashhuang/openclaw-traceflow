@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { SkillsService } from '../skills/skills.service';
 
 export interface HealthStatus {
   status: 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY' | 'CRITICAL';
@@ -22,13 +23,18 @@ export interface HealthStatus {
   };
   lastHeartbeat?: number;
   openclawConnected?: boolean;
+  /** Gateway 连接失败时的错误信息（用于前端展示和恢复引导） */
+  gatewayError?: string;
 }
 
 @Injectable()
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
 
-  constructor(private openclawService: OpenClawService) {}
+  constructor(
+    private openclawService: OpenClawService,
+    private skillsService: SkillsService,
+  ) {}
 
   async getHealthStatus(): Promise<HealthStatus> {
     const status: HealthStatus = {
@@ -46,18 +52,20 @@ export class HealthService {
       openclawConnected: false,
     };
 
-    // 1. 检查 OpenClaw Gateway 连接
+    // 1. 检查 OpenClaw Gateway 连接（WebSocket 协议，含 token 鉴权）
     const connectionResult = await this.openclawService.checkConnection();
     status.openclawConnected = connectionResult.connected;
+    status.gatewayError = connectionResult.error;
 
     if (!connectionResult.connected) {
       status.status = 'DEGRADED';
-      this.logger.warn('OpenClaw Gateway not connected');
+      this.logger.warn(`OpenClaw Gateway not connected: ${connectionResult.error}`);
       return status;
     }
 
-    // 2. Gateway 已连接，设置 running 为 true
+    // 2. Gateway 已连接，设置 running 为 true，并触发 systemPrompt 缓存刷新
     status.gateway.running = true;
+    void this.skillsService.refreshCache();
 
     // 3. 尝试从 OpenClaw 获取更多信息（可选）
     try {

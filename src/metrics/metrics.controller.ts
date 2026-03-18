@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { MetricsService, LatencyMetrics } from './metrics.service';
+import { MetricsService, LatencyMetrics, TokenSummaryMetrics, TokenUsageBySession } from './metrics.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
 
 @Controller('api/metrics')
@@ -73,6 +73,20 @@ export class MetricsController {
       { sessionKey: 'calm-lagoon', requestCount: 15, avgDurationMs: 1200 },
       { sessionKey: 'tidal-bloom', requestCount: 8, avgDurationMs: 950 },
     ];
+  }
+
+  @Get('token-summary')
+  async getTokenSummary(
+    @Query('timeRangeMs') timeRangeMs?: number,
+  ): Promise<TokenSummaryMetrics> {
+    return this.metricsService.getTokenSummary(timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 86400000);
+  }
+
+  @Get('token-usage')
+  async getTokenUsageBySession(
+    @Query('timeRangeMs') timeRangeMs?: number,
+  ): Promise<TokenUsageBySession[]> {
+    return this.metricsService.getTokenUsageBySession(timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 86400000);
   }
 
   @Get('subagents')

@@ -5,9 +5,14 @@ export interface Session {
   sessionKey: string;
   sessionId: string;
   user: string;
+  /** 任务类型：heartbeat | cron | wave用户 | 其他 channel */
+  typeLabel?: string;
   status: 'active' | 'idle' | 'completed' | 'failed';
   lastActive: number;
   duration: number;
+  totalTokens?: number;
+  contextTokens?: number;
+  model?: string;
   tokenUsage?: {
     input: number;
     output: number;
@@ -17,11 +22,27 @@ export interface Session {
   };
 }
 
+/** 从 sessionKey 推断任务类型（heartbeat、cron、wave 等） */
+function inferSessionTypeLabel(sessionKey: string, sessionId: string): string {
+  const key = sessionKey || sessionId || '';
+  const full = key.includes('/') ? key.split('/').pop() || key : key;
+  if (full.endsWith(':main') || full === 'main') return 'heartbeat';
+  if (full.includes(':cron:')) return 'cron';
+  if (full.includes(':wave:')) return 'Wave 用户';
+  if (full.includes(':slack:')) return 'Slack';
+  if (full.includes(':telegram:')) return 'Telegram';
+  if (full.includes(':discord:')) return 'Discord';
+  if (full.includes(':feishu:')) return '飞书';
+  if (full.includes(':cron')) return 'cron';
+  return '用户';
+}
+
 export interface SessionDetail extends Session {
   messages: Array<{
     role: 'user' | 'assistant';
     content: string;
     timestamp: number;
+    sender?: string;
   }>;
   toolCalls: Array<{
     name: string;
@@ -52,15 +73,19 @@ export class SessionsService {
         sessionKey: s.sessionKey,
         sessionId: s.sessionId,
         user: s.userId || 'unknown',
+        typeLabel: inferSessionTypeLabel(s.sessionKey, s.sessionId),
         status: s.status,
         lastActive: s.lastActiveAt,
         duration: Date.now() - s.createdAt,
+        totalTokens: s.totalTokens,
+        contextTokens: s.contextTokens,
+        model: s.model,
         tokenUsage: s.tokenUsage && 'limit' in s.tokenUsage && s.tokenUsage.limit
           ? {
               ...s.tokenUsage,
               utilization: Math.round((s.tokenUsage.total / s.tokenUsage.limit) * 100),
             }
-          : s.tokenUsage as any,
+          : (s.tokenUsage as Session['tokenUsage']),
       }));
     } catch (error) {
       this.logger.error('Failed to list sessions:', error);
@@ -80,7 +105,10 @@ export class SessionsService {
         sessionKey: detail.sessionKey,
         sessionId: detail.sessionId,
         user: detail.userId || 'unknown',
+        typeLabel: inferSessionTypeLabel(detail.sessionKey, detail.sessionId),
         status: detail.status,
+        model: detail.model,
+        contextTokens: detail.contextTokens,
         lastActive: detail.lastActiveAt,
         duration: Date.now() - detail.createdAt,
         tokenUsage: detail.tokenUsage && 'limit' in detail.tokenUsage && detail.tokenUsage.limit
@@ -93,6 +121,7 @@ export class SessionsService {
           role: m.role as 'user' | 'assistant',
           content: m.content,
           timestamp: m.timestamp,
+          ...(m.sender ? { sender: m.sender } : {}),
         })),
         toolCalls: (detail.toolCalls || []).map((t: any) => ({
           name: t.name,

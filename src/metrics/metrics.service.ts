@@ -16,11 +16,57 @@ export interface HookMetric {
   metadata?: any;
 }
 
+export interface TokenUsageMetric {
+  id: string;
+  timestamp: number;
+  sessionKey: string;
+  sessionId: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  tokenLimit?: number;
+  utilization?: number;
+}
+
+export interface TokenEventMetric {
+  id: string;
+  timestamp: number;
+  sessionKey: string;
+  sessionId: string;
+  eventType: 'token:near_limit' | 'token:limit_reached';
+  threshold?: number;
+  currentUsage?: number;
+  limit?: number;
+}
+
 export interface LatencyMetrics {
   p50: number;
   p95: number;
   p99: number;
   count: number;
+}
+
+export interface TokenUsageBySession {
+  sessionKey: string;
+  sessionId?: string;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  requestCount: number;
+  avgUtilization?: number;
+  /** 模型 context 上限（用于展示阈值） */
+  tokenLimit?: number;
+  limitReachedCount?: number;
+}
+
+export interface TokenSummaryMetrics {
+  totalInput: number;
+  totalOutput: number;
+  totalTokens: number;
+  tokenCost?: number;
+  nearLimitCount: number;
+  limitReachedCount: number;
+  sessionCount: number;
 }
 
 @Injectable()
@@ -86,10 +132,43 @@ export class MetricsService implements OnModuleInit {
       )
     `);
 
+    // Token 用量表 - 记录每次会话的 token 消耗
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS token_usage (
+        id TEXT PRIMARY KEY,
+        timestamp INTEGER NOT NULL,
+        session_key TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        total_tokens INTEGER NOT NULL,
+        token_limit INTEGER,
+        utilization REAL
+      )
+    `);
+
+    // Token 事件表 - 记录触顶和预警事件
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS token_events (
+        id TEXT PRIMARY KEY,
+        timestamp INTEGER NOT NULL,
+        session_key TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        threshold REAL,
+        current_usage INTEGER,
+        token_limit INTEGER
+      )
+    `);
+
     // 创建索引
     this.db.run('CREATE INDEX IF NOT EXISTS idx_timestamp ON hook_metrics(timestamp)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_hook ON hook_metrics(hook)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_session_key ON hook_metrics(session_key)');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_token_timestamp ON token_usage(timestamp)');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_token_session_key ON token_usage(session_key)');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_token_events_timestamp ON token_events(timestamp)');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_token_events_type ON token_events(event_type)');
 
     console.log('Metrics database initialized');
   }
@@ -99,7 +178,7 @@ export class MetricsService implements OnModuleInit {
 
     try {
       this.db.run(
-        `INSERT OR REPLACE INTO hook_metrics 
+        `INSERT OR REPLACE INTO hook_metrics
          (id, timestamp, hook, session_key, session_id, tool_name, duration_ms, success, error, metadata)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -121,6 +200,167 @@ export class MetricsService implements OnModuleInit {
     } catch (error) {
       console.error('Failed to record metric:', error);
     }
+  }
+
+  /**
+   * 记录 Token 用量
+   */
+  async recordTokenUsage(usage: TokenUsageMetric): Promise<void> {
+    if (!this.db) return;
+
+    try {
+      this.db.run(
+        `INSERT OR REPLACE INTO token_usage
+         (id, timestamp, session_key, session_id, input_tokens, output_tokens, total_tokens, token_limit, utilization)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          usage.id,
+          usage.timestamp,
+          usage.sessionKey,
+          usage.sessionId,
+          usage.inputTokens,
+          usage.outputTokens,
+          usage.totalTokens,
+          usage.tokenLimit || null,
+          usage.utilization || null,
+        ],
+      );
+
+      this.saveDatabase();
+    } catch (error) {
+      console.error('Failed to record token usage:', error);
+    }
+  }
+
+  /**
+   * 记录 Token 事件（预警/触顶）
+   */
+  async recordTokenEvent(event: TokenEventMetric): Promise<void> {
+    if (!this.db) return;
+
+    try {
+      this.db.run(
+        `INSERT INTO token_events
+         (id, timestamp, session_key, session_id, event_type, threshold, current_usage, token_limit)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          event.id,
+          event.timestamp,
+          event.sessionKey,
+          event.sessionId,
+          event.eventType,
+          event.threshold || null,
+          event.currentUsage || null,
+          event.limit || null,
+        ],
+      );
+
+      this.saveDatabase();
+    } catch (error) {
+      console.error('Failed to record token event:', error);
+    }
+  }
+
+  /**
+   * 获取 Token 汇总指标
+   */
+  async getTokenSummary(timeRangeMs: number = 86400000): Promise<TokenSummaryMetrics> {
+    if (!this.db) return {
+      totalInput: 0,
+      totalOutput: 0,
+      totalTokens: 0,
+      nearLimitCount: 0,
+      limitReachedCount: 0,
+      sessionCount: 0,
+    };
+
+    const now = Date.now();
+    const startTime = now - timeRangeMs;
+
+    // 获取 token 总量
+    const tokenResult = this.db.exec(
+      `SELECT SUM(input_tokens), SUM(output_tokens), SUM(total_tokens), COUNT(DISTINCT session_id)
+       FROM token_usage WHERE timestamp > ?`,
+      [startTime],
+    );
+
+    // 获取预警和触顶次数
+    const eventResult = this.db.exec(
+      `SELECT event_type, COUNT(*) FROM token_events
+       WHERE timestamp > ? GROUP BY event_type`,
+      [startTime],
+    );
+
+    const totals = tokenResult.length ? tokenResult[0].values[0] : [0, 0, 0, 0];
+    const events = eventResult.length ? eventResult[0].values : [];
+
+    const nearLimitCount = events.find(e => e[0] === 'token:near_limit')?.[1] as number || 0;
+    const limitReachedCount = events.find(e => e[0] === 'token:limit_reached')?.[1] as number || 0;
+
+    return {
+      totalInput: (totals[0] as number) || 0,
+      totalOutput: (totals[1] as number) || 0,
+      totalTokens: (totals[2] as number) || 0,
+      nearLimitCount,
+      limitReachedCount,
+      sessionCount: (totals[3] as number) || 0,
+    };
+  }
+
+  /**
+   * 获取 Session Key Token 用量排行
+   */
+  async getTokenUsageBySession(timeRangeMs: number = 86400000): Promise<TokenUsageBySession[]> {
+    if (!this.db) return [];
+
+    const now = Date.now();
+    const startTime = now - timeRangeMs;
+
+    const result = this.db.exec(
+      `SELECT session_key,
+              MAX(session_id) as session_id,
+              SUM(total_tokens) as total_tokens,
+              SUM(input_tokens) as input_tokens,
+              SUM(output_tokens) as output_tokens,
+              COUNT(*) as request_count,
+              AVG(utilization) as avg_utilization,
+              MAX(token_limit) as token_limit
+       FROM token_usage
+       WHERE timestamp > ?
+       GROUP BY session_key
+       ORDER BY total_tokens DESC
+       LIMIT 10`,
+      [startTime],
+    );
+
+    if (!result.length) return [];
+
+    // 获取每个 session 的触顶次数
+    const limitReachedResult = this.db.exec(
+      `SELECT session_key, COUNT(*) as count FROM token_events
+       WHERE timestamp > ? AND event_type = 'token:limit_reached'
+       GROUP BY session_key`,
+      [startTime],
+    );
+
+    const limitReachedMap = new Map<string, number>();
+    if (limitReachedResult.length) {
+      for (const row of limitReachedResult[0].values) {
+        limitReachedMap.set(row[0] as string, row[1] as number);
+      }
+    }
+
+    return result[0].values.map((row) => ({
+      sessionKey: row[0] as string,
+      sessionId: row[1] as string,
+      totalTokens: row[2] as number,
+      inputTokens: row[3] as number,
+      outputTokens: row[4] as number,
+      requestCount: row[5] as number,
+      avgUtilization: row[6] as number,
+      tokenLimit: typeof row[7] === 'number' ? row[7] : undefined,
+      limitReachedCount: limitReachedMap.get(row[0] as string) || 0,
+    }));
   }
 
   async getLatencyMetrics(timeRangeMs: number = 3600000): Promise<LatencyMetrics> {

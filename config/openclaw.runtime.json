@@ -2,8 +2,7 @@
   "host": "127.0.0.1",
   "port": 3001,
   "openclawGatewayUrl": "http://localhost:18789",
-  "openclawStateDir": "/Users/huangxiaogang/claw-sources/claw-family/openClawRuntime/.clawStates",
   "accessMode": "local-only",
-  "dataDir": "/Users/huangxiaogang/claw-sources/open-openclaw/data",
-  "pm2LogPath": "/Users/huangxiaogang/.pm2/logs/claw-gateway-out.log"
+  "dataDir": "/Users/xiaogang.h/work/wave-fe/ai-调研/claw-sources/open-openclaw/data",
+  "openclawGatewayToken": "wave-fe"
 }

@@ -28,8 +28,9 @@ export default defineConfig({
     outDir: '../public/app',
     emptyOutDir: true,
     base: '/',
+    sourcemap: true, // 启用 sourcemap
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'socket.io-client', 'recharts', 'axios'],
+    include: ['react', 'react-dom', 'react-router-dom', 'socket.io-client', 'recharts', 'axios', 'react-markdown'],
   },
 })

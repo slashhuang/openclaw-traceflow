@@ -1,10 +1,10 @@
 /**
  * OpenClaw 路径解析（开源 / 无机器硬编码）
  *
- * 优先级：
+ * 优先级（参考 control-ui 的 WebSocket 方案）：
  * 1. 显式 openclawStateDir
- * 2. 向正在运行的 Gateway 拉取 WebSocket hello-ok.snapshot（stateDir/configPath 与进程一致）；
- *    仅当本机存在 ${stateDir}/agents 时采用（排除「监控连远程 Gateway」时误用远端路径）
+ * 2. 向正在运行的 Gateway 拉取 WebSocket：connect → hello-ok.snapshot（stateDir/configPath）
+ *    + skills.status（workspaceDir）；仅当本机存在 ${stateDir}/agents 时采用
  * 3. OPENCLAW_STATE_DIR / OPENCLAW_CONFIG_PATH
  * 4. openclaw config file + 目录启发式
  *
@@ -22,7 +22,7 @@ const execFileAsync = promisify(execFile);
 export type OpenClawPathsSource = {
   configPath: 'gateway' | 'env' | 'cli' | 'none';
   stateDir: 'gateway' | 'env' | 'explicit' | 'inferred' | 'fallback';
-  workspaceDir: 'config-file' | 'cli' | 'none';
+  workspaceDir: 'gateway' | 'config-file' | 'cli' | 'explicit' | 'none';
 };
 
 export interface OpenClawResolvedPaths {
@@ -140,6 +140,8 @@ async function runOpenClawConfigGetWorkspace(
 
 export async function resolveOpenClawPaths(options: {
   explicitStateDir?: string;
+  /** 手动指定工作目录，优先级最高 */
+  explicitWorkspaceDir?: string;
   gatewayHttpUrl?: string;
   gatewayToken?: string;
   gatewayPassword?: string;
@@ -165,6 +167,7 @@ export async function resolveOpenClawPaths(options: {
     source.stateDir = 'explicit';
   }
 
+  let workspaceDirFromGateway: string | null = null;
   if (!stateDir && options.gatewayHttpUrl?.trim()) {
     const tok =
       options.gatewayToken?.trim() || env.OPENCLAW_GATEWAY_TOKEN?.trim();
@@ -183,6 +186,9 @@ export async function resolveOpenClawPaths(options: {
           if (gw.configPath && fs.existsSync(gw.configPath)) {
             configPath = path.resolve(gw.configPath);
             source.configPath = 'gateway';
+          }
+          if (gw.workspaceDir && fs.existsSync(gw.workspaceDir)) {
+            workspaceDirFromGateway = gw.workspaceDir;
           }
         } else {
           gatewayHint =
@@ -245,7 +251,15 @@ export async function resolveOpenClawPaths(options: {
   }
 
   let workspaceDir: string | null = null;
-  if (configPath && fs.existsSync(configPath)) {
+  if (options.explicitWorkspaceDir?.trim()) {
+    workspaceDir = expandHome(options.explicitWorkspaceDir.trim());
+    source.workspaceDir = 'explicit';
+  }
+  if (!workspaceDir && workspaceDirFromGateway) {
+    workspaceDir = workspaceDirFromGateway;
+    source.workspaceDir = 'gateway';
+  }
+  if (!workspaceDir && configPath && fs.existsSync(configPath)) {
     workspaceDir = readWorkspaceFromConfigFile(configPath);
     if (workspaceDir) {
       source.workspaceDir = 'config-file';

@@ -4,6 +4,8 @@ import { setupApi } from '../api';
 export default function SetupWizard({ onComplete }) {
   const [step, setStep] = useState(1);
   const [gatewayUrl, setGatewayUrl] = useState('http://localhost:18789');
+  const [gatewayToken, setGatewayToken] = useState('');
+  const [gatewayPassword, setGatewayPassword] = useState('');
   const [accessMode, setAccessMode] = useState('local-only');
   const [accessToken, setAccessToken] = useState('');
   const [testing, setTesting] = useState(false);
@@ -15,10 +17,14 @@ export default function SetupWizard({ onComplete }) {
     setTesting(true);
     setError(null);
     try {
-      const result = await setupApi.testConnection(gatewayUrl);
+      const result = await setupApi.testConnection({
+        openclawGatewayUrl: gatewayUrl,
+        openclawGatewayToken: gatewayToken || undefined,
+        openclawGatewayPassword: gatewayPassword || undefined,
+      });
       setTestResult(result);
-    } catch (error) {
-      setError(`测试失败：${error.message}`);
+    } catch (err) {
+      setError(`测试失败：${err.message}`);
     } finally {
       setTesting(false);
     }
@@ -28,8 +34,8 @@ export default function SetupWizard({ onComplete }) {
     try {
       const result = await setupApi.generateToken();
       setAccessToken(result.token);
-    } catch (error) {
-      setError(`生成 Token 失败：${error.message}`);
+    } catch (err) {
+      setError(`生成 Token 失败：${err.message}`);
     }
   };
 
@@ -39,12 +45,14 @@ export default function SetupWizard({ onComplete }) {
     try {
       await setupApi.configure({
         openclawGatewayUrl: gatewayUrl,
+        openclawGatewayToken: gatewayToken || undefined,
+        openclawGatewayPassword: gatewayPassword || undefined,
         accessMode,
         accessToken: accessMode === 'token' ? accessToken : undefined,
       });
       onComplete();
-    } catch (error) {
-      setError(`保存配置失败：${error.message}`);
+    } catch (err) {
+      setError(`保存配置失败：${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -84,11 +92,32 @@ export default function SetupWizard({ onComplete }) {
               />
             </div>
 
+            <div className="form-group">
+              <label className="form-label">Gateway Token（鉴权用，可选）</label>
+              <input
+                type="password"
+                className="form-input"
+                value={gatewayToken}
+                onChange={(e) => setGatewayToken(e.target.value)}
+                placeholder="OPENCLAW_GATEWAY_TOKEN"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Gateway Password（可选）</label>
+              <input
+                type="password"
+                className="form-input"
+                value={gatewayPassword}
+                onChange={(e) => setGatewayPassword(e.target.value)}
+                placeholder="系统或共享密码"
+              />
+            </div>
+
             {testResult && (
               <div className={`message ${testResult.connected ? 'message-success' : 'message-error'}`}>
                 {testResult.connected
-                  ? '✓ 连接成功！Gateway 正常运行。'
-                  : `✗ 连接失败：${testResult.error}`}
+                  ? `✓ ${testResult.message || '连接成功！配置已自动保存。'}`
+                  : `✗ 连接失败：${testResult.error || testResult.message}`}
               </div>
             )}
 
@@ -193,6 +222,12 @@ export default function SetupWizard({ onComplete }) {
                 <span className="text-muted">Gateway URL</span>
                 <span>{gatewayUrl}</span>
               </div>
+              {gatewayToken && (
+                <div className="flex flex-between" style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-muted">Gateway Token</span>
+                  <span className="text-muted text-sm">已配置</span>
+                </div>
+              )}
               <div className="flex flex-between" style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border)' }}>
                 <span className="text-muted">访问模式</span>
                 <span className="badge">{accessMode}</span>

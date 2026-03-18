@@ -33,18 +33,9 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const config = configService.getConfig();
 
-  // 启动日志追踪
+  // 启动日志追踪（弱依赖，静默失败）
   const logsService = app.get(LogsService);
-
-  // 尝试启动日志追踪（如果日志文件存在）
-  try {
-    await logsService.startTailing(config.openclawLogPath);
-    if (config.openclawLogPath) {
-      console.log(`Started tailing logs from: ${config.openclawLogPath}`);
-    }
-  } catch (error) {
-    console.warn(`Failed to start log tailing: ${error}. Logs will be available when OpenClaw is running.`);
-  }
+  logsService.startTailing(config.openclawLogPath);
 
   // 监听配置的主机/端口
   const port = config.port;

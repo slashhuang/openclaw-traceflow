@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { setupApi, healthApi, actionsApi } from '../api';
+import { setupApi, actionsApi } from '../api';
 
 export default function Settings() {
   const [config, setConfig] = useState(null);
   const [gatewayUrl, setGatewayUrl] = useState('');
+  const [gatewayToken, setGatewayToken] = useState('');
+  const [gatewayPassword, setGatewayPassword] = useState('');
+  const [stateDir, setStateDir] = useState('');
+  const [workspaceDir, setWorkspaceDir] = useState('');
   const [accessMode, setAccessMode] = useState('local-only');
   const [accessToken, setAccessToken] = useState('');
   const [message, setMessage] = useState(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -17,6 +22,8 @@ export default function Settings() {
         setConfig(data.config);
         setGatewayUrl(data.config.openclawGatewayUrl || '');
         setAccessMode(data.config.accessMode || 'local-only');
+        setStateDir(data.config.openclawStateDir || data.config.openclawPaths?.stateDir || '');
+        setWorkspaceDir(data.config.openclawWorkspaceDir || data.config.openclawPaths?.workspaceDir || '');
       } catch (error) {
         console.error('Failed to fetch config:', error);
       }
@@ -28,11 +35,15 @@ export default function Settings() {
     setTesting(true);
     setMessage(null);
     try {
-      const result = await setupApi.testConnection(gatewayUrl);
+      const result = await setupApi.testConnection({
+        openclawGatewayUrl: gatewayUrl,
+        openclawGatewayToken: gatewayToken || undefined,
+        openclawGatewayPassword: gatewayPassword || undefined,
+      });
       if (result.connected) {
-        setMessage({ type: 'success', text: '连接成功！Gateway 正常运行。' });
+        setMessage({ type: 'success', text: result.message || '连接成功！配置已自动保存。' });
       } else {
-        setMessage({ type: 'error', text: `连接失败：${result.error}` });
+        setMessage({ type: 'error', text: `连接失败：${result.error || result.message}` });
       }
     } catch (error) {
       setMessage({ type: 'error', text: `测试失败：${error.message}` });
@@ -47,6 +58,10 @@ export default function Settings() {
     try {
       await setupApi.configure({
         openclawGatewayUrl: gatewayUrl,
+        openclawGatewayToken: gatewayToken || undefined,
+        openclawGatewayPassword: gatewayPassword || undefined,
+        openclawStateDir: stateDir.trim() || undefined,
+        openclawWorkspaceDir: workspaceDir.trim() || undefined,
         accessMode,
         accessToken: accessMode === 'token' ? accessToken : undefined,
       });
@@ -107,6 +122,29 @@ export default function Settings() {
             />
           </div>
 
+          <div className="form-group">
+            <label className="form-label">Gateway Token（鉴权用，可选）</label>
+            <input
+              type="password"
+              className="form-input"
+              value={gatewayToken}
+              onChange={(e) => setGatewayToken(e.target.value)}
+              placeholder="OPENCLAW_GATEWAY_TOKEN"
+            />
+            <span className="text-muted text-sm">连接失败时请检查是否需填写 token</span>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Gateway Password（可选）</label>
+            <input
+              type="password"
+              className="form-input"
+              value={gatewayPassword}
+              onChange={(e) => setGatewayPassword(e.target.value)}
+              placeholder="系统或共享密码"
+            />
+          </div>
+
           <button
             className="btn btn-secondary"
             onClick={handleTestConnection}
@@ -115,6 +153,42 @@ export default function Settings() {
           >
             {testing ? '测试中...' : '测试连接'}
           </button>
+
+          <div style={{ marginTop: '1rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{ fontSize: '0.875rem' }}
+            >
+              {showAdvanced ? '收起' : '展开'} 路径配置
+            </button>
+            {showAdvanced && (
+              <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem' }}>
+                <div className="form-group">
+                  <label className="form-label">State Dir（手动指定，可选）</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={stateDir}
+                    onChange={(e) => setStateDir(e.target.value)}
+                    placeholder="~/.openclaw 或绝对路径"
+                  />
+                  <span className="text-muted text-sm">留空则从 Gateway/CLI 自动解析</span>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Workspace Dir（手动指定，可选）</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={workspaceDir}
+                    onChange={(e) => setWorkspaceDir(e.target.value)}
+                    placeholder="工作目录路径"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="card">

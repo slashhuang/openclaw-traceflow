@@ -9,6 +9,7 @@ import { LogsModule } from './logs/logs.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { ActionsModule } from './actions/actions.module';
 import { SetupModule } from './setup/setup.module';
+import { SkillsModule } from './skills/skills.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { SetupModule } from './setup/setup.module';
     MetricsModule,
     ActionsModule,
     SetupModule,
+    SkillsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,6 +1,7 @@
 /**
- * 从正在运行的 OpenClaw Gateway 拉取真实运行时路径（与进程内 STATE_DIR / config 一致）。
- * 见上游 buildGatewaySnapshot：snapshot.stateDir、snapshot.configPath
+ * 从正在运行的 OpenClaw Gateway 通过 WebSocket 拉取真实运行时路径。
+ * 参考 control-ui 方案：connect 握手后 hello-ok.snapshot 含 stateDir/configPath，
+ * 再调用 skills.status 获取 workspaceDir。
  */
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
@@ -15,11 +16,20 @@ export function gatewayHttpUrlToWs(httpUrl: string): string {
 }
 
 export type GatewayWsPathsResult =
-  | { ok: true; stateDir: string; configPath: string | null }
+  | {
+      ok: true;
+      stateDir: string;
+      configPath: string | null;
+      workspaceDir: string | null;
+    }
   | { ok: false; error: string };
 
 /**
- * WebSocket 完成 connect 后，hello-ok.payload.snapshot 含 stateDir / configPath。
+ * 通过 WebSocket 连接 Gateway（与 control-ui 相同流程）：
+ * 1. 等待 connect.challenge
+ * 2. 发送 connect 请求（含 token/password 鉴权）
+ * 3. hello-ok.payload.snapshot 含 stateDir、configPath
+ * 4. 调用 skills.status 获取 workspaceDir
  */
 export function fetchRuntimePathsFromGateway(params: {
   gatewayHttpUrl: string;
@@ -54,10 +64,13 @@ export function fetchRuntimePathsFromGateway(params: {
     );
 
     let connectReqId: string | null = null;
+    let skillsStatusReqId: string | null = null;
+    let pendingStateDir = '';
+    let pendingConfigPath: string | null = null;
     const ws = new WebSocket(wsUrl, { maxPayload: 25 * 1024 * 1024 });
 
     ws.on('error', (err) => {
-      if (!connectReqId) {
+      if (!settled) {
         done({ ok: false, error: err.message || String(err) });
       }
     });
@@ -90,15 +103,15 @@ export function fetchRuntimePathsFromGateway(params: {
                 minProtocol: GATEWAY_PROTOCOL_VERSION,
                 maxProtocol: GATEWAY_PROTOCOL_VERSION,
                 client: {
-                  id: 'openclaw-probe',
-                  version: 'openclaw-monitor',
+                  id: 'gateway-client',
+                  version: 'open-openclaw',
                   platform: process.platform,
-                  mode: 'probe',
+                  mode: 'backend',
                   instanceId: randomUUID(),
                 },
                 caps: [],
                 role: 'operator',
-                scopes: ['operator.read'],
+                scopes: ['operator.admin', 'operator.read'],
                 auth,
               },
             }),
@@ -126,7 +139,34 @@ export function fetchRuntimePathsFromGateway(params: {
             done({ ok: false, error: 'snapshot missing stateDir' });
             return;
           }
-          done({ ok: true, stateDir, configPath });
+          pendingStateDir = stateDir;
+          pendingConfigPath = configPath;
+          skillsStatusReqId = randomUUID();
+          ws.send(
+            JSON.stringify({
+              type: 'req',
+              id: skillsStatusReqId,
+              method: 'skills.status',
+              params: {},
+            }),
+          );
+          return;
+        }
+
+        if (msg.type === 'res' && msg.id === skillsStatusReqId) {
+          let workspaceDir: string | null = null;
+          if (msg.ok) {
+            const payload = msg.payload as { workspaceDir?: string };
+            if (typeof payload?.workspaceDir === 'string' && payload.workspaceDir.trim()) {
+              workspaceDir = payload.workspaceDir.trim();
+            }
+          }
+          done({
+            ok: true,
+            stateDir: pendingStateDir,
+            configPath: pendingConfigPath,
+            workspaceDir,
+          });
         }
       } catch (e) {
         done({ ok: false, error: e instanceof Error ? e.message : String(e) });

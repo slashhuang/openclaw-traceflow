@@ -11,6 +11,10 @@ export const healthApi = {
   getHealth: () => api.get('/health').then(res => res.data),
 };
 
+export const statusApi = {
+  getOverview: () => api.get('/status').then(res => res.data),
+};
+
 export const sessionsApi = {
   list: () => api.get('/sessions').then(res => res.data),
   getDetail: (id) => api.get(`/sessions/${id}`).then(res => res.data),
@@ -23,14 +27,21 @@ export const logsApi = {
 
 export const setupApi = {
   getStatus: () => api.get('/setup/status').then(res => res.data),
-  testConnection: (gatewayUrl) => api.post('/setup/test-connection', { gatewayUrl }).then(res => res.data),
+  testConnection: (params) =>
+    api.post('/setup/test-connection', {
+      openclawGatewayUrl: params?.gatewayUrl ?? params?.openclawGatewayUrl,
+      openclawGatewayToken: params?.gatewayToken ?? params?.openclawGatewayToken,
+      openclawGatewayPassword: params?.gatewayPassword ?? params?.openclawGatewayPassword,
+    }).then(res => res.data),
   configure: (config) => api.post('/setup/configure', config).then(res => res.data),
-  generateToken: () => api.post('/setup/generate-token').then(res => res.data),
+  generateToken: () => api.get('/setup/generate-token').then(res => res.data),
 };
 
 export const metricsApi = {
   getLatency: () => api.get('/metrics/latency').then(res => res.data),
   getTools: () => api.get('/metrics/tools').then(res => res.data),
+  getTokenSummary: () => api.get('/metrics/token-summary').then(res => res.data),
+  getTokenUsage: () => api.get('/metrics/token-usage').then(res => res.data),
 };
 
 export const actionsApi = {

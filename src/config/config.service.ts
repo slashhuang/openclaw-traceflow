@@ -13,6 +13,8 @@ export interface Config {
   openclawGatewayToken?: string;
   openclawGatewayPassword?: string;
   openclawStateDir?: string;
+  /** 手动指定工作目录（可选，留空则从 Gateway/CLI 解析） */
+  openclawWorkspaceDir?: string;
 
   // 访问保护配置
   accessToken?: string;
@@ -31,11 +33,16 @@ export class ConfigService {
   private configPath: string;
 
   constructor() {
-    this.configPath = path.join(process.cwd(), 'config', 'openclaw.runtime.json');
+    // 使用 realpathSync 解析符号链接，确保路径正确
+    const realCwd = fs.realpathSync(process.cwd());
+    this.configPath = path.join(realCwd, 'config', 'openclaw.runtime.json');
     this.config = this.loadConfig();
   }
 
   private loadConfig(): Config {
+    // 使用 realpathSync 解析符号链接，确保路径正确
+    const realCwd = fs.realpathSync(process.cwd());
+
     // 1. 默认配置
     const defaultConfig: Partial<Config> = {
       host: '127.0.0.1',
@@ -44,7 +51,7 @@ export class ConfigService {
       /** 留空则由 OpenClawService 通过 CLI / 环境变量自动解析 */
       openclawStateDir: undefined,
       accessMode: 'local-only',
-      dataDir: path.join(process.cwd(), 'data'),
+      dataDir: path.join(realCwd, 'data'),
       /** OpenClaw 日志路径，需用户配置（OpenClaw 输出到该文件） */
       openclawLogPath: undefined,
     };
@@ -68,6 +75,7 @@ export class ConfigService {
       openclawGatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN || undefined,
       openclawGatewayPassword: process.env.OPENCLAW_GATEWAY_PASSWORD || undefined,
       openclawStateDir: process.env.OPENCLAW_STATE_DIR || undefined,
+      openclawWorkspaceDir: process.env.OPENCLAW_WORKSPACE_DIR || undefined,
       accessToken: process.env.OPENCLAW_RUNTIME_ACCESS_TOKEN || undefined,
       accessMode: process.env.OPENCLAW_ACCESS_MODE as Config['accessMode'] || undefined,
       dataDir: process.env.DATA_DIR || undefined,
