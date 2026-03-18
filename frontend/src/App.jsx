@@ -7,6 +7,7 @@ import SessionDetail from './pages/SessionDetail';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
 import SetupWizard from './pages/SetupWizard';
+import Skills from './pages/Skills';
 
 function Navigation() {
   const location = useLocation();
@@ -14,6 +15,7 @@ function Navigation() {
   const navItems = [
     { path: '/', label: '仪表盘', icon: '📊' },
     { path: '/sessions', label: '会话', icon: '💬' },
+    { path: '/skills', label: 'Skills', icon: '🔧' },
     { path: '/logs', label: '日志', icon: '📝' },
     { path: '/settings', label: '设置', icon: '⚙️' },
   ];
@@ -112,6 +114,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/sessions/:id" element={<SessionDetail />} />
+          <Route path="/skills" element={<Skills />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
