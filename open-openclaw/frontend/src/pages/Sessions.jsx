@@ -51,6 +51,24 @@ export default function Sessions() {
     return `${seconds}s`;
   };
 
+  const formatTokenUtilization = (usage) => {
+    if (!usage || !usage.limit) return <span className="text-muted">N/A</span>;
+    const utilization = usage.utilization || Math.round((usage.total / usage.limit) * 100);
+    const color = utilization > 90 ? 'var(--danger)' : utilization > 70 ? 'var(--warning)' : 'var(--success)';
+    const warning = utilization > 80 ? ' ⚠️' : '';
+    return (
+      <div className="flex" style={{ alignItems: 'center', gap: '0.5rem' }}>
+        <div className="progress-bar" style={{ width: '80px' }}>
+          <div
+            className="progress-fill"
+            style={{ width: `${Math.min(utilization, 100)}%`, background: color }}
+          />
+        </div>
+        <span className="text-muted text-sm" style={{ color }}>{utilization}%{warning}</span>
+      </div>
+    );
+  };
+
   if (loading) {
     return <div className="loading">加载会话列表中...</div>;
   }
@@ -60,7 +78,7 @@ export default function Sessions() {
       <div className="flex flex-between" style={{ marginBottom: '1.5rem' }}>
         <h2 className="card-title">会话列表</h2>
         <div className="flex">
-          {['all', 'active', 'idle', 'completed'].map(status => (
+          {['all', 'active', 'idle', 'completed', 'failed'].map(status => (
             <button
               key={status}
               className={`btn ${filter === status ? 'btn-primary' : 'btn-secondary'}`}
@@ -76,11 +94,12 @@ export default function Sessions() {
         <table className="table">
           <thead>
             <tr>
-              <th>Session ID</th>
+              <th>Session Key</th>
               <th>状态</th>
               <th>用户</th>
               <th>最后活跃</th>
               <th>持续时间</th>
+              <th>Token 利用率</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -89,7 +108,7 @@ export default function Sessions() {
               <tr key={session.sessionId}>
                 <td>
                   <Link to={`/sessions/${session.sessionId}`} style={{ color: 'var(--primary)' }}>
-                    {session.sessionId.slice(0, 8)}-{session.sessionId.slice(8, 12)}...
+                    {session.sessionKey || session.sessionId.slice(0, 8)}-{session.sessionId.slice(8, 12)}...
                   </Link>
                 </td>
                 <td>
@@ -102,6 +121,11 @@ export default function Sessions() {
                   {new Date(session.lastActive).toLocaleString('zh-CN')}
                 </td>
                 <td className="text-muted">{formatDuration(session.duration)}</td>
+                <td>
+                  {session.tokenUsage ? formatTokenUtilization(session.tokenUsage) : (
+                    <span className="text-muted">-</span>
+                  )}
+                </td>
                 <td>
                   <div className="flex">
                     <Link
@@ -126,7 +150,7 @@ export default function Sessions() {
             ))}
             {filteredSessions.length === 0 && (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
                   暂无会话
                 </td>
               </tr>

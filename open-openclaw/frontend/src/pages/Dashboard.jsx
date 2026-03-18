@@ -40,22 +40,29 @@ export default function Dashboard() {
   const [health, setHealth] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
-  const [metrics, setMetrics] = useState({ latency: null, tools: [] });
+  const [metrics, setMetrics] = useState({ latency: null, tools: [], tokenSummary: null, tokenUsage: [] });
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     try {
-      const [healthData, sessionsData, logsData, latencyData, toolsData] = await Promise.all([
-        healthApi.getHealth(),
-        sessionsApi.list(),
-        logsApi.getRecent(10),
-        metricsApi.getLatency(),
-        metricsApi.getTools(),
+      const [healthData, sessionsData, logsData, latencyData, toolsData, tokenSummaryData, tokenUsageData] = await Promise.all([
+        healthApi.getHealth().catch(() => null),
+        sessionsApi.list().catch(() => []),
+        logsApi.getRecent(10).catch(() => []),
+        metricsApi.getLatency().catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
+        metricsApi.getTools().catch(() => []),
+        metricsApi.getTokenSummary().catch(() => ({ totalInput: 0, totalOutput: 0, totalTokens: 0, nearLimitCount: 0, limitReachedCount: 0, sessionCount: 0 })),
+        metricsApi.getTokenUsage().catch(() => []),
       ]);
       setHealth(healthData);
-      setSessions(sessionsData);
-      setRecentLogs(logsData);
-      setMetrics({ latency: latencyData, tools: toolsData });
+      setSessions(Array.isArray(sessionsData) ? sessionsData : []);
+      setRecentLogs(Array.isArray(logsData) ? logsData : []);
+      setMetrics({
+        latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
+        tools: Array.isArray(toolsData) ? toolsData : [],
+        tokenSummary: tokenSummaryData || { totalInput: 0, totalOutput: 0, totalTokens: 0, nearLimitCount: 0, limitReachedCount: 0, sessionCount: 0 },
+        tokenUsage: Array.isArray(tokenUsageData) ? tokenUsageData : [],
+      });
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -113,6 +120,31 @@ export default function Dashboard() {
             <LatencyCard title="P95" value={metrics.latency.p95} unit="ms" color="#ed8936" />
             <LatencyCard title="P99" value={metrics.latency.p99} unit="ms" color="#f56565" />
             <LatencyCard title="总请求数" value={metrics.latency.count} unit="次" color="#667eea" />
+          </div>
+        </div>
+      )}
+
+      {/* Token 用量汇总 */}
+      {metrics.tokenSummary && (
+        <div className="card mt-4">
+          <h3 className="card-title" style={{ marginBottom: '1rem' }}>💰 Token 用量汇总 (过去 24 小时)</h3>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+            <StatCard value={metrics.tokenSummary.totalInput?.toLocaleString() || '0'} label="Input Tokens" color="primary" />
+            <StatCard value={metrics.tokenSummary.totalOutput?.toLocaleString() || '0'} label="Output Tokens" color="success" />
+            <StatCard value={metrics.tokenSummary.totalTokens?.toLocaleString() || '0'} label="Total Tokens" color="warning" />
+            <StatCard value={metrics.tokenSummary.sessionCount || '0'} label="会话数" color="primary" />
+            <StatCard
+              value={metrics.tokenSummary.nearLimitCount || '0'}
+              label="预警次数"
+              color={metrics.tokenSummary.nearLimitCount > 0 ? 'warning' : 'success'}
+              icon={metrics.tokenSummary.nearLimitCount > 0 ? '⚠️' : undefined}
+            />
+            <StatCard
+              value={metrics.tokenSummary.limitReachedCount || '0'}
+              label="触顶次数"
+              color={metrics.tokenSummary.limitReachedCount > 0 ? 'danger' : 'success'}
+              icon={metrics.tokenSummary.limitReachedCount > 0 ? '🚨' : undefined}
+            />
           </div>
         </div>
       )}
@@ -184,6 +216,62 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Session Key Token 用量排行 */}
+      {metrics.tokenUsage && metrics.tokenUsage.length > 0 && (
+        <div className="card mt-4">
+          <h3 className="card-title">Session Key Token 用量 Top 10 (过去 24 小时)</h3>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Session Key</th>
+                <th>总 Token</th>
+                <th>Input</th>
+                <th>Output</th>
+                <th>请求数</th>
+                <th>平均利用率</th>
+                <th>触顶次数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.tokenUsage.map((item, index) => (
+                <tr key={item.sessionKey}>
+                  <td style={{ fontWeight: '600' }}>{index + 1}. {item.sessionKey}</td>
+                  <td style={{ color: 'var(--primary)' }}>{item.totalTokens?.toLocaleString() || 0}</td>
+                  <td className="text-muted">{item.inputTokens?.toLocaleString() || 0}</td>
+                  <td className="text-muted">{item.outputTokens?.toLocaleString() || 0}</td>
+                  <td className="text-muted">{item.requestCount || 0}</td>
+                  <td>
+                    {item.avgUtilization ? (
+                      <div className="flex" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                        <div className="progress-bar" style={{ width: '80px' }}>
+                          <div
+                            className="progress-fill"
+                            style={{
+                              width: `${Math.min(item.avgUtilization, 100)}%`,
+                              background: item.avgUtilization > 80 ? 'var(--danger)' : 'var(--success)',
+                            }}
+                          />
+                        </div>
+                        <span className="text-muted text-sm">{Math.round(item.avgUtilization)}%</span>
+                      </div>
+                    ) : (
+                      <span className="text-muted">N/A</span>
+                    )}
+                  </td>
+                  <td>
+                    {item.limitReachedCount > 0 ? (
+                      <span style={{ color: 'var(--danger)' }}>🚨 {item.limitReachedCount}</span>
+                    ) : (
+                      <span className="text-muted">-</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* 系统信息和最近会话 */}
       <div className="grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
