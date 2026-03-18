@@ -31,6 +31,8 @@ export const setupApi = {
 export const metricsApi = {
   getLatency: () => api.get('/metrics/latency').then(res => res.data),
   getTools: () => api.get('/metrics/tools').then(res => res.data),
+  getTokenSummary: () => api.get('/metrics/token-summary').then(res => res.data),
+  getTokenUsage: () => api.get('/metrics/token-usage').then(res => res.data),
 };
 
 export const actionsApi = {

@@ -19,6 +19,7 @@ export interface OpenClawSession {
     output: number;
     total: number;
     limit?: number;
+    utilization?: number;
   };
 }
 
