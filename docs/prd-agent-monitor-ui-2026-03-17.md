@@ -1,11 +1,33 @@
-# PRD：OpenClaw Agent Monitor UI（Agent 监控仪表盘）
+# PRD：OpenClaw Monitor（Agent 监控仪表盘）
 
-**文档状态：** 待评审
+**文档状态：** ✅ **MVP 已完成**（2026-03-18）
 **创建日期：** 2026-03-17
+**更新日期：** 2026-03-18
 **提出人：** 晓刚（爸爸）
 **撰写人：** 阿布
 **优先级：** P0（高）
-**预计工期：** 15-20 天（MVP 8 天 + 增强 7-12 天）
+**实施状态：** MVP 已交付，迭代中
+
+---
+
+## 📌 更新记录（2026-03-18）
+
+**MVP 已完成功能：**
+- ✅ 项目名称确定为 **open-openclaw**（位于 `claw-sources/open-openclaw/`）
+- ✅ 技术栈：NestJS 11 + React 19 + Vite 8 + Recharts 3 + Socket.IO + sql.js
+- ✅ 前端页面：Dashboard、会话管理、实时日志、系统设置、首次启动向导
+- ✅ 后端 API：健康检查、会话管理、实时日志、Metrics 监控、快速操作
+- ✅ 零侵入集成：通过文件系统读取 OpenClaw 会话数据
+- ✅ 开箱即用：默认 local-only 模式，可选 Access Token 保护
+- ✅ 3 秒自动轮询刷新
+- ✅ PM2 进程管理集成
+
+**待实现功能（二期）：**
+- ⏳ Token 用量可视化与阈值预警
+- ⏳ 会话规则匹配（按 Session Key 前缀）
+- ⏳ 自动恢复策略配置
+- ⏳ 多实例监控
+- ⏳ Prometheus 集成
 
 ---
 
@@ -13,7 +35,7 @@
 
 ### 0.1 产品定位重申
 
-**像 Open Web UI 一样简单** —— 一条命令启动，打开浏览器就能用。
+**像 Open Web UI 一样简单** -- 一条命令启动，打开浏览器就能用。
 
 参考 Open Web UI 的核心体验：
 - ✅ 一条 `docker run` 或 `npx` 启动
@@ -113,7 +135,7 @@ services:
 | **执行进度黑盒** | 无法查看任务执行到哪一步 | 无法判断是否卡住 |
 | **性能不可观测** | 无端到端延迟、工具耗时数据 | 无法优化慢的环节 |
 | **多 Agent 管理困难** | 未来 10+ Agent 无统一入口 | 管理成本高 |
-| **Token 消耗焦虑（晓浩痛点）** | 看不到会话 token 用量、预算与消耗速度 | 成本不可控、担心”烧 token” |
+| **Token 消耗焦虑（晓浩痛点）** | 看不到会话 token 用量、预算与消耗速度 | 成本不可控、担心"烧 token" |
 | **会话触顶无提醒（maxTokens）** | 某个 session 到达 maxTokens 才表现为质量下降/截断/失败 | 用户以为卡住或模型变笨，无法及时止损或调整策略 |
 
 ### 1.3 产品原则（借鉴 Open Web UI）
@@ -145,21 +167,43 @@ services:
 
 ### 1.3 产品定位
 
-**Open Web UI for Agents** —— OpenClaw 的统一监控、管理、调试界面
+**Open Web UI for Agents** -- OpenClaw 的统一监控、管理、调试界面
 
 - **不是**漂亮的 ToC 产品
 - **是**信息密度高、实用的 ToB 监控工具
 - **类比**：tmux（多会话管理）+ Wordpress /wp-admin（一站式管理）
 - **学习借鉴**：Jarvis-dashboard（模型用量）、Watchdog（自动恢复）、ClawPanel（拓扑图）
 
-### 1.4 本 PRD 的核心交付物（重要范围收敛）
+### 1.4 核心交付物（MVP 已完成）
 
-本 PRD 的**最核心交付物不是”做一个站点”**，而是实现 OpenClaw Agent Monitor UI 必需的运行时基座：
+**项目名称：** `open-openclaw`（位于 `claw-sources/open-openclaw/`）
 
-- **`claw-family/openClawRuntime`**：OpenClaw 的配置文件、workspace、state、事件流、日志/指标采集与对外接口的标准实现
-- **Agent Monitor UI**：基于 `openClawRuntime` 的薄层 UI（读取运行时状态、订阅事件、执行管理动作）
+**MVP 交付物：**
+- ✅ **后端（NestJS）**：健康检查、会话管理、实时日志、Metrics、快速操作 API
+- ✅ **前端（React 19 + Vite 8）**：Dashboard、会话管理、实时日志、系统设置、启动向导
+- ✅ **零侵入集成**：通过文件系统读取 OpenClaw 会话数据（`~/.openclaw/workspace/agents/*/sessions/`）
+- ✅ **PM2 集成**：进程管理、日志读取、重启操作
+- ✅ **开箱即用**：默认 local-only 模式，可选 Access Token 保护
+- ✅ **实时通信**：Socket.IO WebSocket 推送日志
+- ✅ **数据可视化**：Recharts 3 图表（延迟 P50/P95/P99、会话状态分布、工具调用 Top 榜）
 
-> 目标是把”监控/管理/调试”的**真实数据面**沉淀为 runtime（可被 UI、CLI、未来自动化运维复用），UI 只是其中一个消费者。
+**架构说明：**
+```
+┌─────────────────────────────────────────────────────────┐
+│  OpenClaw Gateway（被监控方）                            │
+│  - 业务执行：会话/工具/记忆/子 Agent                      │
+│  - 会话数据：~/.openclaw/workspace/agents/*/sessions/   │
+│  - PM2 日志：~/.pm2/logs/*.log                          │
+└─────────────────────────────────────────────────────────┘
+                          │（只读接入，不修改）
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│  open-openclaw（监控方）                                 │
+│  - 读取：OpenClaw 会话文件 + PM2 日志 + sessions API     │
+│  - 展示：React 仪表盘、实时日志、会话管理                │
+│  - 操作：PM2 重启、会话终止、配置修改                    │
+└─────────────────────────────────────────────────────────┘
+```
 
 ### 1.4.1 与 OpenClaw 的关系
 
@@ -388,7 +432,7 @@ services:
 
 #### 2.2.6 开箱即用访问保护（默认无需登录）
 
-**功能描述：** 作为开源项目，默认“拉起即可用、零学习成本”。同时提供**可选的轻量保护**，避免用户把管理端暴露到公网导致风险。
+**功能描述：** 作为开源项目，默认"拉起即可用、零学习成本"。同时提供**可选的轻量保护**，避免用户把管理端暴露到公网导致风险。
 
 **设计原则：**
 - **默认可用**：本机开发/个人使用不需要账号体系、不需要登录页
@@ -401,11 +445,11 @@ services:
 - **模式 B：access token**：通过 `OPENCLAW_RUNTIME_ACCESS_TOKEN` 设置
   - UI/CLI/HTTP 请求携带 `Authorization: Bearer <token>`
 - **模式 C：反向代理**（推荐生产）：交由 Nginx/Caddy/Traefik 做 Basic Auth / OAuth
-  - runtime 只提供清晰的“如何接入反代”的示例与健康检查端点
+  - runtime 只提供清晰的"如何接入反代"的示例与健康检查端点
 
 **首次启动引导（UI/CLI 二选一即可）：**
 - 展示当前监听地址（local vs public）与 workspace 路径
-- 一键复制“安全建议配置”（设置 token、改回 127.0.0.1、反向代理示例）
+- 一键复制"安全建议配置"（设置 token、改回 127.0.0.1、反向代理示例）
 
 **验收标准：**
 - [ ] 默认安装启动后无需任何账号配置即可打开 UI
@@ -428,8 +472,8 @@ services:
 | **SQLite 写入失败** | Metrics 数据丢失 | - 降级为内存存储（Ring Buffer，保留最近 1000 条）<br>- 定期 dump 到文件（每 5 分钟）<br>- 告警通知 | 顶部警告"Metrics 存储异常，部分数据可能丢失" |
 | **OpenClaw API 返回错误** | 会话列表/详情无法获取 | - adapter 层做错误转换<br>- 返回统一错误格式<br>- 缓存最后一份有效数据 | 显示"数据更新于 XX:XX" + 重试按钮 |
 | **PM2 未安装/未运行** | 重启功能失败 | - 启动时检测 adapter 可用性<br>- 不可用时在 UI 隐藏相关操作<br>- 提示"当前环境不支持此操作" | 操作按钮置灰 + Tooltip 说明 |
-| **会话接近 maxTokens** | 输出质量下降风险、可能很快触顶 | - runtime 计算 token 利用率<br>- 达到阈值触发 `token:near_limit` 事件<br>- 建议动作：压缩上下文/降低输出长度/切换模型 | Sessions 列表出现 ⚠️ 标记，详情页显示“预计剩余 token” |
-| **会话触达 maxTokens** | 回复被截断/失败，用户误判为卡住 | - 触发 `token:limit_reached` 事件并落盘<br>- 将 session 标记为 `degraded` 或 `failed`（按策略）<br>- 给出下一步建议（继续/新开会话/压缩记忆） | 详情页红色提示“已触顶 maxTokens”，并展示触发点与上下文 |
+| **会话接近 maxTokens** | 输出质量下降风险、可能很快触顶 | - runtime 计算 token 利用率<br>- 达到阈值触发 `token:near_limit` 事件<br>- 建议动作：压缩上下文/降低输出长度/切换模型 | Sessions 列表出现 ⚠️ 标记，详情页显示"预计剩余 token" |
+| **会话触达 maxTokens** | 回复被截断/失败，用户误判为卡住 | - 触发 `token:limit_reached` 事件并落盘<br>- 将 session 标记为 `degraded` 或 `failed`（按策略）<br>- 给出下一步建议（继续/新开会话/压缩记忆） | 详情页红色提示"已触顶 maxTokens"，并展示触发点与上下文 |
 
 **WebSocket 重连策略（详细）：**
 
@@ -494,16 +538,18 @@ function reconnect(retryCount) {
 └──────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 技术选型（以 Runtime 为中心）
+### 3.2 技术选型（MVP 已实现）
 
-| 组件 | 方案 | 理由 |
-|------|------|------|
-| **Runtime 语言** | **TypeScript（Node.js）** | 便于与 UI、现有生态共享类型与工具链 |
-| Runtime 形态 | 可嵌入库 + 可运行服务（可选） | UI/CLI/daemon 复用同一 runtime |
-| 实时通信 | Event Bus（内部）+ WebSocket/SSE（对外） | UI 订阅事件与日志流 |
-| Metrics 存储 | SQLite（MVP）+ 可插拔 driver | 单文件易部署，后续可接 Prometheus |
-| 进程管理 | Adapter（PM2/systemd/docker） | 把”如何重启/读取指标”从 runtime 核心解耦 |
-| UI | 任意（React/Next 等） | UI 只消费 runtime 接口，本 PRD 不锁死框架 |
+| 组件 | 方案 | 理由 | 实现状态 |
+|------|------|------|---------|
+| **后端框架** | **NestJS 11** | 企业级架构、模块化、TypeScript 原生 | ✅ 已实现 |
+| **前端框架** | **React 19 + Vite 8** | 快速开发、热重载、生态丰富 | ✅ 已实现 |
+| **UI 组件** | **原生 HTML + CSS** | 轻量、无额外依赖 | ✅ 已实现 |
+| **数据可视化** | **Recharts 3** | React 友好、图表丰富 | ✅ 已实现 |
+| **实时通信** | **Socket.IO** | WebSocket 封装、自动重连 | ✅ 已实现 |
+| **数据存储** | **sql.js（SQLite 内存版）** | 单文件、无需安装、MVP 够用 | ✅ 已实现 |
+| **进程管理** | **PM2** | OpenClaw 默认进程管理器 | ✅ 已实现 |
+| **路由** | **React Router DOM 7** | React 标准路由方案 | ✅ 已实现 |
 
 ---
 
@@ -563,20 +609,20 @@ runtime:
 
   # 内置 adapters（runtime 提供实现）
   adapters_builtin:
-    pm2: “✅ 提供完整实现（通过 pm2 API）”
-    none: “✅ 本地开发模式，不支持重启操作”
+    pm2: "✅ 提供完整实现（通过 pm2 API）"
+    none: "✅ 本地开发模式，不支持重启操作"
 
   # 部署方负责：根据环境实现具体 adapter
   adapters_custom:
-    systemd: “部署方自行实现（调用 systemctl 命令）”
-    docker: “部署方自行实现（调用 docker 命令）”
+    systemd: "部署方自行实现（调用 systemctl 命令）"
+    docker: "部署方自行实现（调用 docker 命令）"
 ```
 
 **`none` 模式说明：**
 - 适用于本地开发、调试场景
 - 不支持重启/停止操作
 - 仅支持读取日志和状态
-- UI 显示”本地模式 - 部分功能不可用”
+- UI 显示"本地模式 - 部分功能不可用"
 
 ---
 
@@ -588,40 +634,40 @@ runtime:
 
 ```json
 {
-  “sessions”: {
-    “maxConcurrent”: 10,
-    “rules”: [
+  "sessions": {
+    "maxConcurrent": 10,
+    "rules": [
       {
-        “name”: “agent-main”,
-        “pattern”: “agent:main:*”,
-        “matchType”: “glob”,
-        “priority”: 1,
-        “config”: {
-          “maxConcurrent”: 5,
-          “model”: “claude-opus-4-6”,
-          “autoRecover”: true
+        "name": "agent-main",
+        "pattern": "agent:main:*",
+        "matchType": "glob",
+        "priority": 1,
+        "config": {
+          "maxConcurrent": 5,
+          "model": "claude-opus-4-6",
+          "autoRecover": true
         }
       },
       {
-        “name”: “agent-sub”,
-        “pattern”: “agent:sub:*”,
-        “matchType”: “glob”,
-        “priority”: 2,
-        “config”: {
-          “maxConcurrent”: 10,
-          “model”: “claude-sonnet-4-6”,
-          “autoRecover”: false
+        "name": "agent-sub",
+        "pattern": "agent:sub:*",
+        "matchType": "glob",
+        "priority": 2,
+        "config": {
+          "maxConcurrent": 10,
+          "model": "claude-sonnet-4-6",
+          "autoRecover": false
         }
       },
       {
-        “name”: “default”,
-        “pattern”: “default”,
-        “matchType”: “exact”,
-        “priority”: 999,
-        “config”: {
-          “maxConcurrent”: 2,
-          “model”: “claude-sonnet-4-6”,
-          “autoRecover”: false
+        "name": "default",
+        "pattern": "default",
+        "matchType": "exact",
+        "priority": 999,
+        "config": {
+          "maxConcurrent": 2,
+          "model": "claude-sonnet-4-6",
+          "autoRecover": false
         }
       }
     ]
@@ -659,22 +705,22 @@ runtime:
 ```yaml
 events:
   retention:
-    active_sessions: “7 天（自动清理已完成会话的详细事件）”
-    completed_sessions: “30 天（仅保留索引，详情归档）”
-    failed_sessions: “90 天（保留完整事件用于调试）”
+    active_sessions: "7 天（自动清理已完成会话的详细事件）"
+    completed_sessions: "30 天（仅保留索引，详情归档）"
+    failed_sessions: "90 天（保留完整事件用于调试）"
 
-  partitioning: “按 session_key 分片存储”
+  partitioning: "按 session_key 分片存储"
 
   cleanup:
-    schedule: “每天凌晨 3:00”
+    schedule: "每天凌晨 3:00"
     strategy: |
       1. 将 completed_sessions 详情归档到 events/archive/{YYYY-MM}.tar.gz
       2. 删除原事件文件，保留索引
       3. 清理 tmp/ 临时文件
 
   archive:
-    format: “tar.gz”
-    destination: “workspace/archive/”
+    format: "tar.gz"
+    destination: "workspace/archive/"
     include_index: true  # 归档中包含索引文件，支持离线查询
 ```
 
@@ -688,7 +734,7 @@ events:
 - 配置加载顺序：默认值 → 配置文件 → 环境变量 → 启动时 overrides
 - 配置校验：缺失字段、类型错误、非法范围（例如并发数 < 1）
 - 配置热更新：修改后触发 `runtime.reload()`，并产出 `config:changed` 事件
-- 配置可观测：UI 能看到“当前生效值”与“来源（file/env/default）”
+- 配置可观测：UI 能看到"当前生效值"与"来源（file/env/default）"
 
 **建议的配置文件形态（MVP）：**
 - `openclaw.runtime.json`（或 `openclaw.runtime.yaml`）：monitor/runtime 专属配置
@@ -709,7 +755,7 @@ events:
 
 **约定目录结构（MVP）：**
 - `workspace/`
-  - `config/`（运行时展开后的“生效配置快照”）
+  - `config/`（运行时展开后的"生效配置快照"）
   - `sessions/`（会话索引与导出物）
   - `events/`（事件存储：按 session 分片）
   - `logs/`（结构化日志与原始日志）
@@ -723,7 +769,7 @@ events:
 
 #### 3.3.3 状态（State）与事件流（Bus）
 
-**目标：** UI 的“会话列表/详情/日志/指标”都以 runtime 的状态与事件为真相来源，而不是 UI 直接拼接多个外部来源。
+**目标：** UI 的"会话列表/详情/日志/指标"都以 runtime 的状态与事件为真相来源，而不是 UI 直接拼接多个外部来源。
 
 **State 要覆盖：**
 - Runtime 状态机：`starting` → `running` → `degraded` → `stopping` → `stopped`（含 `error` 分支）
@@ -745,7 +791,7 @@ events:
 
 **事件能力：**
 - 订阅：按 session_id/session_key/tool/skill/level 过滤
-- 回放：按时间范围拉取（用于“历史回溯”与“导出”）
+- 回放：按时间范围拉取（用于"历史回溯"与"导出"）
 - 去重与顺序：至少保证单 session 内有序
 
 #### 3.3.4 Metrics（采集与存储）
@@ -816,7 +862,7 @@ CREATE INDEX idx_concurrency_timestamp ON concurrency_snapshots(timestamp);
 
 ### 3.4 对外接口设计（以 Runtime API 为准）
 
-> 说明：UI 只依赖 `openClawRuntime` 暴露的接口。具体对外形态可以是“嵌入式调用”（同进程）或“runtime daemon”（HTTP/WebSocket/SSE）。本 PRD 先定义**语义接口**，不锁定 NestJS。
+> 说明：UI 只依赖 `openClawRuntime` 暴露的接口。具体对外形态可以是"嵌入式调用"（同进程）或"runtime daemon"（HTTP/WebSocket/SSE）。本 PRD 先定义**语义接口**，不锁定 NestJS。
 
 **HTTP（示例接口）：**
 
@@ -851,22 +897,34 @@ CREATE INDEX idx_concurrency_timestamp ON concurrency_snapshots(timestamp);
 
 ## 4. 实施计划
 
-### 4.1 阶段划分
+### 4.1 阶段划分（MVP 已完成）
 
-| 阶段 | 内容 | 工期 | 交付物 |
-|------|------|------|--------|
-| **阶段一** | 调研与设计 | 1-2 天 | PRD、线框图、技术设计 |
-| **阶段二** | `openClawRuntime` MVP | 5-8 天 | Config/Workspace/State/Bus、基础 API |
-| **阶段三** | UI MVP 接入 | 2-4 天 | 健康检查、会话管理、实时日志（基于 runtime） |
-| **阶段四** | 增强功能 | 3-5 天 | 快速操作、开箱即用访问保护、告警 |
-| **阶段五** | 测试与优化 | 2-3 天 | Bug 修复、性能优化 |
+| 阶段 | 内容 | 工期 | 状态 | 交付物 |
+|------|------|------|------|--------|
+| **阶段一** | 调研与设计 | 1-2 天 | ✅ 完成 | PRD、线框图、技术设计 |
+| **阶段二** | open-openclaw MVP | 3 天 | ✅ 完成（2026-03-18） | 后端 API + 前端仪表盘 |
+| **阶段三** | UI 功能完善 | 2-3 天 | 🔄 进行中 | Dashboard、会话管理、实时日志 |
+| **阶段四** | Token 可视化与预警 | 2-3 天 | ⏳ 待实施 | Token 用量、阈值告警、触顶追溯 |
+| **阶段五** | 增强功能 | 3-5 天 | ⏳ 待实施 | 自动恢复、多实例、Prometheus |
 
-**工期调整说明：**
-- 阶段二从 3-5 天调整为 5-8 天，原因：
-  - Config 模块需要完整的 schema 定义 + 校验 + 来源追踪（1-2 天）
-  - State/Bus 模块需要保证事件有序性和回放能力（2-3 天）
-  - 与 OpenClaw 的集成可能需要额外调试时间（1-2 天，取决于配合程度）
-  - Process Adapter 需要实现 PM2 集成 + 错误处理（1 天）
+**MVP 实际工期：** 3 天（2026-03-16 至 2026-03-18）
+
+**MVP 已完成功能：**
+- ✅ 后端 NestJS 框架搭建
+- ✅ 前端 React + Vite 框架搭建
+- ✅ 健康检查 API（Gateway 状态、PM2 进程、技能列表）
+- ✅ 会话管理 API（列表、详情、历史回溯）
+- ✅ 实时日志（PM2 日志文件读取、WebSocket 推送）
+- ✅ Metrics API（延迟 P50/P95/P99、工具调用统计）
+- ✅ 快速操作（重启 Gateway、终止会话、清理日志）
+- ✅ Dashboard 页面（统计卡片、延迟指标、会话状态分布、工具调用 Top 榜）
+- ✅ 会话管理页面（列表、详情、Token 用量占位）
+- ✅ 实时日志页面（WebSocket 推送、级别过滤）
+- ✅ 系统设置页面（Gateway 配置、访问模式切换）
+- ✅ 首次启动向导（3 步配置）
+- ✅ 开箱即用访问保护（local-only / token 模式）
+- ✅ 3 秒自动轮询刷新
+- ✅ Docker 镜像构建配置
 
 ### 4.2 详细任务列表
 
@@ -893,7 +951,7 @@ CREATE INDEX idx_concurrency_timestamp ON concurrency_snapshots(timestamp);
 - [ ] Sessions 页面：会话列表/详情/事件时间线/导出
 - [ ] Logs 页面：订阅事件/日志流，过滤与下载
 - [ ] Metrics 页面（可选 P1）：基于 runtime 的 metrics 查询
-- [ ] 兼容“无 PM2/无 daemon”的最小部署形态（本机 workspace）
+- [ ] 兼容"无 PM2/无 daemon"的最小部署形态（本机 workspace）
 
 #### 阶段四：增强功能（3-5 天）
 - [ ] 实现快速操作接口
@@ -934,43 +992,71 @@ CREATE INDEX idx_concurrency_timestamp ON concurrency_snapshots(timestamp);
 
 ## 6. 验收标准
 
-### 6.1 功能验收
+### 6.1 MVP 验收（已完成 ✅）
 
-- [ ] 所有 P0 功能正常
-- [ ] 所有 P1 功能正常
-- [ ] 开箱即用访问保护生效（默认 local-only；启用 token 后未授权请求返回 401）
-- [ ] 实时日志延迟 < 1s
-- [ ] Metrics 数据延迟 < 1 分钟
-- [ ] `openClawRuntime` 具备：配置校验 + workspace 规范 + state/事件订阅 + 会话导出
+- [x] 后端 API 正常（健康检查、会话管理、日志、Metrics、操作）
+- [x] 前端页面正常（Dashboard、会话、日志、设置、向导）
+- [x] 开箱即用访问保护生效（默认 local-only）
+- [x] 实时日志 WebSocket 推送正常
+- [x] Metrics 数据展示正常（P50/P95/P99、工具调用统计）
+- [x] 3 秒自动轮询刷新正常
+- [x] PM2 集成正常（重启、日志读取）
+- [x] Docker 镜像构建正常
+
+### 6.2 二期验收标准（待实施）
+
 - [ ] **Token 预警生效**：可配置阈值（如 80%/95%），触发后 UI 在 5s 内可见
-- [ ] **触顶可追溯**：每次 `maxTokens` 触顶都能在会话事件时间线中定位到触发点（含时间戳、会话、模型/策略信息）
+- [ ] **触顶可追溯**：每次 `maxTokens` 触顶都能在会话事件时间线中定位到触发点
+- [ ] 会话规则匹配（按 Session Key 前缀：default、agent:main:*、agent:sub:*）
+- [ ] 自动恢复策略配置
+- [ ] 多实例监控
+- [ ] Prometheus 集成
 
-### 6.2 性能验收
+### 6.3 性能验收
 
-- [ ] 页面加载时间 < 2s
+- [x] 页面加载时间 < 2s
 - [ ] 支持 10+ 并发会话监控
 - [ ] SQLite 写入不影响主流程
 - [ ] 内存占用 < 200MB
 
-### 6.3 用户体验验收
+### 6.4 用户体验验收
 
-- [ ] 界面简洁、信息密度高
+- [x] 界面简洁、信息密度高
 - [ ] 支持移动端查看
-- [ ] 错误提示清晰
+- [x] 错误提示清晰
 - [ ] 操作有二次确认
 
 ---
 
 ## 7. 后续迭代（二期）
 
-| 功能 | 说明 | 优先级 |
-|------|------|--------|
-| **告警通知** | Gateway 停止、API 配额不足时推送通知（多渠道） | P1 |
-| **插件生态** | 支持第三方监控插件 | P2 |
-| **多实例监控** | 监控多个 OpenClaw 实例 | P2 |
-| **Prometheus 集成** | 导出 Metrics 到 Prometheus | P2 |
-| **自动化运维** | 自动重启、自动扩容 | P3 |
-| **会话流程图** | 可视化展示会话执行流程、Agent 调用关系 | P2 |
+### 7.1 高优先级（P1）
+
+| 功能 | 说明 | 预计工期 |
+|------|------|---------|
+| **Token 用量可视化** | 会话级 token 统计（输入/输出/总量）、消耗速率、预算/上限 | 2 天 |
+| **Token 阈值预警** | 可配置阈值（80%/95%），触发后 UI 明示 + 告警 | 1 天 |
+| **maxTokens 触顶追溯** | 记录触顶事件、在会话时间线中标注触发点 | 1 天 |
+| **会话规则匹配** | 按 Session Key 前缀（default、agent:main:*、agent:sub:*）应用不同配置 | 2 天 |
+| **自动恢复策略** | Gateway 故障自动重启、模型故障自动切换 | 2 天 |
+
+### 7.2 中优先级（P2）
+
+| 功能 | 说明 | 预计工期 |
+|------|------|---------|
+| **告警通知** | Gateway 停止、API 配额不足时推送通知（飞书/邮件/短信） | 2 天 |
+| **多实例监控** | 支持切换监控多个 OpenClaw 实例 | 3 天 |
+| **Prometheus 集成** | 导出 Metrics 到 Prometheus、Grafana 仪表盘 | 2 天 |
+| **会话流程图** | 可视化展示会话执行流程、Agent 调用关系 | 2 天 |
+| **移动端适配** | 响应式布局优化、移动端操作优化 | 2 天 |
+
+### 7.3 低优先级（P3）
+
+| 功能 | 说明 | 预计工期 |
+|------|------|---------|
+| **插件生态** | 支持第三方监控插件 | 5 天 |
+| **自动化运维** | 自动扩容、自动清理日志 | 3 天 |
+| **高级分析** | 会话趋势分析、异常检测、成本优化建议 | 5 天 |
 
 ---
 
@@ -1009,21 +1095,21 @@ npx openclaw-monitor
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/claw-family/openclaw-monitor.git
-cd openclaw-monitor
+git clone https://github.com/slashhuang/claw-sources.git
+cd claw-sources/open-openclaw
 
-# 2. 安装依赖
-npm install
+# 2. 安装依赖（使用 pnpm）
+pnpm install
 
-# 3. 启动
-npm run dev
+# 3. 启动开发模式
+pnpm run start:dev
 
 # 访问 http://localhost:3001
 ```
 
 **前提条件：**
 - Node.js 18+
-- npm 或 pnpm
+- pnpm（推荐）或 npm
 
 ---
 
@@ -1206,7 +1292,82 @@ curl http://localhost:3001/api/health
 ### 9.2 相关文件
 
 - 灵感文档：`inspiration/agent-monitor-ui-2026-03-17.md`
-- 技术设计：`docs/tech-design-agent-monitor-ui.md`（待创建）
+- 项目代码：`claw-sources/open-openclaw/`
+- README: `open-openclaw/README.md`
+- CLAUDE.md: `open-openclaw/CLAUDE.md`
+
+### 9.4 open-openclaw 项目结构
+
+```
+open-openclaw/
+├── bin/
+│   └── cli.js              # CLI 入口
+├── config/
+│   └── openclaw.runtime.json  # 运行时配置
+├── data/
+│   └── config/
+│       └── snapshot.json   # 配置快照
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Dashboard.jsx      # 仪表盘页面
+│   │   │   ├── Sessions.jsx       # 会话列表
+│   │   │   ├── SessionDetail.jsx  # 会话详情
+│   │   │   ├── Logs.jsx           # 实时日志
+│   │   │   ├── Settings.jsx       # 系统设置
+│   │   │   └── SetupWizard.jsx    # 首次启动向导
+│   │   ├── api/
+│   │   │   └── index.js           # API 客户端
+│   │   ├── App.jsx                # 主应用组件
+│   │   ├── main.jsx               # 入口
+│   │   └── styles/
+│   │       └── index.css          # 全局样式
+│   ├── index.html
+│   └── vite.config.js
+├── public/
+│   └── app/                  # 构建后的前端静态文件
+├── src/
+│   ├── actions/
+│   │   ├── actions.controller.ts   # 快速操作 API
+│   │   ├── actions.module.ts
+│   │   └── actions.service.ts
+│   ├── auth/
+│   │   └── auth.guard.ts           # 认证守卫（Access Token）
+│   ├── config/
+│   │   ├── config.module.ts
+│   │   └── config.service.ts       # 配置服务
+│   ├── health/
+│   │   ├── health.controller.ts    # 健康检查 API
+│   │   ├── health.module.ts
+│   │   └── health.service.ts
+│   ├── metrics/
+│   │   ├── metrics.controller.ts   # Metrics API
+│   │   ├── metrics.module.ts
+│   │   └── metrics.service.ts
+│   ├── openclaw/
+│   │   ├── openclaw.module.ts
+│   │   ├── openclaw.service.ts     # OpenClaw 集成服务
+│   │   ├── openclaw-paths.resolver.ts
+│   │   └── gateway-ws-paths.ts     # Gateway WebSocket 路径
+│   ├── sessions/
+│   │   ├── sessions.controller.ts  # 会话管理 API
+│   │   ├── sessions.module.ts
+│   │   └── sessions.service.ts
+│   ├── setup/
+│   │   ├── setup.controller.ts     # 启动向导 API
+│   │   └── setup.module.ts
+│   ├── app.controller.ts
+│   ├── app.module.ts
+│   ├── app.service.ts
+│   └── main.ts
+├── test/
+├── Dockerfile
+├── docker-compose.yml
+├── package.json
+├── pnpm-lock.yaml
+├── tsconfig.json
+└── README.md
+```
 
 ---
 
@@ -1214,36 +1375,36 @@ curl http://localhost:3001/api/health
 
 **我们的核心优势：**
 
-| 维度 | 竞品 | 我们 |
+| 维度 | 竞品 | 我们（open-openclaw） |
 |------|------|------|
-| **架构设计** | 监控工具（单一功能） | Runtime 为中心（可复用、可扩展） |
-| **OpenClaw 集成** | 外部 Hook | **原生集成（零侵入 + 深度优化）** |
-| **部署体验** | 手动配置或多步骤 | **3 种方式任选：Docker / npx / npm** |
+| **架构设计** | 监控工具（单一功能） | NestJS 模块化架构（可扩展） |
+| **OpenClaw 集成** | 外部 Hook | **零侵入接入（读取会话文件 + PM2 日志）** |
+| **部署体验** | 手动配置或多步骤 | **3 种方式任选：Docker / npx / pnpm** |
 | **开箱即用** | 需要读文档配置 | **3 分钟上手，首次启动引导** |
-| **OpenClaw 专属功能** | 无 | Token 预警、会话规则匹配、并发可视化 |
-| **企业级特性** | 弱 | 强（配置校验、权限控制、事件归档） |
+| **技术栈** | 多样 | **NestJS 11 + React 19 + Vite 8 + Recharts 3** |
+| **实时性** | 轮询 | **Socket.IO WebSocket 推送** |
+| **企业级特性** | 弱 | 强（访问保护、PM2 集成、配置热更新） |
 
 **OpenClaw 接入友好性：**
 
 | 特性 | 说明 |
 |------|------|
 | **零侵入** | 无需修改 OpenClaw 代码，即插即用 |
-| **自动检测** | Monitor 自动发现本地 OpenClaw 实例 |
-| **版本兼容** | 支持 OpenClaw v1.0+，向后兼容 v0.8 |
-| **可选增强** | 有 webhook 配置时延迟<1s，无 webhook 时延迟 2-5s |
+| **自动检测** | Monitor 自动发现本地 OpenClaw 实例（通过 `openclaw config file`） |
+| **版本兼容** | 支持 OpenClaw v1.0+ |
 | **独立部署** | OpenClaw 和 Monitor 可同机/局域网/跨网部署 |
-| **专属优化** | Token 用量、Session Key 分析、并发状态可视化 |
+| **PM2 集成** | 直接读取 PM2 日志、支持重启操作 |
 
-**实施关键点（已澄清）：**
+**实施关键点（MVP 已完成）：**
 
-1. ✅ Runtime 与 OpenClaw 集成策略（Hybrid 模式 + Plan B）
-2. ✅ Process Adapter 责任边界（内置 PM2 + 自定义 systemd/docker）
-3. ✅ 会话规则匹配语法（glob 匹配 + 优先级）
-4. ✅ 事件存储规模与清理策略（SQLite 分表 + 归档）
-5. ✅ 开箱即用访问保护（默认 local-only，可选 access token / 反代）
-6. ✅ 错误场景处理流程（WebSocket 重连、SQLite 降级、缓存策略）
-7. ✅ 工期评估调整（15-20 天，更准确）
-8. ✅ **OpenClaw 零侵入接入（无需改代码）**
+1. ✅ 零侵入接入（读取会话文件 + PM2 日志）
+2. ✅ PM2 集成（进程管理、日志读取、重启）
+3. ✅ 开箱即用访问保护（默认 local-only，可选 access token）
+4. ✅ WebSocket 实时日志推送（Socket.IO）
+5. ✅ 数据可视化（Recharts 3 图表）
+6. ✅ 3 秒自动轮询刷新
+7. ✅ Docker 镜像构建
+8. ✅ 首次启动向导
 
 ---
 
@@ -1448,5 +1609,25 @@ A: 一期 MVP 支持单实例，二期支持多实例切换。
 
 ---
 
-**PRD 状态：** 待评审
-**下一步：** 爸爸评审 PRD → 确认后进入阶段二（MVP 开发）
+---
+
+## 12. PRD 状态与下一步
+
+### 当前状态（2026-03-18）
+
+- ✅ **MVP 已完成**：open-openclaw 项目已创建并实现基础功能
+- ✅ **代码位置**：`claw-sources/open-openclaw/`
+- 🔄 **文档更新**：本 PRD 根据实际实现更新
+- ⏳ **二期规划**：Token 可视化、预警、自动恢复等
+
+### 下一步计划
+
+1. **爸爸评审 PRD** → 确认二期优先级
+2. **实施二期功能** → 按优先级逐步实现
+3. **持续优化** → 根据用户反馈改进
+
+---
+
+**PRD 状态：** ✅ MVP 已完成，迭代中  
+**最后更新：** 2026-03-18  
+**维护人：** 阿布 👧
