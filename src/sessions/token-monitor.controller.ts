@@ -1,4 +1,4 @@
-import { Controller, Get, Logger, Post } from '@nestjs/common';
+import { Controller, Get, Logger, Param, Post } from '@nestjs/common';
 import { TokenMonitorService, SessionTokenUsage, TokenAlert } from './token-monitor.service';
 
 @Controller('api/sessions')
@@ -20,7 +20,7 @@ export class TokenMonitorController {
    * 获取单个会话的 token 使用情况
    */
   @Get(':sessionKey/token-usage')
-  async getSessionTokenUsage(@Param('sessionKey') sessionKey: string): Promise<SessionTokenUsage> {
+  async getSessionTokenUsage(@Param('sessionKey') sessionKey: string): Promise<SessionTokenUsage | null> {
     this.logger.log(`Getting token usage for session ${sessionKey}`);
     return await this.tokenMonitor.getSessionTokenUsage(sessionKey);
   }

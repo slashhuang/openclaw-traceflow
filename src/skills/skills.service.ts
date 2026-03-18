@@ -16,6 +16,7 @@ export interface SkillUsage {
   avgDuration: number;
   duplicateWith?: string[];
   conflictWith?: string[];
+  isZombie?: boolean;
 }
 
 export interface SystemPromptAnalysis {
@@ -38,8 +39,8 @@ export class SkillsService {
    * 获取 workspace 路径
    */
   async getWorkspacePath(): Promise<string> {
-    const state = await this.openclaw.getState();
-    return state.stateDir;
+    const paths = await this.openclaw.getResolvedPaths();
+    return paths.stateDir || '';
   }
 
   /**
@@ -157,55 +158,51 @@ export class SkillsService {
    */
   private async analyzeUsage(skills: SkillUsage[]): Promise<Map<string, Partial<SkillUsage>>> {
     const stats = new Map<string, Partial<SkillUsage>>();
-    
+
     try {
       // 获取会话列表
-      const sessions = await this.openclaw.getSessions();
-      
+      const sessions = await this.openclaw.listSessions();
+
       // 分析每个会话的历史
       for (const session of sessions) {
-        const history = await this.openclaw.getSessionHistory(session.sessionKey || session.id);
-        
+        const sessionDetail = await this.openclaw.getSessionDetail(session.sessionKey);
+
         // 分析 tool calls
-        if (history?.messages) {
-          for (const message of history.messages) {
-            if (message.toolCalls) {
-              for (const toolCall of message.toolCalls) {
-                const skillName = toolCall.function?.name || toolCall.name;
-                const existing = stats.get(skillName) || { callCount: 0, callHistory: [] };
-                
-                existing.callCount = (existing.callCount || 0) + 1;
-                
-                // 按日期统计
-                const date = new Date(message.timestamp || Date.now()).toISOString().split('T')[0];
-                const dateEntry = existing.callHistory?.find(h => h.date === date);
-                if (dateEntry) {
-                  dateEntry.count += 1;
-                } else {
-                  existing.callHistory?.push({ date, count: 1 });
-                }
-              }
+        if (sessionDetail?.toolCalls) {
+          for (const toolCall of sessionDetail.toolCalls) {
+            const skillName = toolCall.name;
+            const existing = stats.get(skillName) || { callCount: 0, callHistory: [] };
+
+            existing.callCount = (existing.callCount || 0) + 1;
+
+            // 按日期统计
+            const date = new Date(session.lastActiveAt).toISOString().split('T')[0];
+            const dateEntry = existing.callHistory?.find(h => h.date === date);
+            if (dateEntry) {
+              dateEntry.count += 1;
+            } else {
+              existing.callHistory?.push({ date, count: 1 });
             }
           }
         }
       }
 
-      // 计算最后使用时间
+      // 计算最后使用频率
       const now = Date.now();
       const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
-      for (const [skillName, skillStats] of stats) {
+      for (const [skillName, skillStats] of stats.entries()) {
         // 找出最后使用时间
         if (skillStats.callHistory && skillStats.callHistory.length > 0) {
-          const sortedHistory = [...skillStats.callHistory].sort((a, b) => 
+          const sortedHistory = [...skillStats.callHistory].sort((a, b) =>
             new Date(b.date).getTime() - new Date(a.date).getTime()
           );
           skillStats.lastUsed = new Date(sortedHistory[0].date).getTime();
         }
 
-        // 标记僵尸 skills（30 天未使用）
+        // 标记僵尸 skills（30 天未使用）- 使用可选属性
         if (skillStats.lastUsed && skillStats.lastUsed < thirtyDaysAgo) {
-          skillStats.isZombie = true;
+          (skillStats as any).isZombie = true;
         }
       }
     } catch (error) {

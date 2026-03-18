@@ -50,11 +50,11 @@ export class TokenMonitorService {
    */
   async getAllSessionsTokenUsage(): Promise<SessionTokenUsage[]> {
     try {
-      const sessions = await this.openclaw.getSessions();
+      const sessions = await this.openclaw.listSessions();
       const usageList: SessionTokenUsage[] = [];
 
       for (const session of sessions) {
-        const usage = await this.getSessionTokenUsage(session.sessionKey || session.id);
+        const usage = await this.getSessionTokenUsage(session.sessionKey);
         if (usage) {
           usageList.push(usage);
         }
@@ -72,18 +72,24 @@ export class TokenMonitorService {
    */
   async getSessionTokenUsage(sessionKey: string): Promise<SessionTokenUsage | null> {
     try {
-      const status = await this.openclaw.getSessionStatus(sessionKey);
-      
-      // 从 session status 中提取 token 信息
-      const tokenUsage = status.tokenUsage || { input: 0, output: 0, total: 0 };
-      const limit = status.modelConfig?.maxTokens || 100000; // 默认 100k
-      const utilization = limit > 0 ? Math.round((tokenUsage.total / limit) * 100) : 0;
-      
+      // 从 listSessions 获取的会话中查找
+      const sessions = await this.openclaw.listSessions();
+      const session = sessions.find(s => s.sessionKey === sessionKey);
+
+      if (!session) {
+        return null;
+      }
+
+      // 从 session 中提取 token 信息
+      const tokenUsage = session.tokenUsage || { input: 0, output: 0, total: 0 };
+      const limit = tokenUsage.limit || 100000; // 默认 100k
+      const utilization = limit > 0 ? Math.round(((tokenUsage.total || 0) / limit) * 100) : 0;
+
       // 计算消耗速率（基于历史数据）
       const consumptionRate = await this.calculateConsumptionRate(sessionKey);
-      
+
       // 估算到达限制的时间
-      const remainingTokens = limit - tokenUsage.total;
+      const remainingTokens = limit - (tokenUsage.total || 0);
       const estimatedTimeToLimit = consumptionRate > 0 ? Math.round(remainingTokens / consumptionRate) : undefined;
 
       // 确定阈值等级
@@ -91,7 +97,7 @@ export class TokenMonitorService {
 
       return {
         sessionKey,
-        sessionId: status.id || sessionKey,
+        sessionId: session.sessionId,
         inputTokens: tokenUsage.input || 0,
         outputTokens: tokenUsage.output || 0,
         totalTokens: tokenUsage.total || 0,
@@ -113,23 +119,24 @@ export class TokenMonitorService {
    */
   private async calculateConsumptionRate(sessionKey: string): Promise<number> {
     try {
-      const history = await this.openclaw.getSessionHistory(sessionKey);
-      
-      if (!history?.messages || history.messages.length < 2) {
+      // 获取会话详情来计算消耗速率
+      const sessionDetail = await this.openclaw.getSessionDetail(sessionKey);
+
+      if (!sessionDetail?.messages || sessionDetail.messages.length < 2) {
         return 0;
       }
 
       // 获取第一条和最后一条消息的时间戳
-      const firstMessage = history.messages[0];
-      const lastMessage = history.messages[history.messages.length - 1];
-      
+      const firstMessage = sessionDetail.messages[0];
+      const lastMessage = sessionDetail.messages[sessionDetail.messages.length - 1];
+
       const timeDiffMinutes = (lastMessage.timestamp - firstMessage.timestamp) / (1000 * 60);
-      
+
       if (timeDiffMinutes <= 0) {
         return 0;
       }
 
-      const totalTokens = history.messages.reduce((sum, msg) => {
+      const totalTokens = sessionDetail.messages.reduce((sum, msg) => {
         return sum + (msg.tokenCount || 0);
       }, 0);
 
