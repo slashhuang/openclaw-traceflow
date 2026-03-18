@@ -587,3 +587,34 @@ body {
   font-weight: 600;
   color: #111827;
 }
+
+/* Markdown table: make it readable when ReactMarkdown renders tables */
+.system-prompt-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+}
+
+.system-prompt-markdown th,
+.system-prompt-markdown td {
+  border: 1px solid #e5e7eb;
+  padding: 0.45rem 0.65rem;
+  vertical-align: top;
+}
+
+.system-prompt-markdown th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #111827;
+}
+
+.system-prompt-markdown tbody tr:nth-child(even) td {
+  background: #f3f4f6;
+}
+
+.system-prompt-markdown hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0.75rem 0;
+}

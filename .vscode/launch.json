@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "OpenOpenclaw: Launch (Nest debug)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["run", "start:debug"],
+      "cwd": "${workspaceFolder}/open-openclaw",
+      "console": "integratedTerminal",
+      "protocol": "inspector",
+      "port": 9229,
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"],
+      "outFiles": ["${workspaceFolder}/open-openclaw/dist/**/*.js"]
+    },
+    {
+      "name": "OpenOpenclaw: Attach (9229)",
+      "type": "node",
+      "request": "attach",
+      "protocol": "inspector",
+      "port": 9229,
+      "restart": true,
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"],
+      "localRoot": "${workspaceFolder}/open-openclaw",
+      "outFiles": ["${workspaceFolder}/open-openclaw/dist/**/*.js"]
+    }
+  ]
+}

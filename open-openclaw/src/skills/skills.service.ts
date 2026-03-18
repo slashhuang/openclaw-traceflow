@@ -32,6 +32,9 @@ export interface SystemPromptAnalysis {
 @Injectable()
 export class SkillsService {
   private readonly logger = new Logger(SkillsService.name);
+  /** SystemPrompt 分析结果缓存，避免健康检查/轮询造成重复重算 */
+  private systemPromptCache: { at: number; value: SystemPromptAnalysis } | null = null;
+  private static readonly SYSTEM_PROMPT_CACHE_TTL_MS = 30 * 1000;
 
   constructor(private readonly openclaw: OpenClawService) {}
 
@@ -261,41 +264,70 @@ export class SkillsService {
   /**
    * 分析 SystemPrompt
    */
+  async refreshCache(): Promise<void> {
+    try {
+      const value = await this.computeSystemPromptAnalysis();
+      this.systemPromptCache = { at: Date.now(), value };
+    } catch (error) {
+      // 健康检查场景下不希望因为分析失败导致请求失败
+      this.logger.error('Failed to refresh system prompt cache', error);
+    }
+  }
+
   async analyzeSystemPrompt(): Promise<SystemPromptAnalysis> {
+    const cache = this.systemPromptCache;
+    const isFresh = cache && Date.now() - cache.at < SkillsService.SYSTEM_PROMPT_CACHE_TTL_MS;
+    if (isFresh) {
+      return cache!.value;
+    }
+
+    const value = await this.computeSystemPromptAnalysis();
+    this.systemPromptCache = { at: Date.now(), value };
+    return value;
+  }
+
+  private async computeSystemPromptAnalysis(): Promise<SystemPromptAnalysis> {
     const skills = await this.getAllSkills();
-    
-    const activeSkills = skills.filter(s => s.enabled);
-    const zombieSkills = skills.filter(s => !s.lastUsed || s.lastUsed < Date.now() - 30 * 24 * 60 * 60 * 1000);
-    
+
+    const activeSkills = skills.filter((s) => s.enabled);
+    const zombieSkills = skills.filter(
+      (s) => !s.lastUsed || s.lastUsed < Date.now() - 30 * 24 * 60 * 60 * 1000,
+    );
+
     // 找出重复的 skills
     const duplicates = this.detectDuplicates(skills);
     const duplicateSkillNames = new Set<string>();
-    for (const [_, dupes] of duplicates) {
+    for (const [, dupes] of duplicates) {
       for (const dupe of dupes) {
         duplicateSkillNames.add(dupe);
       }
     }
-    
-    const duplicateSkills = skills.filter(s => duplicateSkillNames.has(s.name));
-    
+
+    const duplicateSkills = skills.filter((s) => duplicateSkillNames.has(s.name));
+
     const totalTokens = skills.reduce((sum, s) => sum + s.tokenCount, 0);
     const activeSkillsTokens = activeSkills.reduce((sum, s) => sum + s.tokenCount, 0);
     const zombieSkillsTokens = zombieSkills.reduce((sum, s) => sum + s.tokenCount, 0);
     const duplicateSkillsTokens = duplicateSkills.reduce((sum, s) => sum + s.tokenCount, 0);
-    
+
     const savings = zombieSkillsTokens + duplicateSkillsTokens;
-    const savingsPercent = totalTokens > 0 ? Math.round((savings / totalTokens) * 100) : 0;
-    
+    const savingsPercent =
+      totalTokens > 0 ? Math.round((savings / totalTokens) * 100) : 0;
+
     const recommendations: string[] = [];
-    
+
     if (zombieSkills.length > 0) {
-      recommendations.push(`建议移除 ${zombieSkills.length} 个僵尸 skills（30 天未使用），可节省 ${zombieSkillsTokens} tokens`);
+      recommendations.push(
+        `建议移除 ${zombieSkills.length} 个僵尸 skills（30 天未使用），可节省 ${zombieSkillsTokens} tokens`,
+      );
     }
-    
+
     if (duplicateSkills.length > 0) {
-      recommendations.push(`建议合并 ${duplicateSkills.length} 个重复 skills，可节省 ${duplicateSkillsTokens} tokens`);
+      recommendations.push(
+        `建议合并 ${duplicateSkills.length} 个重复 skills，可节省 ${duplicateSkillsTokens} tokens`,
+      );
     }
-    
+
     return {
       totalTokens,
       activeSkillsTokens,

@@ -89,7 +89,7 @@ export class ConfigService {
       ...Object.fromEntries(Object.entries(envConfig).filter(([_, v]) => v !== undefined)),
     } as Config;
 
-    // 5. 确保数据目录存在
+    // 5. 确保数据目录存在（dataDir 由 cwd + 配置文件 + DATA_DIR 等合并决定，不写死）
     if (!fs.existsSync(merged.dataDir)) {
       fs.mkdirSync(merged.dataDir, { recursive: true });
     }

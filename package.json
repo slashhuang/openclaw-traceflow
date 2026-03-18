@@ -7,12 +7,9 @@
     "claw:prod": "cd claw-family && npm run prod",
     "claw:local": "cd claw-family && npm run local",
     "futu": "cd futu-openD && npm run futu",
-    "monitor": "cd open-openclaw && npm run monitor",
-    "monitor:dev": "cd open-openclaw && npm run monitor:dev",
-    "dev": "cd open-openclaw && npm run dev:all",
-    "start:all:local": "npm run monitor & npm run claw:local",
-    "start:all:prod": "npm run monitor & npm run claw:prod",
-    "start:all:local:dev": "npm run monitor:dev & npm run claw:local"
+    "monitor": "cd open-openclaw && npm run dev",
+    "start:local": "npm run monitor & npm run claw:local",
+    "start:prod": "npm run monitor & npm run claw:prod"
   },
   "keywords": [
     "monorepo",

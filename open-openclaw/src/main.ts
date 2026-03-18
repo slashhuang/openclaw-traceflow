@@ -5,8 +5,44 @@ import { LogsService } from './logs/logs.service';
 import * as express from 'express';
 import * as path from 'path';
 
+/** 开发/watch 重启时旧进程可能尚未释放端口；短暂重试可避免 EADDRINUSE */
+async function listenWithDevRetry(
+  app: { listen: (port: number, host: string) => Promise<unknown> },
+  port: number,
+  host: string,
+): Promise<void> {
+  const isProd = process.env.NODE_ENV === 'production';
+  const maxAttempts = isProd ? 1 : 15;
+  const delayMs = 200;
+  let lastErr: unknown;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      await app.listen(port, host);
+      if (i > 0) {
+        console.log(`[bootstrap] Port ${port} available after ${i} retry(ies).`);
+      }
+      return;
+    } catch (e: unknown) {
+      lastErr = e;
+      const code =
+        e && typeof e === 'object' && 'code' in e
+          ? (e as { code?: string }).code
+          : undefined;
+      if (code !== 'EADDRINUSE' || i === maxAttempts - 1) {
+        throw e;
+      }
+      console.warn(
+        `[bootstrap] Port ${port} busy (hot reload?), retry ${i + 1}/${maxAttempts} in ${delayMs}ms...`,
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
 
   // 启用 CORS
   app.enableCors({
@@ -41,7 +77,18 @@ async function bootstrap() {
   const port = config.port;
   const host = config.host;
 
-  await app.listen(port, host);
+  const shutdown = async () => {
+    try {
+      await app.close();
+    } catch {
+      /* ignore */
+    }
+    process.exit(0);
+  };
+  process.once('SIGTERM', () => void shutdown());
+  process.once('SIGINT', () => void shutdown());
+
+  await listenWithDevRetry(app, port, host);
 
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗

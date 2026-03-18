@@ -3,6 +3,6 @@
   "port": 3001,
   "openclawGatewayUrl": "http://localhost:18789",
   "accessMode": "local-only",
-  "dataDir": "/Users/xiaogang.h/work/wave-fe/ai-调研/claw-sources/open-openclaw/data",
+  "dataDir": "/Users/huangxiaogang/claw-sources/open-openclaw/data",
   "openclawGatewayToken": "[REDACTED]"
 }

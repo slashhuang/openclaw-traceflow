@@ -6,9 +6,17 @@ import {
 } from './openclaw-paths.resolver';
 import { fetchRuntimePathsFromGateway } from './gateway-ws-paths';
 import {
+  callGatewayRpc,
   fetchStatusOverview,
   type StatusOverviewResult,
 } from './gateway-rpc';
+import {
+  buildBreakdownFromReport,
+  buildMarkdownFallbackFromReport,
+  parseSystemPromptSections,
+  type SystemPromptProbeResult,
+  type WorkspaceFileContent,
+} from './system-prompt-probe';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -630,6 +638,89 @@ export class OpenClawService {
     }
   }
 
+  private readWorkspaceInjectedContents(
+    workspaceDir: string,
+    files: SystemPromptProbeResult['workspaceFiles'],
+  ): WorkspaceFileContent[] {
+    const MAX_CHARS = 400_000;
+    const MAX_FILES = 40;
+    const wsResolved = path.resolve(workspaceDir.trim());
+    if (!fs.existsSync(wsResolved)) {
+      return [];
+    }
+    let wsReal: string;
+    try {
+      wsReal = fs.realpathSync(wsResolved);
+    } catch {
+      wsReal = wsResolved;
+    }
+
+    const out: WorkspaceFileContent[] = [];
+    const list = files.slice(0, MAX_FILES);
+    for (const f of list) {
+      if (f.missing) {
+        out.push({
+          name: f.name || f.path,
+          path: f.path,
+          content: '',
+          truncated: false,
+          readError: '报告标记为缺失，未读取',
+        });
+        continue;
+      }
+      const rel = String(f.path || f.name || '').trim();
+      if (!rel) continue;
+      try {
+        const candidate = path.isAbsolute(rel) ? path.resolve(rel) : path.resolve(wsReal, rel);
+        let targetReal: string;
+        try {
+          targetReal = fs.existsSync(candidate) ? fs.realpathSync(candidate) : candidate;
+        } catch {
+          targetReal = candidate;
+        }
+        const relToWs = path.relative(wsReal, targetReal);
+        if (relToWs.startsWith('..') || path.isAbsolute(relToWs)) {
+          out.push({
+            name: f.name || f.path,
+            path: f.path,
+            content: '',
+            truncated: false,
+            readError: '路径不在 workspace 内，已跳过',
+          });
+          continue;
+        }
+        if (!fs.existsSync(targetReal) || !fs.statSync(targetReal).isFile()) {
+          out.push({
+            name: f.name || f.path,
+            path: f.path,
+            content: '',
+            truncated: false,
+            readError: '文件不存在或不是普通文件',
+          });
+          continue;
+        }
+        const raw = fs.readFileSync(targetReal, 'utf-8');
+        const truncated = raw.length > MAX_CHARS;
+        out.push({
+          name: f.name || f.path,
+          path: f.path,
+          content: truncated ? raw.slice(0, MAX_CHARS) : raw,
+          truncated,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        out.push({
+          name: f.name || f.path,
+          path: f.path,
+          content: '',
+          truncated: false,
+          readError: msg,
+        });
+      }
+    }
+    return out;
+  }
+
   private async findSessionFile(sessionId: string): Promise<SessionFile | null> {
     const dir = await this.stateDir();
     const agentsDir = path.join(dir, 'agents');
@@ -736,5 +827,183 @@ export class OpenClawService {
       this.logger.error('Failed to update config:', msg);
       return false;
     }
+  }
+
+  /**
+   * 嗅探 Gateway 侧 systemPromptReport（sessions.usage + includeContextWeight），
+   * 并尝试从本机 transcript 拉取 system 消息作 Markdown 展示。
+   */
+  async probeSystemPrompt(): Promise<SystemPromptProbeResult> {
+    const empty: SystemPromptProbeResult = {
+      ok: false,
+      error: undefined,
+      breakdown: [],
+      workspaceFiles: [],
+      workspaceFileContents: [],
+      skillsDetail: [],
+      toolsDetail: [],
+      toolsSummary: { listChars: 0, schemaChars: 0, entryCount: 0 },
+      systemPromptMarkdown: '',
+      sections: {
+        fromTranscript: false,
+        coreText: '',
+        projectContextText: '',
+        toolsListText: '',
+        skillBlocks: [],
+      },
+    };
+
+    const cfg = this.configService.getConfig();
+    const gw = cfg.openclawGatewayUrl?.trim();
+    if (!gw) {
+      return { ...empty, error: '未配置 openclawGatewayUrl' };
+    }
+
+    const end = new Date();
+    const start = new Date(end.getTime() - 120 * 86400000);
+    const dr = {
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+      mode: 'utc' as const,
+    };
+
+    type UsageSess = {
+      key: string;
+      sessionId?: string;
+      agentId?: string;
+      updatedAt?: number;
+      contextWeight?: Record<string, unknown> | null;
+    };
+
+    const rpc = async (extra: Record<string, unknown>) =>
+      callGatewayRpc<{ sessions?: UsageSess[] }>({
+        gatewayHttpUrl: gw,
+        token: cfg.openclawGatewayToken,
+        password: cfg.openclawGatewayPassword,
+        method: 'sessions.usage',
+        methodParams: {
+          ...dr,
+          limit: 100,
+          includeContextWeight: true,
+          ...extra,
+        },
+        timeoutMs: 35000,
+      });
+
+    const pickReport = (sessions: UsageSess[] | undefined) => {
+      if (!sessions?.length) return null;
+      const withCw = sessions.filter((s) => s.contextWeight != null);
+      if (!withCw.length) return null;
+      return (
+        withCw.find((s) => s.key === 'agent:main:main') ||
+        [...withCw].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]
+      );
+    };
+
+    let chosen: UsageSess | null = null;
+    const rMain = await rpc({ key: 'agent:main:main', limit: 8 });
+    if (rMain.ok) {
+      chosen = pickReport(rMain.payload?.sessions) || null;
+    }
+    if (!chosen) {
+      const r = await rpc({ limit: 100 });
+      if (!r.ok) {
+        return {
+          ...empty,
+          error: r.error || 'sessions.usage RPC 失败（请检查 Gateway 与 Token）',
+        };
+      }
+      chosen = pickReport(r.payload?.sessions) || null;
+    }
+
+    if (!chosen?.contextWeight) {
+      return {
+        ...empty,
+        error:
+          '未找到 systemPromptReport。请在本机至少成功运行过一次 Agent（生成会话后 Gateway 会写入 store），并确保 Gateway 版本支持 sessions.usage.includeContextWeight。',
+      };
+    }
+
+    const report = chosen.contextWeight as Record<string, unknown>;
+    const breakdown = buildBreakdownFromReport(report);
+    const workspaceFiles = (Array.isArray(report.injectedWorkspaceFiles)
+      ? report.injectedWorkspaceFiles
+      : []) as SystemPromptProbeResult['workspaceFiles'];
+    const skills = (report.skills as { entries?: Array<{ name: string; blockChars: number }> }) || {};
+    const skillsDetail = Array.isArray(skills.entries) ? skills.entries : [];
+    const tools = (report.tools as { listChars?: number; schemaChars?: number; entries?: unknown[] }) || {};
+    const toolsDetail = Array.isArray(tools.entries)
+      ? (tools.entries as Array<{
+          name?: string;
+          summaryChars?: number;
+          schemaChars?: number;
+          propertiesCount?: number | null;
+        }>)
+          .map((t) => ({
+            name: String(t.name || '-'),
+            summaryChars: Number(t.summaryChars) || 0,
+            schemaChars: Number(t.schemaChars) || 0,
+            propertiesCount: typeof t.propertiesCount === 'number' ? t.propertiesCount : t.propertiesCount ?? null,
+          }))
+          .sort((a, b) => a.schemaChars + a.summaryChars - (b.schemaChars + b.summaryChars))
+          .reverse()
+      : [];
+    const toolsSummary = {
+      listChars: Number(tools.listChars) || 0,
+      schemaChars: Number(tools.schemaChars) || 0,
+      entryCount: Array.isArray(tools.entries) ? tools.entries.length : 0,
+    };
+
+    let systemPromptMarkdown = '';
+    let fromTranscript = false;
+    const rawSid = chosen.sessionId || '';
+    const uuid = rawSid.includes('/') ? rawSid.split('/').pop() || rawSid : rawSid;
+    if (uuid && uuid.length > 4) {
+      try {
+        const detail = await this.getSessionDetail(uuid);
+        const sysMsgs = (detail?.messages || []).filter((m) => m.role === 'system');
+        const joined = sysMsgs
+          .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+          .map((m) => m.content)
+          .join('\n\n---\n\n');
+        if (joined.length > 200) {
+          systemPromptMarkdown = joined;
+          fromTranscript = true;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (!systemPromptMarkdown || systemPromptMarkdown.length < 200) {
+      systemPromptMarkdown = buildMarkdownFallbackFromReport(report, chosen.key);
+      fromTranscript = false;
+    }
+
+    const sections = parseSystemPromptSections(systemPromptMarkdown, fromTranscript);
+    const workspaceDirStr = report.workspaceDir ? String(report.workspaceDir) : '';
+    const workspaceFileContents = workspaceDirStr
+      ? this.readWorkspaceInjectedContents(workspaceDirStr, workspaceFiles)
+      : [];
+
+    return {
+      ok: true,
+      sessionKey: chosen.key,
+      sessionId: chosen.sessionId,
+      agentId: chosen.agentId,
+      reportSource: String(report.source || ''),
+      reportGeneratedAt: report.generatedAt ? Number(report.generatedAt) : undefined,
+      model: report.model ? String(report.model) : undefined,
+      provider: report.provider ? String(report.provider) : undefined,
+      workspaceDir: workspaceDirStr || undefined,
+      breakdown,
+      workspaceFiles,
+      workspaceFileContents,
+      skillsDetail,
+      toolsDetail,
+      toolsSummary,
+      systemPromptMarkdown,
+      sections,
+    };
   }
 }

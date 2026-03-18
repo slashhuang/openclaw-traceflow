@@ -1,8 +1,0 @@
-{
-  "host": "127.0.0.1",
-  "port": 3001,
-  "openclawGatewayUrl": "http://localhost:18789",
-  "accessMode": "local-only",
-  "dataDir": "/Users/xiaogang.h/work/wave-fe/ai-调研/claw-sources/open-openclaw/data",
-  "openclawGatewayToken": "wave-fe"
-}

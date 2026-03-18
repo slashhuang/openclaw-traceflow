@@ -1,0 +1,6 @@
+{
+  "host": "127.0.0.1",
+  "port": 3001,
+  "openclawGatewayUrl": "http://localhost:18789",
+  "accessMode": "local-only"
+}

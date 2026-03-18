@@ -48,6 +48,8 @@ export interface LatencyMetrics {
 
 export interface TokenUsageBySession {
   sessionKey: string;
+  /** 该 session_key 下最近一条记录的 session_id，用于跳转会话详情 */
+  sessionId?: string;
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
@@ -314,18 +316,35 @@ export class MetricsService implements OnModuleInit {
     const startTime = now - timeRangeMs;
 
     const result = this.db.exec(
-      `SELECT session_key,
-              SUM(total_tokens) as total_tokens,
-              SUM(input_tokens) as input_tokens,
-              SUM(output_tokens) as output_tokens,
-              COUNT(*) as request_count,
-              AVG(utilization) as avg_utilization
-       FROM token_usage
-       WHERE timestamp > ?
-       GROUP BY session_key
-       ORDER BY total_tokens DESC
+      `WITH agg AS (
+         SELECT session_key,
+                SUM(total_tokens) AS total_tokens,
+                SUM(input_tokens) AS input_tokens,
+                SUM(output_tokens) AS output_tokens,
+                COUNT(*) AS request_count,
+                AVG(utilization) AS avg_utilization
+         FROM token_usage
+         WHERE timestamp > ?
+         GROUP BY session_key
+       ),
+       ranked AS (
+         SELECT session_key, session_id,
+                ROW_NUMBER() OVER (PARTITION BY session_key ORDER BY timestamp DESC) AS rn
+         FROM token_usage
+         WHERE timestamp > ? AND session_id IS NOT NULL AND session_id != ''
+       )
+       SELECT a.session_key,
+              r.session_id,
+              a.total_tokens,
+              a.input_tokens,
+              a.output_tokens,
+              a.request_count,
+              a.avg_utilization
+       FROM agg a
+       LEFT JOIN ranked r ON r.session_key = a.session_key AND r.rn = 1
+       ORDER BY a.total_tokens DESC
        LIMIT 10`,
-      [startTime],
+      [startTime, startTime],
     );
 
     if (!result.length) return [];
@@ -347,11 +366,12 @@ export class MetricsService implements OnModuleInit {
 
     return result[0].values.map((row) => ({
       sessionKey: row[0] as string,
-      totalTokens: row[1] as number,
-      inputTokens: row[2] as number,
-      outputTokens: row[3] as number,
-      requestCount: row[4] as number,
-      avgUtilization: row[5] as number,
+      sessionId: (row[1] as string) || undefined,
+      totalTokens: row[2] as number,
+      inputTokens: row[3] as number,
+      outputTokens: row[4] as number,
+      requestCount: row[5] as number,
+      avgUtilization: row[6] as number,
       limitReachedCount: limitReachedMap.get(row[0] as string) || 0,
     }));
   }

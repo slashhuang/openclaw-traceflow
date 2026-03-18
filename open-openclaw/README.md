@@ -89,6 +89,14 @@ pnpm run start:dev
 | `DATA_DIR` | 数据目录 | `./data` |
 | `PM2_LOG_PATH` | PM2 日志路径（可选） | 未设则不读文件日志 |
 
+### 本地配置文件（可选）
+
+```bash
+cp config/openclaw.runtime.example.json config/openclaw.runtime.json
+```
+
+`config/openclaw.runtime.json` 为本地文件、**不纳入版本库**。其中不要写死本机绝对路径的 `dataDir`：省略时自动使用**当前启动目录**下的 `./data`；Gateway Token 等请用环境变量（如 `OPENCLAW_GATEWAY_TOKEN`）。
+
 **状态目录 / 配置路径如何解析（推荐依赖「正在跑的 Gateway」）：**
 
 1. **首选：WebSocket 连 Gateway**（与 `OPENCLAW_GATEWAY_URL` 一致）  

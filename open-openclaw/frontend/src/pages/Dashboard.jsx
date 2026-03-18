@@ -55,7 +55,8 @@ const TYPE_SORT_ORDER = { heartbeat: 0, cron: 1, Wave: 2, 'Wave 用户': 2, Slac
 
 function formatTokenShort(n) {
   if (n == null || typeof n !== 'number') return '?';
-  if (n >= 1000) return `${(n / 1000).toFixed(0)}k`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
 
@@ -77,59 +78,167 @@ function formatTimeAgo(ms) {
   return `${Math.floor(h / 24)} 天前`;
 }
 
+/** Token 用量行：与会话列表一致展示类型 + 用户，并解析详情页 sessionId */
+function tokenUsageRowDisplay(item, sessions) {
+  const session =
+    (item.sessionId && sessions.find((s) => s.sessionId === item.sessionId)) ||
+    sessions.find((s) => s.sessionKey === item.sessionKey);
+  const detailId = item.sessionId || session?.sessionId;
+  const typeLabel = session?.typeLabel || inferSessionTypeLabel(item.sessionKey);
+  const sys = typeLabel === 'heartbeat' || typeLabel === 'cron';
+  const userLabel = session
+    ? sys
+      ? typeLabel
+      : session.user || 'unknown'
+    : detailId
+      ? formatSessionShort(
+          detailId.includes('/') ? detailId.split('/').pop() : detailId,
+          item.sessionKey,
+        )
+      : (item.sessionKey || '').length > 28
+        ? `${(item.sessionKey || '').slice(0, 28)}…`
+        : item.sessionKey || '—';
+  return { typeLabel, userLabel, detailId, sessionKeyFull: item.sessionKey };
+}
+
+/** 与 OpenClaw CLI / Control UI status 展示对齐（参考 status.summary + auto-reply/status.ts） */
+function formatElevated(level) {
+  if (level == null || level === '' || level === 'off') return null;
+  if (level === 'on') return 'elevated';
+  return `elevated:${level}`;
+}
+
+function resolveSessionDetailPath(mainSession) {
+  if (!mainSession?.sessionId) return null;
+  const sid = String(mainSession.sessionId);
+  if (sid.includes('/')) return sid;
+  const agentId = mainSession.agentId || (mainSession.key && String(mainSession.key).split(':')[1]) || 'main';
+  return `${agentId}/${sid}`;
+}
+
 function StatusOverviewCard({ overview }) {
-  if (!overview || overview.error) return null;
+  if (overview == null) {
+    return (
+      <div className="card mt-4" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+        <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>📋 Gateway Status</h3>
+        <p className="text-muted" style={{ fontSize: '0.7rem' }}>加载中…</p>
+      </div>
+    );
+  }
+
+  if (overview.error) {
+    const msg = typeof overview.error === 'string' ? overview.error : '无法获取 Status';
+    return (
+      <div className="card mt-4" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+        <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>📋 Gateway Status</h3>
+        <p className="text-muted" style={{ fontSize: '0.7rem' }}>{msg}</p>
+        <p className="text-muted" style={{ fontSize: '0.65rem', marginTop: '0.5rem' }}>
+          请确认已连接 Gateway，并在设置中配置 Token；数据来自 <code>status</code> + <code>usage.status</code> RPC。
+        </p>
+      </div>
+    );
+  }
+
   const status = overview.status || {};
-  const usage = overview.usage || {};
-  const sessions = status.sessions || {};
-  const defaults = sessions.defaults || {};
-  const recent = sessions.recent || [];
+  const sessionsBlock = status.sessions || {};
+  const defaults = sessionsBlock.defaults || {};
+  const recent = sessionsBlock.recent || [];
   const mainSession = recent[0];
-  const queuedEvents = status.queuedSystemEvents || [];
+  const queuedEvents = Array.isArray(status.queuedSystemEvents) ? status.queuedSystemEvents : [];
+
+  const connectVer = overview.version || '';
+  const runtimeVer = status.runtimeVersion;
+  let versionLine = '🦞 OpenClaw ';
+  if (connectVer && runtimeVer && String(connectVer) !== String(runtimeVer)) {
+    versionLine += `${connectVer} (${runtimeVer})`;
+  } else {
+    versionLine += connectVer || runtimeVer || '?';
+  }
 
   const model = mainSession?.model || defaults.model || '?';
-  const inputTokens = mainSession?.inputTokens ?? 0;
-  const outputTokens = mainSession?.outputTokens ?? 0;
-  const totalTokens = mainSession?.totalTokens ?? inputTokens + outputTokens;
-  const contextTokens = mainSession?.contextTokens ?? defaults.contextTokens;
-  const pct = contextTokens && totalTokens ? Math.round((totalTokens / contextTokens) * 100) : null;
-  const contextLine = contextTokens
-    ? `${formatTokenShort(totalTokens)}/${formatTokenShort(contextTokens)}${pct != null ? ` (${pct}%)` : ''}`
-    : 'N/A';
-  const sessionKey = mainSession?.key || 'N/A';
-  const sessionId = mainSession?.sessionId;
-  const sessionAge = mainSession?.age != null ? formatTimeAgo(mainSession.age) : '';
-  const queueMode = queuedEvents.length > 0 ? `collect (depth ${queuedEvents.length})` : 'collect (depth 0)';
-  const thinkingLevel = mainSession?.thinkingLevel || 'low';
-  const typeLabel = inferSessionTypeLabel(sessionKey);
+  const modelAuth =
+    mainSession?.modelAuth ||
+    mainSession?.authLabel ||
+    (typeof mainSession?.activeModelAuth === 'string' ? mainSession.activeModelAuth : null);
+  const authSource = mainSession?.modelAuthSource || mainSession?.authSource;
+  const authSuffix =
+    modelAuth || authSource
+      ? ` · 🔑 ${[modelAuth, authSource].filter(Boolean).join(' ')}`.trim()
+      : '';
+
+  const totalTok = mainSession?.totalTokens ?? 0;
+  const ctxTok = mainSession?.contextTokens ?? defaults.contextTokens ?? null;
+  const pct =
+    mainSession?.percentUsed != null
+      ? mainSession.percentUsed
+      : ctxTok && ctxTok > 0
+        ? Math.min(999, Math.round((totalTok / ctxTok) * 100))
+        : null;
+  const contextLine =
+    ctxTok != null
+      ? `${formatTokenShort(totalTok)}/${formatTokenShort(ctxTok)}${pct != null ? ` (${pct}%)` : ''}`
+      : 'N/A';
+  const compactions = mainSession?.compactionCount ?? 0;
+
+  const sessionKey = mainSession?.key || '—';
+  const detailPath = resolveSessionDetailPath(mainSession);
+  const updatedPhrase =
+    mainSession?.age != null
+      ? `updated ${formatTimeAgo(mainSession.age)}`
+      : mainSession?.updatedAt
+        ? `updated ${formatTimeAgo(Date.now() - mainSession.updatedAt)}`
+        : 'no activity';
+
+  const runtimeKind = mainSession?.kind === 'group' ? 'group' : 'direct';
+  const think = mainSession?.thinkingLevel ?? 'off';
+  const elevated = formatElevated(mainSession?.elevatedLevel);
+  const runtimeParts = [
+    `Runtime: ${runtimeKind}`,
+    `Think: ${think}`,
+    mainSession?.fastMode ? 'Fast: on' : null,
+    mainSession?.verboseLevel && mainSession.verboseLevel !== 'off'
+      ? mainSession.verboseLevel === 'full'
+        ? 'verbose:full'
+        : `verbose:${mainSession.verboseLevel}`
+      : null,
+    mainSession?.reasoningLevel && mainSession.reasoningLevel !== 'off'
+      ? `Reasoning: ${mainSession.reasoningLevel}`
+      : null,
+    elevated,
+  ].filter(Boolean);
+  const runtimeLine = `⚙️ ${runtimeParts.join(' · ')}`;
+
+  const queueDepth = queuedEvents.length;
+  const queueLine = `🪢 Queue: collect (depth ${queueDepth})`;
 
   return (
     <div className="card mt-4" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-      <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>📋 Status 概览</h3>
-      <p className="text-muted" style={{ fontSize: '0.7rem', marginBottom: '0.75rem' }}>
-        以下为 <strong>最近一次有活动的会话</strong>（可能已空闲），非「活跃中」的实时会话
+      <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>📋 Gateway Status</h3>
+      <p className="text-muted" style={{ fontSize: '0.65rem', marginBottom: '0.75rem' }}>
+        与 OpenClaw Control UI 同源：<code>status</code> + <code>usage.status</code>；最近会话按 store 更新时间排序
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', color: 'var(--text-secondary)' }}>
-        <div>🦞 OpenClaw {overview.version || '?'}</div>
-        <div>🧠 Model: {model}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', color: 'var(--text-secondary)' }}>
+        <div>{versionLine}</div>
         <div>
-          <strong>🧵 当前会话</strong>
-          {sessionId ? (
-            <Link to={`/sessions/${encodeURIComponent(sessionId)}`} style={{ color: 'var(--primary)', marginLeft: '0.5rem', textDecoration: 'underline' }}>
+          🧠 Model: {model}
+          {authSuffix}
+        </div>
+        <div>
+          📚 Context: {contextLine} · 🧹 Compactions: {compactions}
+        </div>
+        <div>
+          🧵 Session:{' '}
+          {detailPath ? (
+            <Link to={`/sessions/${encodeURIComponent(detailPath)}`} style={{ color: 'var(--primary)' }}>
               {sessionKey}
             </Link>
           ) : (
-            <span style={{ marginLeft: '0.5rem' }}>{sessionKey}</span>
+            sessionKey
           )}
-          {sessionAge && <span className="text-muted" style={{ marginLeft: '0.25rem' }}>· {sessionAge}</span>}
-          <span className="text-muted" style={{ marginLeft: '0.25rem', fontSize: '0.65rem' }}>（{typeLabel}）</span>
+          <span className="text-muted"> · {updatedPhrase}</span>
         </div>
-        <div style={{ marginLeft: '1.25rem', paddingLeft: '0.5rem', borderLeft: '2px solid var(--border)' }}>
-          <div>🧮 Tokens: {formatTokenShort(inputTokens)} in / {formatTokenShort(outputTokens)} out</div>
-          <div>📚 Context: {contextLine}</div>
-        </div>
-        <div>⚙️ Runtime: direct · Think: {thinkingLevel}</div>
-        <div>🪢 Queue: {queueMode}</div>
+        <div>{runtimeLine}</div>
+        <div>{queueLine}</div>
       </div>
     </div>
   );
@@ -145,16 +254,26 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     try {
-      const [healthData, sessionsData, logsData, latencyData, toolsData, tokenSummaryData, tokenUsageData] = await Promise.all([
-        healthApi.getHealth().catch(() => null),
-        sessionsApi.list().catch(() => []),
-        logsApi.getRecent(10).catch(() => []),
-        metricsApi.getLatency().catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
-        metricsApi.getTools().catch(() => []),
-        metricsApi.getTokenSummary().catch(() => ({ totalInput: 0, totalOutput: 0, totalTokens: 0, nearLimitCount: 0, limitReachedCount: 0, sessionCount: 0 })),
-        metricsApi.getTokenUsage().catch(() => []),
-      ]);
+      const [healthData, statusData, sessionsData, logsData, latencyData, toolsData, tokenSummaryData, tokenUsageData] =
+        await Promise.all([
+          healthApi.getHealth().catch(() => null),
+          statusApi.getOverview().catch((e) => ({ error: e?.message || 'Status 请求失败' })),
+          sessionsApi.list().catch(() => []),
+          logsApi.getRecent(10).catch(() => []),
+          metricsApi.getLatency().catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
+          metricsApi.getTools().catch(() => []),
+          metricsApi.getTokenSummary().catch(() => ({
+            totalInput: 0,
+            totalOutput: 0,
+            totalTokens: 0,
+            nearLimitCount: 0,
+            limitReachedCount: 0,
+            sessionCount: 0,
+          })),
+          metricsApi.getTokenUsage().catch(() => []),
+        ]);
       setHealth(healthData);
+      setStatusOverview(statusData);
       setSessions(Array.isArray(sessionsData) ? sessionsData : []);
       setRecentLogs(Array.isArray(logsData) ? logsData : []);
       setMetrics({
@@ -323,14 +442,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Session Key Token 用量排行 */}
+      {/* 会话 Token 用量排行（展示与用户列表一致：类型 + 用户，可进详情） */}
       {metrics.tokenUsage && metrics.tokenUsage.length > 0 && (
         <div className="card mt-4">
-          <h3 className="card-title">Session Key Token 用量 Top 10 (过去 24 小时)</h3>
+          <h3 className="card-title">会话 Token 用量 Top 10（过去 24 小时）</h3>
           <table className="table">
             <thead>
               <tr>
-                <th>Session Key</th>
+                <th>#</th>
+                <th>类型</th>
+                <th>用户</th>
                 <th>总 Token</th>
                 <th>Input</th>
                 <th>Output</th>
@@ -340,9 +461,42 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {metrics.tokenUsage.map((item, index) => (
+              {metrics.tokenUsage.map((item, index) => {
+                const { typeLabel, userLabel, detailId, sessionKeyFull } = tokenUsageRowDisplay(item, sessions);
+                return (
                 <tr key={item.sessionKey}>
-                  <td style={{ fontWeight: '600' }}>{index + 1}. {item.sessionKey}</td>
+                  <td className="text-muted text-sm">{index + 1}</td>
+                  <td>
+                    <span
+                      className="badge"
+                      style={{
+                        fontSize: '0.65rem',
+                        background:
+                          typeLabel === 'heartbeat'
+                            ? 'rgba(72,187,120,0.3)'
+                            : typeLabel === 'cron'
+                              ? 'rgba(237,137,54,0.3)'
+                              : 'rgba(102,126,234,0.3)',
+                      }}
+                    >
+                      {typeLabel}
+                    </span>
+                  </td>
+                  <td>
+                    {detailId ? (
+                      <Link
+                        to={`/sessions/${encodeURIComponent(detailId)}`}
+                        style={{ color: 'var(--primary)', fontWeight: 600 }}
+                        title={sessionKeyFull}
+                      >
+                        {userLabel}
+                      </Link>
+                    ) : (
+                      <span className="text-muted" title={sessionKeyFull}>
+                        {userLabel}
+                      </span>
+                    )}
+                  </td>
                   <td style={{ color: 'var(--primary)' }}>{item.totalTokens?.toLocaleString() || 0}</td>
                   <td className="text-muted">{item.inputTokens?.toLocaleString() || 0}</td>
                   <td className="text-muted">{item.outputTokens?.toLocaleString() || 0}</td>
@@ -373,7 +527,8 @@ export default function Dashboard() {
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

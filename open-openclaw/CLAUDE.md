@@ -171,7 +171,9 @@ pnpm run test:e2e
 
 ### 配置文件
 
-`config/openclaw.runtime.json` (可选，优先级高于默认值，低于环境变量)
+- **`config/openclaw.runtime.example.json`**：仓库内示例，可复制为本地配置。
+- **`config/openclaw.runtime.json`**：本地可选覆盖（**已 `.gitignore`**，勿提交）。优先级：默认值 < 该文件 < 环境变量。
+- **不写 `dataDir`** 时，数据目录为**启动目录**下的 `./data`；仅在本机需要固定路径时再写 `dataDir` 或设 `DATA_DIR`。
 
 ## 部署
 

@@ -1,5 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+function inferSessionTypeLabel(sessionKey) {
+  const key = sessionKey || '';
+  const full = key.includes('/') ? key.split('/').pop() || key : key;
+  if (full.endsWith(':main') || full === 'main') return 'heartbeat';
+  if (full.includes(':cron:')) return 'cron';
+  if (full.includes(':wave:')) return 'Wave';
+  if (full.includes(':slack:')) return 'Slack';
+  if (full.includes(':telegram:')) return 'Telegram';
+  if (full.includes(':cron')) return 'cron';
+  return '用户';
+}
+
+function userLabelForTokenRow(usageRow, sessionList) {
+  const ls = sessionList.find((s) => s.sessionKey === usageRow.sessionKey);
+  const typeLabel = ls?.typeLabel || inferSessionTypeLabel(usageRow.sessionKey);
+  const sys = typeLabel === 'heartbeat' || typeLabel === 'cron';
+  if (ls) return sys ? typeLabel : ls.user || 'unknown';
+  const id = usageRow.sessionId || '';
+  const tail = id.includes('/') ? id.split('/').pop() : id;
+  return tail && tail.length >= 6 ? `${tail.slice(0, 8)}…` : usageRow.sessionKey?.slice(0, 14) || '—';
+}
 
 const THRESHOLD_COLORS = {
   normal: '#10B981',
@@ -19,6 +42,7 @@ const THRESHOLD_LABELS = {
 
 export default function TokenMonitor() {
   const [sessions, setSessions] = useState([]);
+  const [sessionList, setSessionList] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -34,16 +58,19 @@ export default function TokenMonitor() {
 
   const fetchData = async () => {
     try {
-      const [sessionsRes, alertsRes] = await Promise.all([
+      const [sessionsRes, alertsRes, listRes] = await Promise.all([
         fetch('/api/sessions/token-usage'),
-        fetch('/api/sessions/token-alerts/history')
+        fetch('/api/sessions/token-alerts/history'),
+        fetch('/api/sessions'),
       ]);
-      
+
       const sessionsData = await sessionsRes.json();
       const alertsData = await alertsRes.json();
-      
+      const listData = await listRes.json();
+
       setSessions(sessionsData);
       setAlerts(alertsData);
+      setSessionList(Array.isArray(listData) ? listData : []);
     } catch (error) {
       console.error('Failed to fetch token data:', error);
     } finally {
@@ -63,7 +90,14 @@ export default function TokenMonitor() {
   const topConsumptionSessions = [...sessions]
     .sort((a, b) => b.consumptionRate - a.consumptionRate)
     .slice(0, 10)
-    .map(s => ({ name: s.sessionKey, rate: s.consumptionRate }));
+    .map((s) => {
+      const label = userLabelForTokenRow(s, sessionList);
+      return {
+        name: label.length > 16 ? `${label.slice(0, 16)}…` : label,
+        nameTip: s.sessionKey,
+        rate: s.consumptionRate,
+      };
+    });
 
   const highUtilizationSessions = sessions.filter(s => s.utilization > 50);
 
@@ -186,9 +220,9 @@ export default function TokenMonitor() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={topConsumptionSessions}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
+                <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={70} tick={{ fontSize: 10 }} />
                 <YAxis />
-                <Tooltip />
+                <Tooltip formatter={(v) => [`${v} /min`, '消耗']} labelFormatter={(_, p) => p?.[0]?.payload?.nameTip || ''} />
                 <Legend />
                 <Bar dataKey="rate" fill="#8884d8" />
               </BarChart>
@@ -207,7 +241,8 @@ export default function TokenMonitor() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">会话</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">类型</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">用户</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">使用率</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">已用 Token</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">限制</th>
@@ -216,10 +251,23 @@ export default function TokenMonitor() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {highUtilizationSessions.map((session, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
+                {highUtilizationSessions.map((session, index) => {
+                  const typeLabel = sessionList.find((s) => s.sessionKey === session.sessionKey)?.typeLabel
+                    || inferSessionTypeLabel(session.sessionKey);
+                  const userLabel = userLabelForTokenRow(session, sessionList);
+                  return (
+                  <tr key={session.sessionId || index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{session.sessionKey}</div>
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">{typeLabel}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Link
+                        to={`/sessions/${encodeURIComponent(session.sessionId)}`}
+                        className="text-sm font-medium text-blue-600 hover:underline"
+                        title={session.sessionKey}
+                      >
+                        {userLabel}
+                      </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -259,7 +307,8 @@ export default function TokenMonitor() {
                       ) : '-'}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

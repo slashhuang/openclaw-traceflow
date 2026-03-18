@@ -42,6 +42,9 @@ jspm_packages/
 # Yarn Integrity file
 .yarn-integrity
 
+# 本机运行时配置（含可选路径/密钥，开源仓库不跟踪）
+config/openclaw.runtime.json
+
 # dotenv environment variables file
 .env
 .env.test
