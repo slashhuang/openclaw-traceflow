@@ -107,16 +107,14 @@ create_pr() {
     fi
     
     # 调用 GitHub API 创建 PR
+    # 注意：body 中的换行符需要转义为 \n
+    local escaped_body=$(echo "$body" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
+    
     local response=$(curl -s -X POST \
         -H "Authorization: token $token" \
         -H "Accept: application/vnd.github.v3+json" \
         "$GITHUB_API/repos/$repo/pulls" \
-        -d "{
-            \"title\": \"$title\",
-            \"body\": \"$body\",
-            \"head\": \"$head\",
-            \"base\": \"$base\"
-        }")
+        -d "{\"title\": \"$title\", \"body\": \"$escaped_body\", \"head\": \"$head\", \"base\": \"$base\"}")
     
     # 解析响应
     local pr_number=$(echo "$response" | grep -o '"number": *[0-9]*' | grep -o '[0-9]*')
