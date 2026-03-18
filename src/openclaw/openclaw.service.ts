@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
+import {
+  resolveOpenClawPaths,
+  type OpenClawResolvedPaths,
+} from './openclaw-paths.resolver';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -65,11 +69,49 @@ interface SessionFile {
 export class OpenClawService {
   private readonly logger = new Logger(OpenClawService.name);
   private baseUrl: string;
-  private stateDir: string;
+  /** 解析缓存，避免每次请求都 exec openclaw */
+  private pathsCache: { at: number; paths: OpenClawResolvedPaths } | null = null;
+  private static readonly PATHS_TTL_MS = 60_000;
 
   constructor(private configService: ConfigService) {
     this.baseUrl = this.configService.getConfig().openclawGatewayUrl;
-    this.stateDir = this.configService.getConfig().openclawStateDir || '';
+  }
+
+  /**
+   * 解析 OpenClaw 的 stateDir / configPath / workspaceDir（CLI + 环境变量 + 启发式）
+   */
+  async getResolvedPaths(forceRefresh = false): Promise<OpenClawResolvedPaths> {
+    if (
+      !forceRefresh &&
+      this.pathsCache &&
+      Date.now() - this.pathsCache.at < OpenClawService.PATHS_TTL_MS
+    ) {
+      return this.pathsCache.paths;
+    }
+    const cfg = this.configService.getConfig();
+    const paths = await resolveOpenClawPaths({
+      explicitStateDir: cfg.openclawStateDir,
+      gatewayHttpUrl: cfg.openclawGatewayUrl,
+      gatewayToken: cfg.openclawGatewayToken,
+      gatewayPassword: cfg.openclawGatewayPassword,
+    });
+    this.pathsCache = { at: Date.now(), paths };
+    if (paths.stateDir) {
+      this.logger.debug(
+        `OpenClaw paths: stateDir=${paths.stateDir} config=${paths.configPath ?? 'n/a'} workspace=${paths.workspaceDir ?? 'n/a'} (${JSON.stringify(paths.source)})`,
+      );
+    } else if (paths.cliHint) {
+      this.logger.warn(`OpenClaw path discovery: ${paths.cliHint}`);
+    }
+    if (paths.gatewayHint && paths.source.stateDir !== 'gateway') {
+      this.logger.debug(`Gateway path hint: ${paths.gatewayHint}`);
+    }
+    return paths;
+  }
+
+  private async stateDir(): Promise<string> {
+    const p = await this.getResolvedPaths();
+    return p.stateDir ?? '';
   }
 
   /**
@@ -112,13 +154,16 @@ export class OpenClawService {
    * 获取会话列表（从文件系统读取）
    */
   async listSessions(): Promise<OpenClawSession[]> {
-    if (!this.stateDir) {
-      this.logger.warn('State directory not configured');
+    const dir = await this.stateDir();
+    if (!dir) {
+      this.logger.warn(
+        'State directory unknown: set OPENCLAW_STATE_DIR or install `openclaw` CLI so we can run `openclaw config file`',
+      );
       return [];
     }
 
     try {
-      const agentsDir = path.join(this.stateDir, 'agents');
+      const agentsDir = path.join(dir, 'agents');
       if (!fs.existsSync(agentsDir)) {
         return [];
       }
@@ -194,14 +239,14 @@ export class OpenClawService {
    * 获取会话详情（从文件系统读取）
    */
   async getSessionDetail(sessionId: string): Promise<OpenClawSessionDetail | null> {
-    if (!this.stateDir) {
+    if (!(await this.stateDir())) {
       this.logger.warn('State directory not configured');
       return null;
     }
 
     try {
       // 查找会话文件
-      const sessionFile = this.findSessionFile(sessionId);
+      const sessionFile = await this.findSessionFile(sessionId);
       if (!sessionFile) {
         return null;
       }
@@ -236,16 +281,47 @@ export class OpenClawService {
 
           // 提取消息
           if (entry.message) {
+            const messageContent = entry.message.content;
+            // 处理 content 可能是数组或字符串的情况
+            let contentText = '';
+            if (Array.isArray(messageContent)) {
+              // 从 content 数组中提取 toolCall 信息和文本
+              for (const item of messageContent) {
+                if (item.type === 'toolCall') {
+                  toolCalls.push({
+                    name: item.name || item.toolName || 'unknown',
+                    input: item.arguments || item.input || {},
+                    output: item.result || item.output || {},
+                    durationMs: item.durationMs || 0,
+                    success: true,
+                    error: item.error,
+                  });
+                } else if (item.type === 'text') {
+                  contentText += item.text || '';
+                } else if (item.type === 'thinking') {
+                  // 跳过 thinking 内容，不显示
+                }
+              }
+              // 如果没有提取到 text，则显示简洁的工具调用摘要
+              if (!contentText && toolCalls.length > 0) {
+                contentText = '[工具调用：' + toolCalls.map(t => t.name).join(', ') + ']';
+              } else if (!contentText) {
+                contentText = '[无内容]';
+              }
+            } else {
+              contentText = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
+            }
+
             messages.push({
               role: entry.message.role as 'user' | 'assistant' | 'system',
-              content: entry.message.content || '',
+              content: contentText,
               timestamp: entry.timestamp || Date.now(),
               tokenCount: entry.message.tokenCount,
             });
           }
 
-          // 提取工具调用
-          if (entry.toolUse) {
+          // 提取工具调用（兼容旧的 toolUse 格式）
+          if (entry.toolUse && !toolCalls.some(tc => tc.name === entry.toolUse.name)) {
             toolCalls.push({
               name: entry.toolUse.name,
               input: entry.toolUse.input || {},
@@ -289,8 +365,9 @@ export class OpenClawService {
     }
   }
 
-  private findSessionFile(sessionId: string): SessionFile | null {
-    const agentsDir = path.join(this.stateDir, 'agents');
+  private async findSessionFile(sessionId: string): Promise<SessionFile | null> {
+    const dir = await this.stateDir();
+    const agentsDir = path.join(dir, 'agents');
     if (!fs.existsSync(agentsDir)) {
       return null;
     }
@@ -321,13 +398,13 @@ export class OpenClawService {
    * 终止会话（通过删除会话文件）
    */
   async killSession(sessionId: string): Promise<boolean> {
-    if (!this.stateDir) {
+    if (!(await this.stateDir())) {
       this.logger.warn('State directory not configured');
       return false;
     }
 
     try {
-      const sessionFile = this.findSessionFile(sessionId);
+      const sessionFile = await this.findSessionFile(sessionId);
       if (!sessionFile) {
         return false;
       }
@@ -342,23 +419,23 @@ export class OpenClawService {
   }
 
   /**
-   * 获取最近日志（从 PM2 日志文件读取）
+   * 获取最近日志（从 OpenClaw 日志文件读取）
    */
   async getRecentLogs(limit: number = 100): Promise<string[]> {
     const config = this.configService.getConfig();
-    const pm2LogPath = config.pm2LogPath;
+    const logPath = config.openclawLogPath;
 
-    if (!pm2LogPath) {
-      this.logger.warn('PM2 log path not configured');
+    if (!logPath) {
+      this.logger.warn('Log file path not configured (OPENCLAW_LOG_PATH)');
       return [];
     }
 
     try {
-      if (!fs.existsSync(pm2LogPath)) {
+      if (!fs.existsSync(logPath)) {
         return [];
       }
 
-      const content = fs.readFileSync(pm2LogPath, 'utf-8');
+      const content = fs.readFileSync(logPath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim());
 
       // 返回最后 N 行
@@ -372,22 +449,26 @@ export class OpenClawService {
   /**
    * 更新配置（通过 openclaw CLI）
    */
-  async updateConfig(config: any): Promise<boolean> {
+  async updateConfig(config: Record<string, unknown>): Promise<boolean> {
     try {
-      // 使用 openclaw config set 命令
-      const { exec } = await import('child_process');
+      const { execFile } = await import('child_process');
       const util = await import('util');
-      const execAsync = util.promisify(exec);
+      const execFileAsync = util.promisify(execFile);
+      const cli = process.env.OPENCLAW_CLI || 'openclaw';
 
       for (const [key, value] of Object.entries(config)) {
-        await execAsync(`openclaw config set ${key} "${value}"`, {
-          cwd: path.join(this.stateDir, '..'),
+        const v =
+          typeof value === 'string' ? value : JSON.stringify(value ?? '');
+        await execFileAsync(cli, ['config', 'set', key, v], {
+          env: process.env,
+          timeout: 60_000,
         });
       }
-
+      await this.getResolvedPaths(true);
       return true;
-    } catch (error: any) {
-      this.logger.error('Failed to update config:', error.message || error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to update config:', msg);
       return false;
     }
   }

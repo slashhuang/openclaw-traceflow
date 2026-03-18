@@ -1,25 +1,35 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService } from '../openclaw/openclaw.service';
-import * as pm2 from 'pm2';
+import { ConfigService } from '../config/config.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 
 @Injectable()
 export class ActionsService {
   private readonly logger = new Logger(ActionsService.name);
 
-  constructor(private openclawService: OpenClawService) {}
+  constructor(
+    private openclawService: OpenClawService,
+    private configService: ConfigService,
+  ) {}
 
   async restartGateway(): Promise<{ success: boolean; message: string }> {
     try {
-      // 尝试通过 PM2 重启
-      await this.pm2Restart('openclaw-gateway');
+      const execFileAsync = promisify(execFile);
+      const cli = process.env.OPENCLAW_CLI || 'openclaw';
+      await execFileAsync(cli, ['gateway', 'restart'], {
+        env: process.env,
+        timeout: 120_000,
+      });
       return { success: true, message: 'Gateway 已重启' };
-    } catch (error: any) {
-      this.logger.error('Failed to restart gateway:', error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to restart gateway:', msg);
       return {
         success: false,
-        message: `重启失败：${error.message}，请尝试手动重启`,
+        message: `重启失败：${msg}`,
       };
     }
   }
@@ -50,53 +60,23 @@ export class ActionsService {
 
   async cleanupLogs(): Promise<{ success: boolean; message: string }> {
     try {
-      const logDir = '/root/.pm2/logs';
+      const config = this.configService.getConfig();
+      const logPath = config.openclawLogPath;
 
-      if (!fs.existsSync(logDir)) {
-        return { success: true, message: '日志目录不存在，无需清理' };
+      if (!logPath || !fs.existsSync(logPath)) {
+        return { success: true, message: '日志文件未配置或不存在，无需清理' };
       }
 
-      const files = fs.readdirSync(logDir);
-      let deleted = 0;
+      const stats = fs.statSync(logPath);
+      // 删除 7 天前的日志
+      if (stats.mtimeMs < Date.now() - 7 * 24 * 60 * 60 * 1000) {
+        fs.truncateSync(logPath, 0);
+        return { success: true, message: '已清理旧日志' };
+      }
 
-      files.forEach((file) => {
-        const filePath = path.join(logDir, file);
-        try {
-          const stats = fs.statSync(filePath);
-          // 删除 7 天前的日志
-          if (stats.mtimeMs < Date.now() - 7 * 24 * 60 * 60 * 1000) {
-            fs.unlinkSync(filePath);
-            deleted++;
-          }
-        } catch (error) {
-          // 忽略单个文件错误
-        }
-      });
-
-      return { success: true, message: `已清理 ${deleted} 个旧日志文件` };
+      return { success: true, message: '日志文件较新，无需清理' };
     } catch (error: any) {
       return { success: false, message: error.message };
     }
-  }
-
-  private pm2Restart(processName: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      pm2.connect((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-
-        pm2.restart(processName, (err) => {
-          pm2.disconnect();
-
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        });
-      });
-    });
   }
 }

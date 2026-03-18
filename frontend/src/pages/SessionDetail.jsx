@@ -8,13 +8,17 @@ export default function SessionDetail() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('messages');
+  const [error, setError] = useState(null);
 
   const fetchSession = async () => {
     try {
       const data = await sessionsApi.getDetail(id);
+      console.log('Session detail response:', data);
       setSession(data);
+      setError(null);
     } catch (error) {
       console.error('Failed to fetch session detail:', error);
+      setError(error.message || 'Failed to load session details');
     } finally {
       setLoading(false);
     }
@@ -96,10 +100,22 @@ export default function SessionDetail() {
     return <div className="loading">加载会话详情...</div>;
   }
 
+  if (error) {
+    return (
+      <div className="card">
+        <h2 className="card-title" style={{ color: 'var(--danger)' }}>加载失败</h2>
+        <p style={{ color: 'var(--text-secondary)', margin: '1rem 0' }}>{error}</p>
+        <button className="btn btn-primary mt-4" onClick={fetchSession}>重试</button>
+        <button className="btn btn-secondary mt-4 ml-2" onClick={() => navigate('/sessions')}>返回列表</button>
+      </div>
+    );
+  }
+
   if (!session) {
     return (
       <div className="card">
         <h2 className="card-title">会话未找到</h2>
+        <p className="text-muted mt-4">该会话可能不存在或已被删除。</p>
         <button className="btn btn-primary mt-4" onClick={() => navigate('/sessions')}>
           返回会话列表
         </button>
@@ -171,27 +187,28 @@ export default function SessionDetail() {
         <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
           {activeTab === 'messages' && (
             <div>
-              {session.messages?.map((msg, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: '1rem',
-                    borderRadius: '0.5rem',
-                    marginBottom: '1rem',
-                    background: msg.role === 'user' ? 'rgba(102, 126, 234, 0.2)' : 'rgba(72, 187, 120, 0.2)',
-                    border: `1px solid ${msg.role === 'user' ? 'var(--primary)' : 'var(--success)'}`,
-                  }}
-                >
-                  <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
-                    <span className="badge">{msg.role}</span>
-                    <span className="text-muted text-sm">
-                      {new Date(msg.timestamp).toLocaleString('zh-CN')}
-                    </span>
+              {session.messages && session.messages.length > 0 ? (
+                session.messages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '0.5rem',
+                      marginBottom: '1rem',
+                      background: msg.role === 'user' ? 'rgba(102, 126, 234, 0.2)' : 'rgba(72, 187, 120, 0.2)',
+                      border: `1px solid ${msg.role === 'user' ? 'var(--primary)' : 'var(--success)'}`,
+                    }}
+                  >
+                    <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
+                      <span className="badge">{msg.role}</span>
+                      <span className="text-muted text-sm">
+                        {msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : 'N/A'}
+                      </span>
+                    </div>
+                    <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{msg.content || '(no content)'}</div>
                   </div>
-                  <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{msg.content}</div>
-                </div>
-              ))}
-              {(!session.messages || session.messages.length === 0) && (
+                ))
+              ) : (
                 <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
                   暂无消息
                 </div>
@@ -201,30 +218,47 @@ export default function SessionDetail() {
 
           {activeTab === 'toolCalls' && (
             <div>
-              {session.toolCalls?.map((tool, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: '1rem',
-                    borderRadius: '0.5rem',
-                    marginBottom: '1rem',
-                    background: tool.success ? 'rgba(72, 187, 120, 0.1)' : 'rgba(245, 101, 101, 0.1)',
-                    border: `1px solid ${tool.success ? 'var(--success)' : 'var(--danger)'}`,
-                  }}
-                >
-                  <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
-                    <span className="badge">{tool.name}</span>
-                    <span className={`session-status ${tool.success ? 'active' : 'failed'}`}>
-                      {tool.success ? '成功' : '失败'}
-                    </span>
+              {session.toolCalls && session.toolCalls.length > 0 ? (
+                session.toolCalls.map((tool, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '0.5rem',
+                      marginBottom: '1rem',
+                      background: tool.success ? 'rgba(72, 187, 120, 0.1)' : 'rgba(245, 101, 101, 0.1)',
+                      border: `1px solid ${tool.success ? 'var(--success)' : 'var(--danger)'}`,
+                    }}
+                  >
+                    <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
+                      <span className="badge">{tool.name || tool.tool || 'Unknown'}</span>
+                      <span className={`session-status ${tool.success ? 'active' : 'failed'}`}>
+                        {tool.success ? '成功' : '失败'}
+                      </span>
+                    </div>
+                    <div className="text-muted text-sm">耗时：{tool.duration || tool.durationMs || 'N/A'}ms</div>
+                    {tool.error && (
+                      <div style={{ color: 'var(--danger)', marginTop: '0.5rem' }}>{tool.error}</div>
+                    )}
+                    {tool.input && (
+                      <details style={{ marginTop: '0.5rem' }}>
+                        <summary className="text-muted text-sm" style={{ cursor: 'pointer' }}>输入参数</summary>
+                        <pre style={{ margin: '0.5rem 0', fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '0.5rem', borderRadius: '0.25rem', overflow: 'auto' }}>
+                          {JSON.stringify(tool.input, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                    {tool.output && (
+                      <details style={{ marginTop: '0.5rem' }}>
+                        <summary className="text-muted text-sm" style={{ cursor: 'pointer' }}>输出结果</summary>
+                        <pre style={{ margin: '0.5rem 0', fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '0.5rem', borderRadius: '0.25rem', overflow: 'auto' }}>
+                          {JSON.stringify(tool.output, null, 2)}
+                        </pre>
+                      </details>
+                    )}
                   </div>
-                  <div className="text-muted text-sm">耗时：{tool.duration}ms</div>
-                  {tool.error && (
-                    <div style={{ color: 'var(--danger)', marginTop: '0.5rem' }}>{tool.error}</div>
-                  )}
-                </div>
-              ))}
-              {(!session.toolCalls || session.toolCalls.length === 0) && (
+                ))
+              ) : (
                 <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
                   暂无工具调用
                 </div>
@@ -234,28 +268,29 @@ export default function SessionDetail() {
 
           {activeTab === 'events' && (
             <div>
-              {session.events?.map((event, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: '1rem',
-                    borderRadius: '0.5rem',
-                    marginBottom: '1rem',
-                    background: 'rgba(0, 0, 0, 0.2)',
-                  }}
-                >
-                  <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
-                    <span className="badge">{event.type}</span>
-                    <span className="text-muted text-sm">
-                      {new Date(event.timestamp).toLocaleString('zh-CN')}
-                    </span>
+              {session.events && session.events.length > 0 ? (
+                session.events.map((event, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '0.5rem',
+                      marginBottom: '1rem',
+                      background: 'rgba(0, 0, 0, 0.2)',
+                    }}
+                  >
+                    <div className="flex flex-between" style={{ marginBottom: '0.5rem' }}>
+                      <span className="badge">{event.type || 'unknown'}</span>
+                      <span className="text-muted text-sm">
+                        {event.timestamp ? new Date(event.timestamp).toLocaleString('zh-CN') : 'N/A'}
+                      </span>
+                    </div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.875rem' }}>
+                      {JSON.stringify(event.payload || event, null, 2)}
+                    </pre>
                   </div>
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.875rem' }}>
-                    {JSON.stringify(event.payload, null, 2)}
-                  </pre>
-                </div>
-              ))}
-              {(!session.events || session.events.length === 0) && (
+                ))
+              ) : (
                 <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
                   暂无事件
                 </div>

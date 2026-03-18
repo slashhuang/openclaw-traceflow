@@ -15,9 +15,19 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // 配置静态资源服务 - 只服务 /assets 等静态路径
+  // 配置静态资源服务 - 服务前端构建产物
   const staticPath = path.join(process.cwd(), 'public', 'app');
-  app.use('/assets', express.static(path.join(staticPath, 'assets')));
+  app.use(express.static(staticPath));
+
+  // 添加 SPA 回退路由 - 所有非 API 路径都返回 index.html
+  app.use((req, res, next) => {
+    // 如果是 API 路径，跳过
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    // 返回 index.html
+    res.sendFile(path.join(staticPath, 'index.html'));
+  });
 
   // 获取配置
   const configService = app.get(ConfigService);
@@ -28,8 +38,10 @@ async function bootstrap() {
 
   // 尝试启动日志追踪（如果日志文件存在）
   try {
-    await logsService.startTailing(config.pm2LogPath);
-    console.log(`Started tailing logs from: ${config.pm2LogPath}`);
+    await logsService.startTailing(config.openclawLogPath);
+    if (config.openclawLogPath) {
+      console.log(`Started tailing logs from: ${config.openclawLogPath}`);
+    }
   } catch (error) {
     console.warn(`Failed to start log tailing: ${error}. Logs will be available when OpenClaw is running.`);
   }

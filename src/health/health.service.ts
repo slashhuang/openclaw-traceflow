@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService } from '../openclaw/openclaw.service';
-import * as pm2 from 'pm2';
 
 export interface HealthStatus {
   status: 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY' | 'CRITICAL';
@@ -68,6 +67,8 @@ export class HealthService {
       if (health && typeof health === 'object' && 'status' in health) {
         status.gateway.uptime = (health as any).uptime;
         status.gateway.memory = (health as any).memoryUsage;
+        status.gateway.pid = (health as any).pid;
+        status.gateway.cpu = (health as any).cpu;
         status.skills = (health as any).skills || [];
 
         if ((health as any).status === 'unhealthy') {
@@ -81,62 +82,6 @@ export class HealthService {
       this.logger.debug('OpenClaw health API returned simple response');
     }
 
-    // 4. 从 PM2 获取更详细信息
-    try {
-      const pm2Status = await this.getPM2Status();
-      if (pm2Status) {
-        status.gateway.pid = pm2Status.pid;
-        status.gateway.memory = pm2Status.memory;
-        status.gateway.cpu = pm2Status.cpu;
-        status.gateway.uptime = pm2Status.uptime;
-      }
-    } catch (error) {
-      // PM2 可能未安装或未运行，忽略
-    }
-
     return status;
-  }
-
-  private async getPM2Status(): Promise<{
-    pid: number;
-    memory: number;
-    cpu: number;
-    uptime: number;
-  } | null> {
-    return new Promise((resolve) => {
-      pm2.connect((err) => {
-        if (err) {
-          resolve(null);
-          return;
-        }
-
-        pm2.list((err, list) => {
-          pm2.disconnect();
-
-          if (err || !list) {
-            resolve(null);
-            return;
-          }
-
-          // 支持多种进程名称：claw-gateway, openclaw-gateway, openclaw
-          const gateway = list.find((proc) =>
-            proc.name === 'claw-gateway' ||
-            proc.name === 'openclaw-gateway' ||
-            proc.name === 'openclaw'
-          );
-          if (!gateway) {
-            resolve(null);
-            return;
-          }
-
-          resolve({
-            pid: gateway.pid || 0,
-            memory: gateway.monit?.memory || 0,
-            cpu: gateway.monit?.cpu || 0,
-            uptime: (gateway as any).uptime || 0,
-          });
-        });
-      });
-    });
   }
 }

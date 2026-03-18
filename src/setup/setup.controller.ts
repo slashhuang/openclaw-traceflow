@@ -35,6 +35,7 @@ export class SetupController {
   }> {
     const config = this.configService.getConfig();
     const connectionResult = await this.openclawService.checkConnection();
+    const ocPaths = await this.openclawService.getResolvedPaths();
 
     return {
       isSetup: true, // 始终认为是已配置状态
@@ -45,6 +46,14 @@ export class SetupController {
         accessMode: config.accessMode,
         hasAccessToken: !!config.accessToken,
         isPublicAccess: config.host === '0.0.0.0',
+        openclawPaths: {
+          stateDir: ocPaths.stateDir,
+          configPath: ocPaths.configPath,
+          workspaceDir: ocPaths.workspaceDir,
+          source: ocPaths.source,
+          gatewayHint: ocPaths.gatewayHint,
+          cliHint: ocPaths.cliHint,
+        },
       },
       gatewayConnected: connectionResult.connected,
       gatewayError: connectionResult.error,

@@ -5,11 +5,12 @@ import { logsApi } from '../api';
 export default function Logs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [autoScroll, setAutoScroll] = useState(true);
   const [filterLevel, setFilterLevel] = useState('all');
   const [socketConnected, setSocketConnected] = useState(false);
   const logsEndRef = useRef(null);
   const socketRef = useRef(null);
+  const containerRef = useRef(null);
+  const userHasScrolledRef = useRef(false);
 
   useEffect(() => {
     // 加载初始日志
@@ -56,10 +57,11 @@ export default function Logs() {
   }, []);
 
   useEffect(() => {
-    if (autoScroll && logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    // 只在用户没有手动滚动时才自动滚动到底部
+    if (logsEndRef.current && !userHasScrolledRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'auto' });
     }
-  }, [logs, autoScroll]);
+  }, [logs]);
 
   const filteredLogs = logs.filter(log => {
     if (filterLevel === 'all') return true;
@@ -77,6 +79,14 @@ export default function Logs() {
 
   const clearLogs = () => {
     setLogs([]);
+  };
+
+  // 格式化日志内容，处理对象序列化
+  const formatLogContent = (content) => {
+    if (typeof content !== 'string') {
+      return JSON.stringify(content, null, 2);
+    }
+    return content;
   };
 
   if (loading) {
@@ -105,20 +115,24 @@ export default function Logs() {
           </select>
           <button
             className="btn btn-secondary"
-            onClick={() => setAutoScroll(!autoScroll)}
+            onClick={() => {
+              // 点击时滚动到底部
+              logsEndRef.current?.scrollIntoView({ behavior: 'auto' });
+              userHasScrolledRef.current = false;
+            }}
             style={{ marginRight: '0.5rem' }}
           >
-            {autoScroll ? '暂停滚动' : '自动滚动'}
+            滚动到底部
           </button>
           <button className="btn btn-danger" onClick={clearLogs}>清空日志</button>
         </div>
       </div>
 
       <div className="card">
-        <div className="log-container" style={{ maxHeight: '70vh' }}>
+        <div className="log-container" ref={containerRef} style={{ maxHeight: '70vh' }}>
           {filteredLogs.map((log, index) => (
             <div key={index} className="log-line">
-              <span style={{ color: '#666', marginRight: '0.5rem' }}>
+              <span style={{ color: '#666', marginRight: '0.5rem', flexShrink: 0 }}>
                 {new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour12: false })}
               </span>
               <span
@@ -127,12 +141,15 @@ export default function Logs() {
                   marginRight: '0.5rem',
                   fontWeight: '600',
                   width: '50px',
+                  flexShrink: 0,
                   display: 'inline-block',
                 }}
               >
                 [{log.level.toUpperCase()}]
               </span>
-              <span style={{ color: '#e2e8f0' }}>{log.content}</span>
+              <span style={{ color: '#e2e8f0', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
+                {formatLogContent(log.content)}
+              </span>
             </div>
           ))}
           <div ref={logsEndRef} />

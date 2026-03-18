@@ -160,7 +160,8 @@ pnpm run test:e2e
 ### 环境变量
 
 - `OPENCLAW_GATEWAY_URL` - OpenClaw 地址 (默认：http://localhost:3000)
-- `OPENCLAW_STATE_DIR` - OpenClaw 状态目录 (默认：`/path/to/.clawStates`)
+- `OPENCLAW_STATE_DIR` - 状态目录（可选；未设时通过 `openclaw config file` + 目录推断）
+- `OPENCLAW_CONFIG_PATH` / `OPENCLAW_CLI` - 与 Gateway 对齐的配置与 CLI
 - `OPENCLAW_RUNTIME_ACCESS_TOKEN` - Access Token (可选)
 - `OPENCLAW_ACCESS_MODE` - local-only | token | none
 - `PORT` - 监听端口 (默认：3001)

@@ -78,14 +78,28 @@ pnpm run start:dev
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `OPENCLAW_GATEWAY_URL` | OpenClaw Gateway 地址 | `http://localhost:3000` |
-| `OPENCLAW_STATE_DIR` | OpenClaw 状态目录 | `/path/to/.clawStates` |
+| `OPENCLAW_GATEWAY_URL` | OpenClaw Gateway 地址 | `http://localhost:18789` |
+| `OPENCLAW_STATE_DIR` | 状态目录（会话在 `…/agents/*/sessions/`） | 未设时自动解析，见下 |
+| `OPENCLAW_CONFIG_PATH` | 配置文件路径（与 Gateway 一致） | 未设时执行 `openclaw config file` |
+| `OPENCLAW_CLI` | openclaw 可执行文件名或绝对路径 | `openclaw` |
 | `OPENCLAW_RUNTIME_ACCESS_TOKEN` | 访问令牌（可选） | 无 |
 | `OPENCLAW_ACCESS_MODE` | 访问模式：local-only \| token \| none | `local-only` |
 | `PORT` | 监听端口 | `3001` |
 | `HOST` | 监听地址 | `127.0.0.1` |
 | `DATA_DIR` | 数据目录 | `./data` |
-| `PM2_LOG_PATH` | PM2 日志路径 | `/Users/xxx/.pm2/logs/claw-gateway-out.log` |
+| `PM2_LOG_PATH` | PM2 日志路径（可选） | 未设则不读文件日志 |
+
+**状态目录 / 配置路径如何解析（推荐依赖「正在跑的 Gateway」）：**
+
+1. **首选：WebSocket 连 Gateway**（与 `OPENCLAW_GATEWAY_URL` 一致）  
+   握手后上游在 `hello-ok.snapshot` 里带上 **`stateDir`、`configPath`**，与 Gateway 进程内实际使用的一致（PM2 自定义目录也能对上）。  
+   仅当本机存在 **`${stateDir}/agents`** 时才采用（避免监控连的是**远程** Gateway 却误用远端路径读本地盘）。  
+   若 Gateway 开了 token/password，请配置 **`OPENCLAW_GATEWAY_TOKEN` / `OPENCLAW_GATEWAY_PASSWORD`**。
+2. 显式 **`openclawStateDir`** 或 **`OPENCLAW_STATE_DIR`**
+3. **`OPENCLAW_CONFIG_PATH`** 或 **`openclaw config file`** + 目录启发式
+4. 最后回退 `~/.openclaw`（若存在 `agents/`）
+
+上游 CLI 补充：`openclaw config file`、`openclaw config get agents.defaults.workspace`（无单独 `openclaw paths`）。
 
 ### Docker Compose
 

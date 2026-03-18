@@ -285,16 +285,23 @@ body {
   border-radius: 0.5rem;
   padding: 1rem;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.875rem;
-  max-height: 600px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  max-height: 70vh;
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 .log-line {
-  padding: 0.25rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  white-space: pre-wrap;
-  word-break: break-all;
+  display: flex;
+  align-items: flex-start;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  line-height: 1.5;
+}
+
+.log-line:last-child {
+  border-bottom: none;
 }
 
 .setup-wizard {

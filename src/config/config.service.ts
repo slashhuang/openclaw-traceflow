@@ -9,6 +9,9 @@ export interface Config {
 
   // OpenClaw Gateway 配置
   openclawGatewayUrl: string;
+  /** Gateway WS 鉴权（与 gateway.auth 一致，用于拉取运行时路径） */
+  openclawGatewayToken?: string;
+  openclawGatewayPassword?: string;
   openclawStateDir?: string;
 
   // 访问保护配置
@@ -18,8 +21,8 @@ export interface Config {
   // 数据目录
   dataDir: string;
 
-  // PM2 日志路径
-  pm2LogPath: string;
+  /** OpenClaw 日志文件路径（用户配置，OpenClaw 输出到该文件） */
+  openclawLogPath?: string;
 }
 
 @Injectable()
@@ -38,10 +41,12 @@ export class ConfigService {
       host: '127.0.0.1',
       port: 3001,
       openclawGatewayUrl: 'http://localhost:18789',
-      openclawStateDir: '/Users/huangxiaogang/claw-sources/claw-family/openClawRuntime/.clawStates',
+      /** 留空则由 OpenClawService 通过 CLI / 环境变量自动解析 */
+      openclawStateDir: undefined,
       accessMode: 'local-only',
       dataDir: path.join(process.cwd(), 'data'),
-      pm2LogPath: '/Users/huangxiaogang/.pm2/logs/claw-gateway-out.log',
+      /** OpenClaw 日志路径，需用户配置（OpenClaw 输出到该文件） */
+      openclawLogPath: undefined,
     };
 
     // 2. 从配置文件加载（如果存在）
@@ -60,11 +65,13 @@ export class ConfigService {
       host: process.env.HOST || undefined,
       port: process.env.PORT ? parseInt(process.env.PORT) : undefined,
       openclawGatewayUrl: process.env.OPENCLAW_GATEWAY_URL || undefined,
+      openclawGatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN || undefined,
+      openclawGatewayPassword: process.env.OPENCLAW_GATEWAY_PASSWORD || undefined,
       openclawStateDir: process.env.OPENCLAW_STATE_DIR || undefined,
       accessToken: process.env.OPENCLAW_RUNTIME_ACCESS_TOKEN || undefined,
       accessMode: process.env.OPENCLAW_ACCESS_MODE as Config['accessMode'] || undefined,
       dataDir: process.env.DATA_DIR || undefined,
-      pm2LogPath: process.env.PM2_LOG_PATH || undefined,
+      openclawLogPath: process.env.OPENCLAW_LOG_PATH || undefined,
     };
 
     // 4. 合并配置
@@ -94,7 +101,12 @@ export class ConfigService {
     }
 
     // 过滤掉敏感信息
-    const safeConfig = { ...config, accessToken: config.accessToken ? '[REDACTED]' : undefined };
+    const safeConfig = {
+      ...config,
+      accessToken: config.accessToken ? '[REDACTED]' : undefined,
+      openclawGatewayToken: config.openclawGatewayToken ? '[REDACTED]' : undefined,
+      openclawGatewayPassword: config.openclawGatewayPassword ? '[REDACTED]' : undefined,
+    };
 
     fs.writeFileSync(snapshotPath, JSON.stringify(safeConfig, null, 2));
   }

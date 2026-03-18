@@ -24,9 +24,12 @@ export interface SessionDetail extends Session {
     timestamp: number;
   }>;
   toolCalls: Array<{
-    tool: string;
+    name: string;
+    input?: any;
+    output?: any;
     duration: number;
     success: boolean;
+    error?: string;
   }>;
   events: Array<{
     type: string;
@@ -92,9 +95,12 @@ export class SessionsService {
           timestamp: m.timestamp,
         })),
         toolCalls: (detail.toolCalls || []).map((t: any) => ({
-          tool: t.name,
+          name: t.name,
+          input: t.input,
+          output: t.output,
           duration: t.durationMs,
           success: t.success,
+          error: t.error,
         })),
         events: detail.events || [],
       };
