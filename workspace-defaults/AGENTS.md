@@ -94,7 +94,7 @@ claw-sources/  ← git 仓库根目录（worktree 基于这里创建）
 │   ├── workspace-defaults/  ← bootstrap 模板
 │   └── openClawRuntime/.workspace/  ← workspace（SOUL.md, USER.md, memory/, inspiration/ 等）
 ├── futu-openD/  ← 富途 OpenD 项目
-├── open-openclaw/  ← OpenClaw UI 项目
+├── openclaw-traceflow/  ← OpenClaw TraceFlow UI 项目
 └── external-refs/  ← 外部参考代码
 ```
 
@@ -105,7 +105,7 @@ claw-sources/  ← git 仓库根目录（worktree 基于这里创建）
 | `claw-family/skills/`、`claw-family/config/`、`claw-family/scripts/` | ✅ **必须** | 技能、配置、脚本 |
 | `claw-family/workspace-defaults/` | ✅ **必须** | 核心配置（SOUL.md、USER.md 等） |
 | `docs/` | ✅ **必须** | **claw-sources 根目录的 docs/**，PRD 文档 |
-| `futu-openD/`、`open-openclaw/` | ✅ **必须** | 其他子项目代码 |
+| `futu-openD/`、`openclaw-traceflow/` | ✅ **必须** | 其他子项目代码 |
 | `claw-family/openClawRuntime/.workspace/` | ❌ 不需要 | workspace 文档（MEMORY.md、inspiration/ 等） |
 
 ### 判断标准：是否需要 PRD
