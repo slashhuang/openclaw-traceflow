@@ -13,6 +13,7 @@ import {
   theme,
   Space,
 } from 'antd';
+import { CopyOutlined } from '@ant-design/icons';
 import {
   PieChart,
   Pie,
@@ -63,36 +64,56 @@ export default function SystemPromptPage() {
   const intl = useIntl();
   const { token } = theme.useToken();
   const [probe, setProbe] = useState(null);
+  const [probeLoading, setProbeLoading] = useState(true);
   const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
   const [skills, setSkills] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showAllSkills, setShowAllSkills] = useState(false);
   const [showAllTools, setShowAllTools] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyFullMarkdown = () => {
+    const text = probe?.systemPromptMarkdown || '';
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
+    // Probe 独立加载：避免阻塞整个页面渲染。
     (async () => {
-      setLoading(true);
+      setProbeLoading(true);
       try {
-        const [probeRes, analysisRes, skillsRes] = await Promise.all([
-          fetch('/api/skills/system-prompt/probe'),
-          fetch('/api/skills/system-prompt/analysis'),
-          fetch('/api/skills/usage'),
-        ]);
-        const [probeData, analysisData, skillsData] = await Promise.all([
-          probeRes.json(),
-          analysisRes.json(),
-          skillsRes.json(),
-        ]);
-        if (!cancelled) {
-          setProbe(probeData);
-          setAnalysis(analysisData);
-          setSkills(Array.isArray(skillsData) ? skillsData : []);
-        }
+        const probeRes = await fetch('/api/skills/system-prompt/probe');
+        const probeData = await probeRes.json();
+        if (!cancelled) setProbe(probeData);
       } catch (e) {
         if (!cancelled) setProbe({ ok: false, error: String(e.message || e), breakdown: [] });
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setProbeLoading(false);
+      }
+    })();
+
+    // Analysis + skills 独立加载。
+    (async () => {
+      setAnalysisLoading(true);
+      try {
+        const [analysisRes, skillsRes] = await Promise.all([
+          fetch('/api/skills/system-prompt/analysis'),
+          fetch('/api/skills/usage'),
+        ]);
+        const [analysisData, skillsData] = await Promise.all([analysisRes.json(), skillsRes.json()]);
+        if (!cancelled) {
+          setAnalysis(analysisData);
+          setSkills(Array.isArray(skillsData) ? skillsData : []);
+        }
+      } catch {
+        // keep analysis null on failure
+      } finally {
+        if (!cancelled) setAnalysisLoading(false);
       }
     })();
     return () => {
@@ -270,10 +291,6 @@ export default function SystemPromptPage() {
   );
   const duplicateSkills = skills.filter((s) => s.duplicateWith?.length > 0);
 
-  if (loading) {
-    return <Spin style={{ display: 'block', margin: 48 }} />;
-  }
-
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
       <Typography.Title level={4}>{intl.formatMessage({ id: 'menu.systemPrompt' })}</Typography.Title>
@@ -281,30 +298,85 @@ export default function SystemPromptPage() {
         Gateway · systemPromptReport · transcript system messages.
       </Typography.Paragraph>
 
-      <Card title="Gateway probe · ~Token breakdown" style={{ marginBottom: 24 }}>
-        {!probe?.ok && (
-          <Alert type="warning" showIcon message={probe?.error || 'Error'} style={{ marginBottom: 16 }} />
-        )}
-        {probe?.ok && (
-          <>
-            {!sections.fromTranscript && (
-              <Alert
-                type="info"
-                showIcon
-                message="Transcript system message short or empty; some blocks may be blank."
-                style={{ marginBottom: 16 }}
-              />
+      {/* 仅展示「真实发给大模型的」system 正文；无 transcript 时不冒充 report 概览为正文 */}
+      {(probeLoading || probe?.ok) && (
+        <Card
+          title={intl.formatMessage({ id: 'systemPrompt.fullTitle' })}
+          style={{ marginBottom: 16 }}
+          extra={
+            (probe?.systemPromptMarkdown?.length > 0) && (
+              <Button
+                type="default"
+                icon={<CopyOutlined />}
+                onClick={copyFullMarkdown}
+              >
+                {copied ? intl.formatMessage({ id: 'systemPrompt.copied' }) : intl.formatMessage({ id: 'systemPrompt.copy' })}
+              </Button>
+            )
+          }
+        >
+          {probeLoading ? (
+            <Spin style={{ display: 'block', margin: '8px 0' }} />
+          ) : probe.systemPromptSource === 'rebuild' ? (
+            <Alert
+              type="info"
+              showIcon
+              message={intl.formatMessage({ id: 'systemPrompt.fromRebuild' })}
+              style={{ marginBottom: 12 }}
+            />
+          ) : (
+            <Alert
+              type="warning"
+              showIcon
+              message={intl.formatMessage({ id: 'systemPrompt.noRealPrompt' })}
+              style={{ marginBottom: 12 }}
+            />
+          )}
+          <div
+            className="system-prompt-md"
+            style={{
+              maxHeight: '70vh',
+              minHeight: 120,
+              overflow: 'auto',
+              fontSize: 13,
+              padding: 16,
+              border: `1px solid ${token.colorBorder}`,
+              borderRadius: token.borderRadius,
+              background: token.colorFillQuaternary,
+            }}
+          >
+            {probe?.systemPromptMarkdown?.length > 0 ? (
+              <ReactMarkdown>{probe?.systemPromptMarkdown}</ReactMarkdown>
+            ) : (
+              <Typography.Text type="secondary">{intl.formatMessage({ id: 'systemPrompt.noContent' })}</Typography.Text>
             )}
-            <Space wrap size="middle" style={{ marginBottom: 16 }}>
+          </div>
+        </Card>
+      )}
+
+      <Card title={intl.formatMessage({ id: 'systemPrompt.breakdownTitle' })} style={{ marginBottom: 16 }}>
+        {probeLoading ? (
+          <Spin style={{ display: 'block', margin: '8px 0' }} />
+        ) : !probe?.ok ? (
+          <Alert type="warning" showIcon message={probe?.error || 'Error'} style={{ marginBottom: 16 }} />
+        ) : (
+          <>
+            <Space wrap size="middle" style={{ marginBottom: 12 }}>
               {probe.sessionKey && <Typography.Text code>{probe.sessionKey}</Typography.Text>}
               {probe.model && <span>Model: {probe.model}</span>}
               {probe.workspaceDir && (
-                <Typography.Text ellipsis style={{ maxWidth: 400 }} title={probe.workspaceDir}>
+                <Typography.Text
+                  code
+                  title={probe.workspaceDir}
+                  style={{
+                    wordBreak: 'break-all',
+                  }}
+                >
                   WS: {probe.workspaceDir}
                 </Typography.Text>
               )}
             </Space>
-            <Row gutter={[24, 24]}>
+            <Row gutter={[16, 16]}>
               <Col xs={24} lg={12}>
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart layout="vertical" data={probe.breakdown} margin={{ left: 8, right: 80, top: 8, bottom: 8 }}>
@@ -328,22 +400,6 @@ export default function SystemPromptPage() {
               <Col xs={24} lg={12}>
                 <Typography.Text strong>Blocks</Typography.Text>
                 <Collapse items={collapseItems} style={{ marginTop: 8 }} />
-                <Card size="small" title="Markdown (system)" style={{ marginTop: 16 }}>
-                  <div
-                    className="system-prompt-md"
-                    style={{
-                      maxHeight: 360,
-                      overflow: 'auto',
-                      fontSize: 13,
-                      padding: 12,
-                      border: `1px solid ${token.colorBorder}`,
-                      borderRadius: token.borderRadius,
-                      background: token.colorFillQuaternary,
-                    }}
-                  >
-                    <ReactMarkdown>{probe.systemPromptMarkdown || '_empty_'}</ReactMarkdown>
-                  </div>
-                </Card>
               </Col>
             </Row>
           </>

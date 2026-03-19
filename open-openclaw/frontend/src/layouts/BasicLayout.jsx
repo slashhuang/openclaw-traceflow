@@ -11,7 +11,8 @@ import {
   SettingOutlined,
   ApiOutlined,
 } from '@ant-design/icons';
-import { Alert, Select, Space, Tag } from 'antd';
+import { Alert, Button, Dropdown, Space, Tag, theme } from 'antd';
+import { DownOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import { useLocaleTheme } from '../providers/LocaleThemeProvider';
 import { healthApi } from '../api';
@@ -20,6 +21,7 @@ export default function BasicLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const intl = useIntl();
+  const { token } = theme.useToken();
   const { locale, setLocale, themeMode, setThemeMode, isDark } = useLocaleTheme();
   const [health, setHealth] = useState(null);
 
@@ -74,32 +76,61 @@ export default function BasicLayout() {
               {String(health.status)}
             </Tag>
           ),
-          <span key="gw" style={{ fontSize: 12, opacity: 0.85 }}>
-            <ApiOutlined /> {health?.openclawConnected ? '●' : '○'} Gateway
-          </span>,
-          <Select
+          health?.openclawConnected != null && (
+            <Tag
+              key="gw"
+              color={health.openclawConnected ? 'success' : 'error'}
+              style={{
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <ApiOutlined />
+              {health.openclawConnected
+                ? intl.formatMessage({ id: 'gateway.connected' })
+                : intl.formatMessage({ id: 'gateway.disconnected' })}
+            </Tag>
+          ),
+          <Dropdown
             key="lang"
-            size="small"
-            value={locale}
-            onChange={setLocale}
-            style={{ width: 108 }}
-            options={[
-              { value: 'zh-CN', label: intl.formatMessage({ id: 'lang.zh' }) },
-              { value: 'en-US', label: intl.formatMessage({ id: 'lang.en' }) },
-            ]}
-          />,
-          <Select
+            menu={{
+              items: [
+                { key: 'zh-CN', label: '中文' },
+                { key: 'en-US', label: 'English' },
+              ],
+              selectedKeys: [locale],
+              onClick: ({ key }) => setLocale(key),
+            }}
+            trigger={['click']}
+          >
+            <Button type="text" size="small" style={{ color: 'inherit' }}>
+              {locale === 'zh-CN' ? '中文' : 'English'} <DownOutlined />
+            </Button>
+          </Dropdown>,
+          <Dropdown
             key="theme"
-            size="small"
-            value={themeMode}
-            onChange={setThemeMode}
-            style={{ width: 108 }}
-            options={[
-              { value: 'light', label: intl.formatMessage({ id: 'theme.light' }) },
-              { value: 'dark', label: intl.formatMessage({ id: 'theme.dark' }) },
-              { value: 'system', label: intl.formatMessage({ id: 'theme.system' }) },
-            ]}
-          />,
+            menu={{
+              items: [
+                { key: 'light', label: intl.formatMessage({ id: 'theme.light' }) },
+                { key: 'dark', label: intl.formatMessage({ id: 'theme.dark' }) },
+                { key: 'system', label: intl.formatMessage({ id: 'theme.system' }) },
+              ],
+              selectedKeys: [themeMode],
+              onClick: ({ key }) => setThemeMode(key),
+            }}
+            trigger={['click']}
+          >
+            <Button type="text" size="small" style={{ color: 'inherit' }}>
+              {themeMode === 'light'
+                ? intl.formatMessage({ id: 'theme.light' })
+                : themeMode === 'dark'
+                  ? intl.formatMessage({ id: 'theme.dark' })
+                  : intl.formatMessage({ id: 'theme.system' })}{' '}
+              <DownOutlined />
+            </Button>
+          </Dropdown>,
         ].filter(Boolean)
       }
       onMenuHeaderClick={() => navigate('/')}
@@ -120,7 +151,13 @@ export default function BasicLayout() {
           }
         />
       )}
-      <div style={{ padding: '0 24px 24px', minHeight: 360 }}>
+      <div
+        style={{
+          padding: '0 24px 24px',
+          minHeight: 360,
+          background: token.colorBgLayout,
+        }}
+      >
         <Outlet />
       </div>
     </ProLayout>

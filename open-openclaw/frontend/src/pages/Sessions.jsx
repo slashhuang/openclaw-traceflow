@@ -9,12 +9,10 @@ import {
   Table,
   Tag,
   Typography,
-  Button,
   message,
-  Modal,
 } from 'antd';
 import { useIntl } from 'react-intl';
-import { ArrowDownOutlined, ArrowUpOutlined, StopOutlined } from '@ant-design/icons';
+import { ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import { sessionsApi } from '../api';
 
 function inferSessionTypeLabel(sessionKey) {
@@ -82,23 +80,6 @@ export default function Sessions() {
   useEffect(() => {
     fetchSessions();
   }, []);
-
-  const onKill = (sessionId) => {
-    Modal.confirm({
-      title: intl.formatMessage({ id: 'confirm.killSession' }),
-      okText: intl.formatMessage({ id: 'common.yes' }),
-      cancelText: intl.formatMessage({ id: 'common.cancel' }),
-      onOk: async () => {
-        try {
-          await sessionsApi.kill(sessionId);
-          message.success('OK');
-          fetchSessions();
-        } catch (e) {
-          message.error(e?.message || 'Failed');
-        }
-      },
-    });
-  };
 
   const filteredSorted = useMemo(() => {
     const list = sessions.filter((s) => (filter === 'all' ? true : s.status === filter));
@@ -195,23 +176,28 @@ export default function Sessions() {
         />
       ),
       key: 'session',
+      width: 390,
       render: (_, r) => {
         const typeLabel = r.typeLabel || inferSessionTypeLabel(r.sessionKey);
         const sys = typeLabel === 'heartbeat' || typeLabel === 'cron';
         const code = String(r.sessionKey || r.sessionId || '');
-        const short = code.length > 28 ? `${code.slice(0, 14)}…${code.slice(-10)}` : code;
+        const short =
+          code.length > 46 ? `${code.slice(0, 26)}…${code.slice(-16)}` : code;
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Tag color={sys ? (typeLabel === 'heartbeat' ? 'green' : 'orange') : 'blue'} style={{ whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <Tag
+              color={sys ? (typeLabel === 'heartbeat' ? 'green' : 'orange') : 'blue'}
+              style={{ whiteSpace: 'nowrap', margin: 0, flex: '0 0 auto' }}
+            >
               {typeLabel}
             </Tag>
             <Typography.Text
               code
               style={{
-                maxWidth: 280,
+                maxWidth: 300,
+                whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
               }}
               title={code}
             >
@@ -238,6 +224,7 @@ export default function Sessions() {
         />
       ),
       key: 'status',
+      width: 120,
       render: (_, r) => <Tag color={statusTagColor(r.status)}>{r.status}</Tag>,
     },
     {
@@ -257,11 +244,31 @@ export default function Sessions() {
         />
       ),
       key: 'user',
+      width: 170,
       render: (_, r) => {
         const typeLabel = r.typeLabel || inferSessionTypeLabel(r.sessionKey);
         const sys = typeLabel === 'heartbeat' || typeLabel === 'cron';
         const v = sys ? typeLabel : r.user || '—';
-        return <Typography.Text>{v}</Typography.Text>;
+        return (
+          <Link
+            to={`/sessions/${encodeURIComponent(r.sessionId)}`}
+            className="session-user-link"
+            title={r.sessionKey || r.sessionId}
+          >
+            <Typography.Text
+              style={{
+                display: 'inline-block',
+                maxWidth: 140,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                verticalAlign: 'middle',
+              }}
+            >
+              {v}
+            </Typography.Text>
+          </Link>
+        );
       },
     },
     {
@@ -307,28 +314,7 @@ export default function Sessions() {
     {
       title: (
         <SortableTitle
-          label={intl.formatMessage({ id: 'sessions.column.tokens' })}
-          active={sortKey === 'totalTokens'}
-          order={sortOrder}
-          onClick={() => {
-            if (sortKey !== 'totalTokens') {
-              setSortKey('totalTokens');
-              setSortOrder('desc');
-            } else {
-              setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
-            }
-          }}
-        />
-      ),
-      key: 'totalTokens',
-      render: (_, r) => (r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'),
-      width: 110,
-      align: 'right',
-    },
-    {
-      title: (
-        <SortableTitle
-          label={intl.formatMessage({ id: 'sessions.column.util' })}
+          label={`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
           active={sortKey === 'utilization'}
           order={sortOrder}
           onClick={() => {
@@ -341,35 +327,30 @@ export default function Sessions() {
           }}
         />
       ),
-      key: 'util',
+      key: 'tokenUtil',
+      width: 160,
       render: (_, r) => {
         const pct = utilizationFor(r);
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Progress percent={pct ?? 0} size="small" status={utilizationColor(pct)} showInfo={false} style={{ width: 120 }} />
-            <Typography.Text style={{ minWidth: 44, textAlign: 'right' }}>{pct == null ? '—' : `${pct}%`}</Typography.Text>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <Typography.Text style={{ textAlign: 'right' }}>
+              {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
+            </Typography.Text>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Progress
+                percent={pct ?? 0}
+                size="small"
+                status={utilizationColor(pct)}
+                showInfo={false}
+                style={{ width: 76 }}
+              />
+              <Typography.Text style={{ minWidth: 34, textAlign: 'right' }}>
+                {pct == null ? '—' : `${pct}%`}
+              </Typography.Text>
+            </div>
           </div>
         );
       },
-      width: 260,
-    },
-    {
-      title: intl.formatMessage({ id: 'sessions.column.actions' }),
-      key: 'actions',
-      render: (_, r) => (
-        <Space>
-          <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>
-            <Button size="small">{intl.formatMessage({ id: 'common.detail' })}</Button>
-          </Link>
-          {r.status === 'active' && (
-            <Button size="small" danger icon={<StopOutlined />} onClick={() => onKill(r.sessionId)}>
-              {intl.formatMessage({ id: 'common.kill' })}
-            </Button>
-          )}
-        </Space>
-      ),
-      fixed: 'right',
-      width: 220,
     },
   ];
 
@@ -401,8 +382,8 @@ export default function Sessions() {
         dataSource={filteredSorted}
         columns={columns}
         locale={{ emptyText: intl.formatMessage({ id: 'sessions.empty' }) }}
+        size="small"
         pagination={{ pageSize: 20, showSizeChanger: false }}
-        scroll={{ x: 1300, y: 640 }}
       />
     </Card>
   );

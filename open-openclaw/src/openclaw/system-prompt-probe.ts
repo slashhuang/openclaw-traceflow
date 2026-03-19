@@ -61,6 +61,13 @@ export type SystemPromptProbeResult = {
   skillsDetail: Array<{ name: string; blockChars: number }>;
   toolsDetail: SystemPromptToolsEntry[];
   toolsSummary: { listChars: number; schemaChars: number; entryCount: number };
+  /**
+   * systemPromptMarkdown 的来源。
+   * - transcript: 从 sessions.get 中抽取到的 system 消息
+   * - rebuild: transcript 缺失时，离线根据 openclaw 拼装逻辑重建（尽量结构一致）
+   * - none: 未拿到可用正文
+   */
+  systemPromptSource: 'transcript' | 'rebuild' | 'none';
   systemPromptMarkdown: string;
   sections: SystemPromptParsedSections;
 };

@@ -183,6 +183,11 @@ export async function callGatewayRpc<T = unknown>(params: {
   method: string;
   methodParams?: Record<string, unknown>;
   timeoutMs?: number;
+  /**
+   * Connect scopes override for this RPC.
+   * Needed for write-only methods like `chat.send`.
+   */
+  scopes?: string[];
 }): Promise<GatewayRpcResult<T>> {
   const wsUrl = gatewayHttpUrlToWs(params.gatewayHttpUrl);
   const timeoutMs = Math.max(2000, params.timeoutMs ?? 12_000);
@@ -254,7 +259,7 @@ export async function callGatewayRpc<T = unknown>(params: {
                 },
                 caps: [],
                 role: 'operator',
-                scopes: ['operator.admin', 'operator.read'],
+                scopes: params.scopes ?? ['operator.admin', 'operator.read'],
                 auth,
               },
             }),
