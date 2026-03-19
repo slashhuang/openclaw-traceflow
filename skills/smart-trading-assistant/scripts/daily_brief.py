@@ -231,7 +231,11 @@ def check_conditions(watchlist, conditions, prices, state):
             cooldown_hours = condition.get("cooldown_hours", 24)
             
             if last_triggered:
-                last_time = datetime.fromisoformat(last_triggered)
+                # Python 3.6 兼容：fromisoformat 是 3.7+ 才有的
+                try:
+                    last_time = datetime.strptime(last_triggered[:19], "%Y-%m-%dT%H:%M:%S")
+                except (ValueError, TypeError):
+                    last_time = now - timedelta(hours=cooldown_hours + 1)  # 解析失败则视为已过期
                 if (now - last_time).total_seconds() < cooldown_hours * 3600:
                     continue  # 冷却中，跳过
             
