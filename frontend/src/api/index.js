@@ -7,6 +7,13 @@ const api = axios.create({
   timeout: 10000,
 });
 
+export const skillsApi = {
+  getUsage: () => api.get('/skills/usage').then(res => res.data),
+  getUsageByUser: () => api.get('/skills/usage-by-user').then(res => res.data),
+  getSkillToolUsage: () => api.get('/skills/skill-tool-usage').then(res => res.data),
+  getSystemPromptAnalysis: () => api.get('/skills/system-prompt/analysis').then(res => res.data),
+};
+
 export const healthApi = {
   getHealth: () => api.get('/health').then(res => res.data),
 };
@@ -42,6 +49,10 @@ export const metricsApi = {
   getTools: () => api.get('/metrics/tools').then(res => res.data),
   getTokenSummary: () => api.get('/metrics/token-summary').then(res => res.data),
   getTokenUsage: () => api.get('/metrics/token-usage').then(res => res.data),
+  getTokenUsageBySessionKey: (timeRangeMs = 86400000) =>
+    api.get(`/metrics/token-usage-by-session-key?timeRangeMs=${timeRangeMs}`).then(res => res.data),
+  getArchiveCountBySessionKey: () =>
+    api.get('/metrics/archive-count-by-session-key').then(res => res.data),
 };
 
 export const actionsApi = {
