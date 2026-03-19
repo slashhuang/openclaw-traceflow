@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Monitor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    h1 {
+      color: #1a1a2e;
+      margin-bottom: 8px;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .step {
+      margin-bottom: 24px;
+    }
+    .step-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      outline: none;
+      border-color: #4a90d9;
+    }
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #4a90d9;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #357abd;
+    }
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .checkbox-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .status {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .status-success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .status-error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .status-info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    .hidden { display: none; }
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #f3f3f3;
+      border-top-color: #4a90d9;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .mode-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .mode-card {
+      padding: 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .mode-card:hover {
+      border-color: #4a90d9;
+      background: #f8f9fa;
+    }
+    .mode-card.selected {
+      border-color: #4a90d9;
+      background: #e7f3ff;
+    }
+    .mode-card h3 {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .mode-card p {
+      font-size: 12px;
+      color: #666;
+    }
+    .tip {
+      font-size: 12px;
+      color: #888;
+      margin-top: 8px;
+    }
+    .tip strong {
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>👋 欢迎使用 OpenClaw Monitor</h1>
+    <p class="subtitle">OpenClaw Agent 监控仪表盘</p>
+
+    <div id="status-area"></div>
+
+    <form id="setup-form">
+      <!-- 步骤 1: 连接 Gateway -->
+      <div class="step">
+        <div class="step-title">第一步：连接 OpenClaw Gateway</div>
+        <input type="text" id="gateway-url" value="http://localhost:3000" placeholder="Gateway 地址" />
+        <button type="button" class="btn btn-secondary" style="margin-top: 8px;" onclick="testConnection()">
+          测试连接
+        </button>
+        <div id="connection-result" class="hidden"></div>
+      </div>
+
+      <!-- 步骤 2: 设置访问保护 -->
+      <div class="step">
+        <div class="step-title">第二步：设置访问保护</div>
+        <div class="mode-cards">
+          <div class="mode-card selected" data-mode="local-only" onclick="selectMode('local-only')">
+            <h3>仅本机访问</h3>
+            <p>最安全，推荐个人使用</p>
+          </div>
+          <div class="mode-card" data-mode="token" onclick="selectMode('token')">
+            <h3>Access Token</h3>
+            <p>需要公网访问时</p>
+          </div>
+          <div class="mode-card" data-mode="none" onclick="selectMode('none')">
+            <h3>无保护</h3>
+            <p>仅限完全可信环境</p>
+          </div>
+        </div>
+        <div id="token-input" class="hidden">
+          <input type="text" id="access-token" placeholder="输入或生成 Token" />
+          <button type="button" class="btn btn-secondary" style="margin-top: 8px;" onclick="generateToken()">
+            自动生成 Token
+          </button>
+        </div>
+        <p class="tip"><strong>提示：</strong>如果只在本地使用，选择"仅本机访问"即可</p>
+      </div>
+
+      <!-- 步骤 3: 完成 -->
+      <div class="btn-group">
+        <button type="button" class="btn btn-secondary" onclick="skipSetup()">跳过，以后再说</button>
+        <button type="submit" class="btn btn-primary" style="flex: 1;">完成并进入仪表盘</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    let selectedMode = 'local-only';
+    let currentToken = '';
+
+    // 初始化：检查当前状态
+    async function init() {
+      try {
+        const res = await fetch('/api/setup/status');
+        const data = await res.json();
+
+        if (data.gatewayConnected) {
+          showStatus('已连接到 OpenClaw Gateway', 'success');
+        } else {
+          showStatus('未连接到 Gateway，请完成配置', 'info');
+        }
+
+        if (data.config) {
+          document.getElementById('gateway-url').value = data.config.openclawGatewayUrl || 'http://localhost:3000';
+          if (data.config.accessMode) {
+            selectMode(data.config.accessMode);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load status:', error);
+      }
+    }
+
+    function showStatus(message, type) {
+      const statusArea = document.getElementById('status-area');
+      statusArea.innerHTML = `<div class="status status-${type}">${message}</div>`;
+    }
+
+    async function testConnection() {
+      const gatewayUrl = document.getElementById('gateway-url').value;
+      const resultDiv = document.getElementById('connection-result');
+
+      resultDiv.className = 'status status-info';
+      resultDiv.classList.remove('hidden');
+      resultDiv.innerHTML = '<span class="loading"></span> 正在连接...';
+
+      try {
+        const res = await fetch('/api/setup/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gatewayUrl }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          resultDiv.className = 'status status-success';
+          resultDiv.innerHTML = '✅ ' + data.message;
+        } else {
+          resultDiv.className = 'status status-error';
+          resultDiv.innerHTML = '❌ ' + data.message;
+        }
+      } catch (error) {
+        resultDiv.className = 'status status-error';
+        resultDiv.innerHTML = '❌ 连接失败：' + error.message;
+      }
+    }
+
+    function selectMode(mode) {
+      selectedMode = mode;
+      document.querySelectorAll('.mode-card').forEach(card => {
+        card.classList.remove('selected');
+        if (card.dataset.mode === mode) {
+          card.classList.add('selected');
+        }
+      });
+
+      const tokenInput = document.getElementById('token-input');
+      if (mode === 'token') {
+        tokenInput.classList.remove('hidden');
+      } else {
+        tokenInput.classList.add('hidden');
+      }
+    }
+
+    async function generateToken() {
+      try {
+        const res = await fetch('/api/setup/generate-token');
+        const data = await res.json();
+        currentToken = data.token;
+        document.getElementById('access-token').value = data.token;
+      } catch (error) {
+        alert('生成失败：' + error.message);
+      }
+    }
+
+    async function skipSetup() {
+      window.location.href = '/dashboard';
+    }
+
+    document.getElementById('setup-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const gatewayUrl = document.getElementById('gateway-url').value;
+      const accessToken = document.getElementById('access-token').value;
+
+      try {
+        const res = await fetch('/api/setup/configure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gatewayUrl,
+            accessMode: selectedMode,
+            accessToken: selectedMode === 'token' ? accessToken : undefined,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          showStatus('配置已保存！正在跳转...', 'success');
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 1000);
+        } else {
+          showStatus(data.message, 'error');
+        }
+      } catch (error) {
+        showStatus('保存失败：' + error.message, 'error');
+      }
+    });
+
+    // 页面加载时初始化
+    init();
+  </script>
+</body>
+</html>
