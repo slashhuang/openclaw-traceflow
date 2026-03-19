@@ -3,7 +3,6 @@
 [![npm version](https://img.shields.io/npm/v/openclaw-monitor)](https://www.npmjs.com/package/openclaw-monitor)
 [![Docker Pulls](https://img.shields.io/docker/pulls/clawfamily/openclaw-monitor)](https://hub.docker.com/r/clawfamily/openclaw-monitor)
 [![License](https://img.shields.io/badge/license-MIT-blue)](/LICENSE)
-[![Discord](https://img.shields.io/discord/1234567890?label=discord&logo=discord)](https://discord.gg/clawd)
 
 **让 AI 助手不再黑盒 — 3 分钟搭建你的 OpenClaw 监控中心**
 
@@ -287,7 +286,7 @@ services:
 - [ ] 历史数据分析（SQLite 持久化、长期趋势）
 - [ ] 成本优化建议（按会话/模型分组）
 
-**有想法？** 查看 [Roadmap Discussion](https://github.com/claw-family/openclaw-monitor/discussions/categories/roadmap) 或提交 [Feature Request](https://github.com/claw-family/openclaw-monitor/issues/new?template=feature_request.md)
+**有想法？** 欢迎提交 [Feature Request](https://github.com/claw-family/openclaw-monitor/issues/new?template=feature_request.md) 或参与讨论！
 
 ---
 
@@ -308,7 +307,6 @@ pnpm run dev
 
 - 📚 [开发文档](./docs/development.md)
 - 🐛 [Good First Issues](https://github.com/claw-family/openclaw-monitor/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
-- 💬 [Discord 社区](https://discord.gg/clawd)
 - 📖 [API 文档](./docs/api.md)
 
 ### 贡献类型
@@ -329,19 +327,8 @@ MIT © OpenClaw Team
 
 ---
 
-## 🙏 致谢
-
-- [OpenClaw](https://github.com/openclaw/openclaw) — 强大的个人 AI 助手框架
-- [NestJS](https://nestjs.com/) — 渐进式 Node.js 框架
-- [React](https://react.dev/) — 用于构建用户界面的 JavaScript 库
-- [Recharts](https://recharts.org/) — 基于 D3 的图表库
-
----
-
 <div align="center">
 
 **Made with ❤️ by OpenClaw Team**
-
-[Website](https://openclaw.ai) · [Docs](https://docs.openclaw.ai) · [Discord](https://discord.gg/clawd)
 
 </div>
