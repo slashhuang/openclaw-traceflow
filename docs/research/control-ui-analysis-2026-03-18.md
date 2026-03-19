@@ -2,7 +2,7 @@
 
 **研究日期：** 2026-03-18  
 **研究对象：** OpenClaw Control-UI（`external-refs/openclaw/ui/`）  
-**目的：** 为 open-openclaw 项目提供技术参考和对比分析
+**目的：** 为 openclaw-traceflow 项目提供技术参考和对比分析
 
 ---
 
@@ -608,35 +608,35 @@ html`<button>${t('chat.send')}</button>`;
 
 ---
 
-## 5. 与 open-openclaw 对比分析
+## 5. 与 openclaw-traceflow 对比分析
 
 ### 5.1 技术栈对比
 
-| 维度 | Control-UI | open-openclaw | 分析 |
+| 维度 | Control-UI | openclaw-traceflow | 分析 |
 |------|-----------|---------------|------|
 | **前端框架** | Lit (Web Components) | React 19 | React 生态更丰富，Lit 更轻量 |
 | **构建工具** | Vite 8 | Vite 8 | 相同 |
 | **状态管理** | @lit-labs/signals | 原生 React State | Lit Signals 更细粒度 |
 | **UI 组件** | 自研 | 原生 HTML+CSS | Control-UI 组件化更好 |
-| **图表** | 自研 | Recharts 3 | open-openclaw 图表更专业 |
+| **图表** | 自研 | Recharts 3 | openclaw-traceflow 图表更专业 |
 | **测试** | Vitest + Playwright | 待补充 | Control-UI 测试覆盖率高 |
 | **国际化** | 6 种语言 | 待实现 | Control-UI 国际化完善 |
 | **WebSocket** | 自研封装 | Socket.IO | Socket.IO 功能更丰富 |
 
 ### 5.2 功能对比
 
-| 功能模块 | Control-UI | open-openclaw | 差距分析 |
+| 功能模块 | Control-UI | openclaw-traceflow | 差距分析 |
 |---------|-----------|---------------|---------|
 | **聊天** | ✅ 完整 | ✅ 完整 | 功能相当 |
 | **会话管理** | ✅ 列表/详情 | ✅ 列表/详情 | 功能相当 |
-| **配置管理** | ✅ Schema 驱动 | ⚠️ 基础 | open-openclaw 需增强 |
-| **定时任务** | ✅ 完整 | ❌ 无 | open-openclaw 待实现 |
-| **技能管理** | ✅ 完整 | ⚠️ 基础 | open-openclaw 需增强 |
-| **用量统计** | ✅ 完整 | ❌ 无 | open-openclaw 待实现 |
+| **配置管理** | ✅ Schema 驱动 | ⚠️ 基础 | openclaw-traceflow 需增强 |
+| **定时任务** | ✅ 完整 | ❌ 无 | openclaw-traceflow 待实现 |
+| **技能管理** | ✅ 完整 | ⚠️ 基础 | openclaw-traceflow 需增强 |
+| **用量统计** | ✅ 完整 | ❌ 无 | openclaw-traceflow 待实现 |
 | **日志查看** | ✅ 实时流 | ✅ 实时流 | 功能相当 |
-| **设备认证** | ✅ 完整 | ❌ 无 | open-openclaw 待实现 |
-| **渠道管理** | ✅ 完整 | ❌ 无 | open-openclaw 待实现 |
-| **节点管理** | ✅ 完整 | ❌ 无 | open-openclaw 待实现 |
+| **设备认证** | ✅ 完整 | ❌ 无 | openclaw-traceflow 待实现 |
+| **渠道管理** | ✅ 完整 | ❌ 无 | openclaw-traceflow 待实现 |
+| **节点管理** | ✅ 完整 | ❌ 无 | openclaw-traceflow 待实现 |
 
 ### 5.3 架构对比
 
@@ -649,7 +649,7 @@ Gateway (RPC Server)
 OpenClaw Core
 ```
 
-**open-openclaw 架构：**
+**openclaw-traceflow 架构：**
 ```
 Browser (React)
     ↓ REST + WebSocket
@@ -660,12 +660,12 @@ OpenClaw Gateway
 
 **差异分析：**
 - Control-UI 直接连接 Gateway，架构更简单
-- open-openclaw 有独立后端，可扩展性更强
-- Control-UI 依赖 Gateway 功能，open-openclaw 可独立增强
+- openclaw-traceflow 有独立后端，可扩展性更强
+- Control-UI 依赖 Gateway 功能，openclaw-traceflow 可独立增强
 
 ---
 
-## 6. 对 open-openclaw 的启示
+## 6. 对 openclaw-traceflow 的启示
 
 ### 6.1 可借鉴的设计
 
@@ -695,23 +695,23 @@ OpenClaw Gateway
 1. **Lit vs React**
    - React 生态更丰富（图表、组件库）
    - Lit 更轻量但生态小
-   - open-openclaw 已选 React，继续深化
+   - openclaw-traceflow 已选 React，继续深化
 
 2. **直接连接 Gateway vs 独立后端**
    - Control-UI：简单但受限
-   - open-openclaw：复杂但灵活
+   - openclaw-traceflow：复杂但灵活
    - 保持独立后端架构
 
 #### ❌ 不适合
 
 1. **纯前端架构**
-   - open-openclaw 需要后端聚合数据
+   - openclaw-traceflow 需要后端聚合数据
    - 需要 PM2 集成
    - 需要文件系统访问
 
 ### 6.2 二期功能规划建议
 
-基于 Control-UI 分析，open-openclaw 二期可考虑：
+基于 Control-UI 分析，openclaw-traceflow 二期可考虑：
 
 | 功能 | 优先级 | 预计工期 | 参考 Control-UI |
 |------|--------|---------|----------------|
@@ -752,13 +752,13 @@ OpenClaw Gateway
 - ❌ 生态较小（Lit）
 - ❌ 无后端聚合能力
 
-### open-openclaw 定位
+### openclaw-traceflow 定位
 - ✅ 独立后端，可扩展
 - ✅ React 生态丰富
 - ✅ 可集成第三方服务
 - ✅ 适合企业级部署
 
-**建议：** 保持 open-openclaw 架构，借鉴 Control-UI 的 UX 设计和功能实现。
+**建议：** 保持 openclaw-traceflow 架构，借鉴 Control-UI 的 UX 设计和功能实现。
 
 ---
 

@@ -7,13 +7,13 @@
       "request": "launch",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["run", "start:debug"],
-      "cwd": "${workspaceFolder}/open-openclaw",
+      "cwd": "${workspaceFolder}/openclaw-traceflow",
       "console": "integratedTerminal",
       "protocol": "inspector",
       "port": 9229,
       "sourceMaps": true,
       "skipFiles": ["<node_internals>/**"],
-      "outFiles": ["${workspaceFolder}/open-openclaw/dist/**/*.js"]
+      "outFiles": ["${workspaceFolder}/openclaw-traceflow/dist/**/*.js"]
     },
     {
       "name": "OpenOpenclaw: Attach (9229)",
@@ -24,8 +24,8 @@
       "restart": true,
       "sourceMaps": true,
       "skipFiles": ["<node_internals>/**"],
-      "localRoot": "${workspaceFolder}/open-openclaw",
-      "outFiles": ["${workspaceFolder}/open-openclaw/dist/**/*.js"]
+      "localRoot": "${workspaceFolder}/openclaw-traceflow",
+      "outFiles": ["${workspaceFolder}/openclaw-traceflow/dist/**/*.js"]
     }
   ]
 }

@@ -10,7 +10,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
 # 定义 subtree 配置 (使用并行数组保证顺序)
-SUBTREE_DIRS=("claw-family" "futu-openD" "open-openclaw" "external-refs/openclaw")
+SUBTREE_DIRS=("claw-family" "futu-openD" "openclaw-traceflow" "external-refs/openclaw")
 SUBTREE_REMOTES=("claw-family-upstream" "futu-openD-upstream" "openclaw-upstream" "openclaw-upstream")
 
 # 获取上游分支名（可配置）

@@ -36,7 +36,7 @@ claw-sources/  ← git 仓库根目录
 │   ├── workspace-defaults/  ← bootstrap 模板
 │   └── openClawRuntime/.workspace/  ← workspace（SOUL.md, USER.md 等）
 ├── futu-openD/  ← 富途 OpenD 项目
-├── open-openclaw/  ← OpenClaw UI 项目
+├── openclaw-traceflow/  ← OpenClaw TraceFlow UI 项目
 └── external-refs/  ← 外部参考代码
 ```
 
@@ -48,7 +48,7 @@ claw-sources/  ← git 仓库根目录
 | 配置文件 | `claw-family/config/`, `claw-family/bot.*.json` | ✅ 必须 | OpenClaw 配置 |
 | 核心配置 | `claw-family/workspace-defaults/` | ✅ 必须 | SOUL.md、USER.md、AGENTS.md 等 |
 | 需求文档（PRD） | `docs/` | ✅ 必须 | **claw-sources 根目录的 docs/** |
-| 其他项目 | `futu-openD/`, `open-openclaw/` | ✅ 必须 | 各子项目代码 |
+| 其他项目 | `futu-openD/`, `openclaw-traceflow/` | ✅ 必须 | 各子项目代码 |
 | workspace 文档 | `claw-family/openClawRuntime/.workspace/` | ❌ 不需要 | 每日记忆、灵感等 |
 | 仅查看/回答 | 任意 | ❌ 不需要 | 不修改文件 |
 

@@ -1,4 +1,4 @@
-# PRD：open-openclaw — OpenClaw 智能监控与资产管理平台
+# PRD：openclaw-traceflow — OpenClaw 智能监控与资产管理平台
 
 **文档状态：** ✅ **V4.0 功能增强版完成**（2026-03-19）
 **创建日期：** 2026-03-17
@@ -12,7 +12,7 @@
 
 ## 🎯 核心竞争力：复用基础设施 + 增强分析 🔥
 
-**open-openclaw 的定位：**
+**openclaw-traceflow 的定位：**
 - ✅ **复用 Control-UI 的 WSS 基础设施**（workspace、stateDir、sessions）
 - ✅ **增强分析能力**（Skills 使用分析、Token 预警、SystemPrompt 优化）
 - ✅ **扩展差异化功能**（PM2、多实例、Workspace 资产管理）
@@ -38,7 +38,7 @@ const snapshot = await gateway.request('connect', {...});
 }
 ```
 
-**open-openclaw 复用策略：**
+**openclaw-traceflow 复用策略：**
 1. ✅ 通过 WSS 获取 `stateDir` → 读取 workspace 文件（memory、inspiration、skills）
 2. ✅ 通过 WSS 获取 `configPath` → 读取配置文件
 3. ✅ 通过 WSS 获取会话数据 → 分析 token 用量、SystemPrompt
@@ -46,11 +46,11 @@ const snapshot = await gateway.request('connect', {...});
 
 ---
 
-### open-openclaw 的增强能力
+### openclaw-traceflow 的增强能力
 
 **在 Control-UI 基础上的增强：**
 
-| 功能 | Control-UI | open-openclaw | 增强点 |
+| 功能 | Control-UI | openclaw-traceflow | 增强点 |
 |------|-----------|---------------|--------|
 | **workspace 读取** | ⚠️ 基础路径 | ✅ 深度分析 | Memory 可视化、Inspiration 管理 |
 | **Skills 管理** | ⚠️ 启用/禁用 | ✅ 使用分析 | 调用频率、重复检测、冲突检测 |
@@ -122,7 +122,7 @@ const snapshot = await gateway.request('connect', {...});
 ## 1. Skills 使用分析（✅ 已完成）
 
 **实现状态：** ✅ 完整实现（2026-03-19）
-**前端页面：** `open-openclaw/frontend/src/pages/Skills.jsx`
+**前端页面：** `openclaw-traceflow/frontend/src/pages/Skills.jsx`
 **后端接口：** 
 - `/api/skills/usage` — Skills 使用统计
 - `/api/skills/system-prompt/analysis` — SystemPrompt 分析
@@ -210,7 +210,7 @@ export function inferInvokedSkillsFromToolCalls(toolCalls) {
 ## 2. Token 阈值预警（✅ 已完成）
 
 **实现状态：** ✅ 完整实现（2026-03-19）
-**前端页面：** `open-openclaw/frontend/src/pages/TokenMonitor.jsx`
+**前端页面：** `openclaw-traceflow/frontend/src/pages/TokenMonitor.jsx`
 **后端接口：** `/api/sessions/token-usage`、`/api/sessions/token-alerts/history`
 
 ### 已实现功能
@@ -229,7 +229,7 @@ export function inferInvokedSkillsFromToolCalls(toolCalls) {
 ## 3. SystemPrompt 优化（✅ 已完成）
 
 **实现状态：** ✅ 完整实现（2026-03-19）
-**前端页面：** `open-openclaw/frontend/src/pages/SystemPrompt.jsx`
+**前端页面：** `openclaw-traceflow/frontend/src/pages/SystemPrompt.jsx`
 **后端接口：** `/api/skills/system-prompt/probe`、`/api/skills/system-prompt/analysis`
 
 ### 已实现功能
@@ -358,7 +358,7 @@ export function inferInvokedSkillsFromToolCalls(toolCalls) {
 
 ## 9. 总结
 
-### open-openclaw 的核心竞争力
+### openclaw-traceflow 的核心竞争力
 
 **最大优势：** 复用 Control-UI 的 WSS 基础设施 + 增强分析能力 + **开箱即用的独立部署**
 
@@ -384,7 +384,7 @@ export function inferInvokedSkillsFromToolCalls(toolCalls) {
 
 ### 9.1 竞争优势评估（对比 Control-UI）
 
-| 维度 | Control-UI | open-openclaw | 优势说明 |
+| 维度 | Control-UI | openclaw-traceflow | 优势说明 |
 |------|-----------|---------------|---------|
 | **部署方式** | 需要手动配置 | **开箱即用**（Docker/npx/源码） | 3 分钟快速启动，零配置 |
 | **数据独立性** | 依赖 Gateway 进程 | **独立数据存储**（sql.js SQLite） | 不依赖 Gateway 进程，可独立分析历史数据 |
