@@ -12,11 +12,11 @@ import {
 } from './gateway-rpc';
 import {
   buildBreakdownFromReport,
-  buildMarkdownFallbackFromReport,
   parseSystemPromptSections,
   type SystemPromptProbeResult,
   type WorkspaceFileContent,
 } from './system-prompt-probe';
+import { rebuildSystemPromptMarkdown } from './system-prompt-rebuild';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -830,8 +830,9 @@ export class OpenClawService {
   }
 
   /**
-   * 嗅探 Gateway 侧 systemPromptReport（sessions.usage + includeContextWeight），
-   * 并尝试从本机 transcript 拉取 system 消息作 Markdown 展示。
+   * 使用 Gateway 侧 systemPromptReport（sessions.usage + includeContextWeight），
+   * 结合本地 workspace/skills 内容，离线重建一个与 openclaw 拼装结构尽量一致的 system prompt 正文。
+   * 该接口不会读取 transcript，也不会调用会触发模型输出的“system 嗅探”链路。
    */
   async probeSystemPrompt(): Promise<SystemPromptProbeResult> {
     const empty: SystemPromptProbeResult = {
@@ -843,6 +844,7 @@ export class OpenClawService {
       skillsDetail: [],
       toolsDetail: [],
       toolsSummary: { listChars: 0, schemaChars: 0, entryCount: 0 },
+      systemPromptSource: 'none',
       systemPromptMarkdown: '',
       sections: {
         fromTranscript: false,
@@ -954,37 +956,34 @@ export class OpenClawService {
       entryCount: Array.isArray(tools.entries) ? tools.entries.length : 0,
     };
 
-    let systemPromptMarkdown = '';
-    let fromTranscript = false;
-    const rawSid = chosen.sessionId || '';
-    const uuid = rawSid.includes('/') ? rawSid.split('/').pop() || rawSid : rawSid;
-    if (uuid && uuid.length > 4) {
-      try {
-        const detail = await this.getSessionDetail(uuid);
-        const sysMsgs = (detail?.messages || []).filter((m) => m.role === 'system');
-        const joined = sysMsgs
-          .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-          .map((m) => m.content)
-          .join('\n\n---\n\n');
-        if (joined.length > 200) {
-          systemPromptMarkdown = joined;
-          fromTranscript = true;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
-    if (!systemPromptMarkdown || systemPromptMarkdown.length < 200) {
-      systemPromptMarkdown = buildMarkdownFallbackFromReport(report, chosen.key);
-      fromTranscript = false;
-    }
-
-    const sections = parseSystemPromptSections(systemPromptMarkdown, fromTranscript);
     const workspaceDirStr = report.workspaceDir ? String(report.workspaceDir) : '';
     const workspaceFileContents = workspaceDirStr
       ? this.readWorkspaceInjectedContents(workspaceDirStr, workspaceFiles)
       : [];
+
+    // 仅离线重建：不读取 transcript、不调用工具目录，以避免任何“真实请求链路”。
+    let systemPromptMarkdown = '';
+    let systemPromptSource: SystemPromptProbeResult['systemPromptSource'] = 'none';
+    if (workspaceDirStr) {
+      try {
+        systemPromptMarkdown = await rebuildSystemPromptMarkdown({
+          workspaceDir: workspaceDirStr,
+          workspaceFileContents,
+          skills: skillsDetail,
+          tools: toolsDetail.map((t) => t.name),
+          provider: report.provider ? String(report.provider) : undefined,
+          model: report.model ? String(report.model) : undefined,
+          agentId: chosen.agentId,
+        });
+        if (systemPromptMarkdown.trim().length > 0) {
+          systemPromptSource = 'rebuild';
+        }
+      } catch {
+        // keep empty
+      }
+    }
+
+    const sections = parseSystemPromptSections(systemPromptMarkdown, false);
 
     return {
       ok: true,
@@ -1003,6 +1002,7 @@ export class OpenClawService {
       toolsDetail,
       toolsSummary,
       systemPromptMarkdown,
+      systemPromptSource,
       sections,
     };
   }

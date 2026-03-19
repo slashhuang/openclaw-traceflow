@@ -30,7 +30,7 @@ export class SkillsController {
   }
 
   /**
-   * Gateway 连接后嗅探 systemPromptReport（sessions.usage）+ transcript system 消息
+  * 仅离线重建 system prompt 正文（不会读取 transcript system 消息）
    */
   @Get('system-prompt/probe')
   async probeSystemPrompt() {

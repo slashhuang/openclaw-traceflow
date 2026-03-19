@@ -5,6 +5,7 @@ import enUS from 'antd/locale/en_US';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { IntlProvider } from 'react-intl';
+import { palette } from '../theme/colors';
 import zhMessages from '../locales/zh-CN';
 import enMessages from '../locales/en-US';
 
@@ -47,6 +48,12 @@ export function LocaleThemeProvider({ children }) {
 
   const isDark = themeMode === 'dark' || (themeMode === 'system' && systemDark);
 
+  useEffect(() => {
+    const theme = isDark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.style.background = palette[theme].bodyBg;
+  }, [isDark]);
+
   const setLocale = useCallback((l) => {
     setLocaleState(l);
     try {
@@ -68,16 +75,31 @@ export function LocaleThemeProvider({ children }) {
   const messages = locale === 'zh-CN' ? zhMessages : enMessages;
   const antdLocale = locale === 'zh-CN' ? zhCN : enUS;
 
-  const configTheme = useMemo(
-    () => ({
+  const configTheme = useMemo(() => {
+    const c = isDark ? palette.dark : palette.light;
+    return {
       algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
       token: {
-        colorPrimary: '#1677ff',
-        borderRadius: 6,
+        colorPrimary: c.primary,
+        colorPrimaryHover: c.primaryHover,
+        colorSuccess: c.success,
+        colorWarning: c.warning,
+        colorError: c.error,
+        colorInfo: c.info,
+        borderRadius: 8,
+        colorBgLayout: c.bodyBg,
+        colorBgContainer: c.containerBg,
+        colorBorderSecondary: c.borderSecondary,
       },
-    }),
-    [isDark],
-  );
+      components: {
+        Layout: {
+          bodyBg: c.bodyBg,
+          headerBg: c.headerBg,
+          siderBg: c.siderBg,
+        },
+      },
+    };
+  }, [isDark]);
 
   const value = useMemo(
     () => ({
