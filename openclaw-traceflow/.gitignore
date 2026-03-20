@@ -1,0 +1,81 @@
+# Compiled output
+dist/
+*.js.map
+*.d.ts.map
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs (runtime files only, not source code)
+*.log
+/pm2/logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage/
+*.lcov
+.nyc_output/
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm/
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# 本机运行时配置（含可选路径/密钥，开源仓库不跟踪）
+config/openclaw.runtime.json
+
+# dotenv environment variables file
+.env
+.env.test
+.env.development
+.env.production
+
+# Database files (sql.js)
+data/*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PM2
+.pm2/
+
+# Build output
+build/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Runtime data and build outputs
+data/config/snapshot.json
+public/app/
