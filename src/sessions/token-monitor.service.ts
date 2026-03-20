@@ -102,9 +102,10 @@ export class TokenMonitorService {
     try {
       const sessions = await this.openclaw.listSessions();
       const usageList: SessionTokenUsage[] = [];
+      const sessionMap = new Map(sessions.map((s) => [s.sessionKey, s]));
 
       for (const session of sessions) {
-        const usage = await this.getSessionTokenUsage(session.sessionKey);
+        const usage = await this.getSessionTokenUsage(session.sessionKey, sessionMap);
         if (usage) {
           usageList.push(usage);
         }
@@ -120,10 +121,13 @@ export class TokenMonitorService {
   /**
    * 获取单个会话的 token 使用情况
    */
-  async getSessionTokenUsage(sessionKey: string): Promise<SessionTokenUsage | null> {
+  async getSessionTokenUsage(
+    sessionKey: string,
+    preloadedSessions?: Map<string, Awaited<ReturnType<OpenClawService['listSessions']>>[number]>,
+  ): Promise<SessionTokenUsage | null> {
     try {
-      const sessions = await this.openclaw.listSessions();
-      const session = sessions.find(s => s.sessionKey === sessionKey);
+      const session = preloadedSessions?.get(sessionKey)
+        || (await this.openclaw.listSessions()).find(s => s.sessionKey === sessionKey);
 
       if (!session) {
         return null;

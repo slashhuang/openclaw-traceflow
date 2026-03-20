@@ -56,18 +56,24 @@ export default function Sessions() {
   const [filter, setFilter] = useState('all');
   const [sortKey, setSortKey] = useState('lastActive');
   const [sortOrder, setSortOrder] = useState('desc'); // asc | desc
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
 
-  const fetchSessions = async () => {
+  const fetchSessions = async (nextPage = page, nextFilter = filter) => {
+    setLoading(true);
     try {
       const [sessionsResult, archiveResult] = await Promise.allSettled([
-        sessionsApi.list(),
+        sessionsApi.list({ page: nextPage, pageSize, filter: nextFilter }),
         metricsApi.getArchiveCountBySessionKey(),
       ]);
-      const data = sessionsResult.status === 'fulfilled' ? sessionsResult.value : [];
+      const data = sessionsResult.status === 'fulfilled' ? sessionsResult.value : { items: [], total: 0 };
       const archiveMap = archiveResult.status === 'fulfilled' && archiveResult.value && typeof archiveResult.value === 'object'
         ? archiveResult.value
         : {};
-      setSessions(Array.isArray(data) ? data : []);
+      const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+      setSessions(items);
+      setTotal(Number(data?.total || items.length || 0));
       setArchiveCountMap(archiveMap);
     } catch (e) {
       message.error(e?.message || 'Failed');
@@ -77,11 +83,11 @@ export default function Sessions() {
   };
 
   useEffect(() => {
-    fetchSessions();
-  }, []);
+    fetchSessions(page, filter);
+  }, [page, filter]);
 
   const filteredSorted = useMemo(() => {
-    const list = sessions.filter((s) => (filter === 'all' ? true : s.status === filter));
+    const list = sessions;
     const mul = sortOrder === 'desc' ? -1 : 1;
     const getVal = (s) => {
       switch (sortKey) {
@@ -405,7 +411,10 @@ export default function Sessions() {
         <Segmented
           options={filterOptions.map((o) => ({ label: o.label, value: o.value }))}
           value={filter}
-          onChange={setFilter}
+          onChange={(v) => {
+            setPage(1);
+            setFilter(v);
+          }}
         />
       </div>
       <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
@@ -418,7 +427,13 @@ export default function Sessions() {
         columns={columns}
         locale={{ emptyText: intl.formatMessage({ id: 'sessions.empty' }) }}
         size="small"
-        pagination={{ pageSize: 20, showSizeChanger: false }}
+        pagination={{
+          pageSize,
+          showSizeChanger: false,
+          current: page,
+          total,
+          onChange: (p) => setPage(p),
+        }}
       />
     </Card>
   );

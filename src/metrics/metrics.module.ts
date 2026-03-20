@@ -25,6 +25,7 @@ export class MetricsModule implements OnModuleInit {
     const collect = async () => {
       try {
         const sessions = await this.openclawService.listSessions();
+        await this.metricsService.refreshToolStatsSnapshot();
         for (const session of sessions) {
           if (session.tokenUsage) {
             await this.metricsService.recordTokenUsage({
@@ -59,6 +60,7 @@ export class MetricsModule implements OnModuleInit {
         }
 
         console.log(`Token usage collected for ${sessions.length} sessions, ${archived.length} archived`);
+        await this.metricsService.flushDatabase();
       } catch (error) {
         console.error('Failed to collect token usage:', error);
       }

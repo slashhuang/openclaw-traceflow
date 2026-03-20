@@ -15,7 +15,7 @@ import {
   theme,
 } from 'antd';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { healthApi, sessionsApi, logsApi, metricsApi, statusApi } from '../api';
+import { dashboardApi } from '../api';
 import { inferSessionTypeLabel } from '../utils/session-user';
 
 function formatTokenShort(n) {
@@ -199,31 +199,32 @@ export default function Dashboard() {
     tokenByKey: [],
   });
   const [loading, setLoading] = useState(true);
+  const [inFlight, setInFlight] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (inFlight) return;
+    setInFlight(true);
     try {
-      const [healthData, statusData, sessionsData, logsData, latencyData, toolsData, tokenSummaryData, tokenUsageData, tokenByKeyData, archiveCountMap] =
-        await Promise.all([
-          healthApi.getHealth().catch(() => null),
-          statusApi.getOverview().catch((e) => ({ error: e?.message || 'fail' })),
-          sessionsApi.list().catch(() => []),
-          logsApi.getRecent(10).catch(() => []),
-          metricsApi.getLatency().catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
-          metricsApi.getTools().catch(() => []),
-          metricsApi.getTokenSummary().catch(() => ({
-            totalInput: 0, totalOutput: 0, totalTokens: 0,
-            activeInput: 0, activeOutput: 0, activeTokens: 0,
-            archivedInput: 0, archivedOutput: 0, archivedTokens: 0,
-            nearLimitCount: 0, limitReachedCount: 0, sessionCount: 0,
-          })),
-          metricsApi.getTokenUsage().catch(() => []),
-          metricsApi.getTokenUsageBySessionKey(86400000).catch(() => []),
-          metricsApi.getArchiveCountBySessionKey().catch(() => ({})),
-        ]);
+      const data = await dashboardApi.getOverview().catch(() => null);
+      const healthData = data?.health ?? null;
+      const statusData = data?.statusOverview ?? { error: 'fail' };
+      const sessionsData = Array.isArray(data?.sessions) ? data.sessions : [];
+      const logsData = Array.isArray(data?.recentLogs) ? data.recentLogs : [];
+      const latencyData = data?.metrics?.latency ?? { p50: 0, p95: 0, p99: 0, count: 0 };
+      const toolsData = Array.isArray(data?.metrics?.tools) ? data.metrics.tools : [];
+      const tokenSummaryData = data?.metrics?.tokenSummary ?? {
+        totalInput: 0, totalOutput: 0, totalTokens: 0,
+        activeInput: 0, activeOutput: 0, activeTokens: 0,
+        archivedInput: 0, archivedOutput: 0, archivedTokens: 0,
+        nearLimitCount: 0, limitReachedCount: 0, sessionCount: 0,
+      };
+      const tokenUsageData = Array.isArray(data?.metrics?.tokenUsage) ? data.metrics.tokenUsage : [];
+      const tokenByKeyData = Array.isArray(data?.metrics?.tokenByKey) ? data.metrics.tokenByKey : [];
+      const archiveCountMap = data?.metrics?.archiveCountMap ?? {};
       setHealth(healthData);
       setStatusOverview(statusData);
-      setSessions(Array.isArray(sessionsData) ? sessionsData : []);
-      setRecentLogs(Array.isArray(logsData) ? logsData : []);
+      setSessions(sessionsData);
+      setRecentLogs(logsData);
       setMetrics({
         latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
         tools: Array.isArray(toolsData) ? toolsData : [],
@@ -238,14 +239,29 @@ export default function Dashboard() {
       console.error(e);
     } finally {
       setLoading(false);
+      setInFlight(false);
     }
-  }, []);
+  }, [inFlight]);
 
   useEffect(() => {
     fetchData();
-    const t = setInterval(fetchData, 3000);
-    return () => clearInterval(t);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData();
+      }
+    };
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchData();
+      }
+    }, 10000);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [fetchData]);
+ 
 
   if (loading) {
     return (

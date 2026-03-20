@@ -143,6 +143,9 @@ export interface TokenSummaryMetrics {
 export class MetricsService implements OnModuleInit {
   private db: Database | null = null;
   private dbPath: string;
+  private pendingSaveTimer: NodeJS.Timeout | null = null;
+  private toolStatsSnapshot: Array<{ tool: string; count: number; successRate: number }> = [];
+  private toolStatsSnapshotAt = 0;
 
   constructor(private readonly openclawService: OpenClawService) {
     this.dbPath = path.join(process.cwd(), 'data', 'metrics.db');
@@ -152,6 +155,40 @@ export class MetricsService implements OnModuleInit {
     const SQL = await initSqlJs();
     this.db = new SQL.Database();
     await this.initDatabase();
+  }
+
+  getToolStatsSnapshot(maxAgeMs = 45_000): Array<{ tool: string; count: number; successRate: number }> | null {
+    if (!this.toolStatsSnapshotAt || Date.now() - this.toolStatsSnapshotAt > maxAgeMs) {
+      return null;
+    }
+    return this.toolStatsSnapshot;
+  }
+
+  async refreshToolStatsSnapshot(): Promise<Array<{ tool: string; count: number; successRate: number }>> {
+    const sessions = await this.openclawService.listSessions();
+    const toolStats = new Map<string, { count: number; success: number }>();
+    for (const session of sessions) {
+      const detail = await this.openclawService.getSessionDetail(session.sessionId);
+      if (!detail?.toolCalls?.length) continue;
+      for (const tool of detail.toolCalls) {
+        const name = tool.name;
+        const current = toolStats.get(name) || { count: 0, success: 0 };
+        current.count += 1;
+        if (tool.success) current.success += 1;
+        toolStats.set(name, current);
+      }
+    }
+    const snapshot = Array.from(toolStats.entries())
+      .map(([tool, data]) => ({
+        tool,
+        count: data.count,
+        successRate: data.count > 0 ? (data.success / data.count) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+    this.toolStatsSnapshot = snapshot;
+    this.toolStatsSnapshotAt = Date.now();
+    return snapshot;
   }
 
   private async initDatabase() {
@@ -267,7 +304,7 @@ export class MetricsService implements OnModuleInit {
       );
 
       // 定期保存到磁盘
-      this.saveDatabase();
+      this.scheduleSaveDatabase();
     } catch (error) {
       console.error('Failed to record metric:', error);
     }
@@ -297,7 +334,7 @@ export class MetricsService implements OnModuleInit {
         ],
       );
 
-      this.saveDatabase();
+      this.scheduleSaveDatabase();
     } catch (error) {
       console.error('Failed to record token usage:', error);
     }
@@ -460,7 +497,7 @@ export class MetricsService implements OnModuleInit {
         ],
       );
 
-      this.saveDatabase();
+      this.scheduleSaveDatabase();
     } catch (error) {
       console.error('Failed to record token event:', error);
     }
@@ -665,13 +702,22 @@ export class MetricsService implements OnModuleInit {
     return sortedArray[Math.max(0, index)];
   }
 
-  private saveDatabase(): void {
-    if (!this.db) return;
+  private scheduleSaveDatabase(delayMs = 5_000): void {
+    if (this.pendingSaveTimer) {
+      return;
+    }
+    this.pendingSaveTimer = setTimeout(() => {
+      this.pendingSaveTimer = null;
+      void this.flushDatabase();
+    }, delayMs);
+  }
 
+  async flushDatabase(): Promise<void> {
+    if (!this.db) return;
     try {
       const data = this.db.export();
       const buffer = Buffer.from(data);
-      fs.writeFileSync(this.dbPath, buffer);
+      await fs.promises.writeFile(this.dbPath, buffer);
     } catch (error) {
       console.error('Failed to save database:', error);
     }

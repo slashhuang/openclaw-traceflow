@@ -1,13 +1,28 @@
-import { Controller, Get, Post, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query } from '@nestjs/common';
 import { SessionsService, Session, SessionDetail } from './sessions.service';
 
 @Controller('api/sessions')
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
 
+  private parsePage(v: unknown, fallback: number): number {
+    const n = Number.parseInt(String(v ?? ''), 10);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  }
+
   @Get()
-  async listSessions(): Promise<Session[]> {
-    return this.sessionsService.listSessions();
+  async listSessions(
+    @Query('page') pageQuery?: number,
+    @Query('pageSize') pageSizeQuery?: number,
+    @Query('filter') filterQuery?: string,
+  ): Promise<Session[] | { items: Session[]; total: number; page: number; pageSize: number }> {
+    const page = this.parsePage(pageQuery, 1);
+    const pageSize = Math.min(200, this.parsePage(pageSizeQuery, 20));
+    const filter = typeof filterQuery === 'string' ? filterQuery : 'all';
+    if (pageQuery == null && pageSizeQuery == null && filterQuery == null) {
+      return this.sessionsService.listSessions();
+    }
+    return this.sessionsService.listSessionsPaged(page, pageSize, filter);
   }
 
   @Get(':id')

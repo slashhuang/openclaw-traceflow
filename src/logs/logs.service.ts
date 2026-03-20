@@ -23,6 +23,8 @@ export class LogsService {
   private gatewaySuppressNextEmit = false;
   private gatewaySubscribers: Set<(entry: LogEntry) => void> = new Set();
   private gatewayPollOptions: { limit: number; pollIntervalMs: number; maxBytes: number } | null = null;
+  private gatewayCurrentPollMs = 1500;
+  private gatewayFailureCount = 0;
   private gatewayDedupeOrder: string[] = [];
   private gatewayDedupeSet: Set<string> = new Set();
   private readonly gatewayDedupeMax = 1000;
@@ -121,10 +123,10 @@ export class LogsService {
           : 1_000_000;
 
       this.gatewayPollOptions = { limit, pollIntervalMs, maxBytes };
+      this.gatewayCurrentPollMs = pollIntervalMs;
+      this.gatewayFailureCount = 0;
       this.gatewaySuppressNextEmit = this.gatewayCursor == null;
-      this.gatewayTimer = setInterval(() => {
-        void this.pollGatewayTailOnce();
-      }, pollIntervalMs);
+      this.scheduleGatewayPoll();
 
       // Kick once immediately
       void this.pollGatewayTailOnce();
@@ -140,6 +142,15 @@ export class LogsService {
         this.gatewayPollOptions = null;
       }
     };
+  }
+
+  private scheduleGatewayPoll() {
+    if (this.gatewayTimer) {
+      clearInterval(this.gatewayTimer);
+    }
+    this.gatewayTimer = setInterval(() => {
+      void this.pollGatewayTailOnce();
+    }, this.gatewayCurrentPollMs);
   }
 
   /**
@@ -245,8 +256,16 @@ export class LogsService {
       });
 
       if (!res.ok || !res.payload) {
-        // Do not stop polling on transient errors
+        this.gatewayFailureCount += 1;
+        const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
+        this.gatewayCurrentPollMs = Math.min(15_000, base * (2 ** Math.min(this.gatewayFailureCount, 4)));
+        this.scheduleGatewayPoll();
         return;
+      }
+      if (this.gatewayFailureCount > 0) {
+        this.gatewayFailureCount = 0;
+        this.gatewayCurrentPollMs = this.gatewayPollOptions?.pollIntervalMs || 1500;
+        this.scheduleGatewayPoll();
       }
 
       if (typeof res.payload.cursor === 'number') {
