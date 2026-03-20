@@ -1,5 +1,7 @@
 # 🦞 OpenClaw TraceFlow
 
+[中文](./README.md) | [English](./README.en.md)
+
 [![License](https://img.shields.io/badge/license-MIT-blue)](/LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11.0-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-%3E%3D9.0.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
@@ -126,13 +128,13 @@ pnpm run start:dev
 
 ## 📸 界面预览
 
-下面截图用于帮助理解本项目的“布局与数据展示”直观效果（入口以本仓库实际路由为准）：
+下面截图来自 `openclaw-traceflow/docs/traceFlowSnapshots`，可直接预览（入口以本仓库实际路由为准）：
 
-- `./docs/traceFlowSnapshots/screenshot.png`（总体预览）
-- `./docs/traceFlowSnapshots/overview.png`（概览）
-- `./docs/traceFlowSnapshots/sessions.png`（会话）
-- `./docs/traceFlowSnapshots/limits.png`（限流/阈值）
-- `./docs/traceFlowSnapshots/logs.png`（日志）
+![Dashboard](./docs/traceFlowSnapshots/dashboard.png)
+![Sessions](./docs/traceFlowSnapshots/sessions.png)
+![Session Detail](./docs/traceFlowSnapshots/session-detail.png)
+![Skills](./docs/traceFlowSnapshots/skills.png)
+![Tokens](./docs/traceFlowSnapshots/tokens.png)
 
 ## 📊 功能亮点
 
