@@ -99,6 +99,22 @@ export class SessionsService {
     }
   }
 
+  async listSessionsPaged(
+    page: number,
+    pageSize: number,
+    filter: string = 'all',
+  ): Promise<{ items: Session[]; total: number; page: number; pageSize: number }> {
+    const all = await this.listSessions();
+    const filtered = filter === 'all' ? all : all.filter((s) => s.status === filter);
+    const start = (Math.max(page, 1) - 1) * pageSize;
+    return {
+      items: filtered.slice(start, start + pageSize),
+      total: filtered.length,
+      page: Math.max(page, 1),
+      pageSize,
+    };
+  }
+
   async getSessionById(id: string): Promise<SessionDetail | null> {
     try {
       const detail = await this.openclawService.getSessionDetail(id);

@@ -6,14 +6,15 @@ import {
   TokenUsageBySession,
   TokenUsageBySessionKey,
 } from './metrics.service';
-import { OpenClawService } from '../openclaw/openclaw.service';
+
+function parsePage(v: unknown, fallback: number): number {
+  const n = Number.parseInt(String(v ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
 @Controller('api/metrics')
 export class MetricsController {
-  constructor(
-    private readonly metricsService: MetricsService,
-    private readonly openclawService: OpenClawService,
-  ) {}
+  constructor(private readonly metricsService: MetricsService) {}
 
   @Get('latency')
   async getLatencyMetrics(
@@ -24,37 +25,12 @@ export class MetricsController {
 
   @Get('tools')
   async getToolStats(@Query('timeRangeMs') timeRangeMs?: number) {
-    // 从 OpenClaw sessions 数据中实时提取工具调用统计
     try {
-      const sessions = await this.openclawService.listSessions();
-      const toolStats = new Map<string, { count: number; success: number }>();
-
-      for (const session of sessions) {
-        const detail = await this.openclawService.getSessionDetail(session.sessionId);
-        if (detail?.toolCalls) {
-          for (const tool of detail.toolCalls) {
-            const name = tool.name;
-            if (!toolStats.has(name)) {
-              toolStats.set(name, { count: 0, success: 0 });
-            }
-            const stats = toolStats.get(name)!;
-            stats.count++;
-            if (tool.success) stats.success++;
-          }
-        }
+      const snapshot = this.metricsService.getToolStatsSnapshot();
+      if (snapshot) {
+        return snapshot;
       }
-
-      // 转换为数组并按调用次数排序
-      const result = Array.from(toolStats.entries())
-        .map(([tool, data]) => ({
-          tool,
-          count: data.count,
-          successRate: data.count > 0 ? (data.success / data.count) * 100 : 0,
-        }))
-        .sort((a, b) => b.count - a.count);
-
-      // 返回 Top 8
-      return result.slice(0, 8);
+      return await this.metricsService.refreshToolStatsSnapshot();
     } catch (error) {
       console.error('Failed to get tool stats from sessions:', error);
       return this.metricsService.getToolStats(timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 3600000);
@@ -91,18 +67,32 @@ export class MetricsController {
   @Get('token-usage')
   async getTokenUsageBySession(
     @Query('timeRangeMs') timeRangeMs?: number,
-  ): Promise<TokenUsageBySession[]> {
-    return this.metricsService.getTokenUsageBySession(timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 86400000);
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ): Promise<{ items: TokenUsageBySession[]; total: number; page: number; pageSize: number }> {
+    const all = await this.metricsService.getTokenUsageBySession(
+      timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 86400000,
+    );
+    const p = parsePage(page, 1);
+    const ps = Math.min(200, parsePage(pageSize, 10));
+    const start = (p - 1) * ps;
+    return { items: all.slice(start, start + ps), total: all.length, page: p, pageSize: ps };
   }
 
   /** 按 sessionKey 聚合的 token 消耗（进行中 + 归档） */
   @Get('token-usage-by-session-key')
   async getTokenUsageBySessionKey(
     @Query('timeRangeMs') timeRangeMs?: number,
-  ): Promise<TokenUsageBySessionKey[]> {
-    return this.metricsService.getTokenUsageBySessionKey(
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ): Promise<{ items: TokenUsageBySessionKey[]; total: number; page: number; pageSize: number }> {
+    const all = await this.metricsService.getTokenUsageBySessionKey(
       timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 86400000,
     );
+    const p = parsePage(page, 1);
+    const ps = Math.min(200, parsePage(pageSize, 20));
+    const start = (p - 1) * ps;
+    return { items: all.slice(start, start + ps), total: all.length, page: p, pageSize: ps };
   }
 
   /** 每个 sessionKey 的归档次数（用于 sessions 列表） */

@@ -1,4 +1,4 @@
-import { Controller, Get, Logger, Param, Post } from '@nestjs/common';
+import { Controller, Get, Logger, Param, Post, Query } from '@nestjs/common';
 import { TokenMonitorService, SessionTokenUsage, TokenAlert } from './token-monitor.service';
 
 @Controller('api/sessions')
@@ -11,9 +11,19 @@ export class TokenMonitorController {
    * 获取所有会话的 token 使用情况
    */
   @Get('token-usage')
-  async getAllTokenUsage(): Promise<SessionTokenUsage[]> {
+  async getAllTokenUsage(
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ): Promise<SessionTokenUsage[] | { items: SessionTokenUsage[]; total: number; page: number; pageSize: number }> {
     this.logger.log('Getting all sessions token usage');
-    return await this.tokenMonitor.getAllSessionsTokenUsage();
+    const all = await this.tokenMonitor.getAllSessionsTokenUsage();
+    if (page == null && pageSize == null) {
+      return all;
+    }
+    const p = Math.max(1, Number.parseInt(String(page ?? 1), 10) || 1);
+    const ps = Math.min(200, Math.max(1, Number.parseInt(String(pageSize ?? 20), 10) || 20));
+    const start = (p - 1) * ps;
+    return { items: all.slice(start, start + ps), total: all.length, page: p, pageSize: ps };
   }
 
   /**

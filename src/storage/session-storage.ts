@@ -128,7 +128,7 @@ export class FileSystemSessionStorage implements SessionStorage {
     }
 
     try {
-      const agentDirs = fs.readdirSync(agentsDir);
+      const agentDirs = await fs.promises.readdir(agentsDir);
       
       for (const agent of agentDirs) {
         const sessionsDir = path.join(agentsDir, agent, 'sessions');
@@ -140,7 +140,7 @@ export class FileSystemSessionStorage implements SessionStorage {
         const sessionsMeta = await this.readSessionsMeta(this.stateDir, agent);
 
         // 扫描 JSONL 文件
-        const files = fs.readdirSync(sessionsDir);
+        const files = await fs.promises.readdir(sessionsDir);
         
         for (const file of files) {
           if (!file.endsWith('.jsonl') || file.includes('.reset.')) {
@@ -149,7 +149,7 @@ export class FileSystemSessionStorage implements SessionStorage {
 
           const sessionId = file.replace('.jsonl', '');
           const filePath = path.join(sessionsDir, file);
-          const stats = fs.statSync(filePath);
+          const stats = await fs.promises.stat(filePath);
           const sessionKey = sessionsMeta.get(sessionId)?.storeKey ?? `${agent}/${sessionId}`;
 
           // 增量扫描：只读取新增/变更的文件
@@ -228,7 +228,7 @@ export class FileSystemSessionStorage implements SessionStorage {
     }
 
     try {
-      const raw = fs.readFileSync(storePath, 'utf-8');
+      const raw = await fs.promises.readFile(storePath, 'utf-8');
       const store = JSON.parse(raw) as Record<string, any>;
 
       for (const [key, entry] of Object.entries(store)) {
@@ -272,7 +272,7 @@ export class FileSystemSessionStorage implements SessionStorage {
     stats?: fs.Stats,
   ): Promise<SessionData | null> {
     try {
-      const allLines = fs.readFileSync(filePath, 'utf-8').split('\n').filter((l) => l.trim());
+      const allLines = (await fs.promises.readFile(filePath, 'utf-8')).split('\n').filter((l) => l.trim());
       
       let userId: string = 'unknown';
       let sessionData: Record<string, unknown> | null = null;
@@ -371,7 +371,7 @@ export class FileSystemSessionStorage implements SessionStorage {
       }
 
       const sessionKey = meta?.storeKey ?? `${agent}/${sessionId}`;
-      const actualStats = stats || fs.statSync(filePath);
+      const actualStats = stats || await fs.promises.stat(filePath);
 
       return {
         sessionKey,
