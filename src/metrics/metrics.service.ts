@@ -3,6 +3,52 @@ import initSqlJs, { Database } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
+
+// 加载价格配置（支持配置文件覆盖）
+const MODEL_PRICING = loadModelPricing();
+
+/** 从 sessionKey 或 model 字符串中提取模型名称 */
+function extractModelFromSessionKey(sessionKey: string): string | null {
+  const parts = sessionKey.split('/');
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (lower.includes('opus') || lower.includes('sonnet') || lower.includes('haiku')) {
+      return part;
+    }
+    if (lower.includes('gpt-')) {
+      return part;
+    }
+    if (lower.includes('gemini')) {
+      return part;
+    }
+    if (lower.includes('grok')) {
+      return part;
+    }
+  }
+  return null;
+}
+
+/** 计算 token 对应的费用（USD） */
+function calculateCost(
+  inputTokens: number,
+  outputTokens: number,
+  model?: string | null,
+  cacheReadTokens?: number,
+  cacheWriteTokens?: number,
+): number {
+  if (!model) return 0;
+
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING['claude-sonnet-4-5'];
+  if (!pricing) return 0;
+
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  const cacheReadCost = cacheReadTokens ? (cacheReadTokens / 1_000_000) * (pricing.cacheRead || 0) : 0;
+  const cacheWriteCost = cacheWriteTokens ? (cacheWriteTokens / 1_000_000) * (pricing.cacheWrite || 0) : 0;
+
+  return inputCost + outputCost + cacheReadCost + cacheWriteCost;
+}
 
 export interface HookMetric {
   id: string;
@@ -69,6 +115,10 @@ export interface TokenUsageBySessionKey {
   archivedCount: number;
   inputTokens: number;
   outputTokens: number;
+  /** 估算费用（USD） */
+  estimatedCost?: number;
+  /** 模型名称（用于价格计算） */
+  model?: string | null;
 }
 
 export interface TokenSummaryMetrics {
@@ -278,6 +328,8 @@ export class MetricsService implements OnModuleInit {
    * 按 sessionKey 聚合 token 消耗（进行中 + 归档）
    * 进行中：取最新一条 active 记录的 total_tokens
    * 归档：SUM 所有 archived 记录的 total_tokens
+   * 
+   * 优化：使用 OpenClawService.getSession() 获取模型信息（O(1) 查找）
    */
   async getTokenUsageBySessionKey(timeRangeMs: number = 86400000): Promise<TokenUsageBySessionKey[]> {
     if (!this.db) return [];
@@ -331,6 +383,15 @@ export class MetricsService implements OnModuleInit {
       }
     }
 
+    // 从 OpenClaw 缓存获取模型信息（O(1) 查找，不再全量扫描）
+    const modelMap = new Map<string, string>();
+    for (const sessionKey of sessionKeys) {
+      const session = await this.openclawService.getSession(sessionKey);
+      if (session?.model) {
+        modelMap.set(sessionKey, session.model);
+      }
+    }
+
     const out: TokenUsageBySessionKey[] = [];
     for (const sessionKey of sessionKeys) {
       const active = activeMap.get(sessionKey);
@@ -338,6 +399,11 @@ export class MetricsService implements OnModuleInit {
       const activeTokens = active?.total ?? 0;
       const archivedTokens = archived?.total ?? 0;
       const archivedCount = archived?.count ?? 0;
+      const inputTokens = (active?.input ?? 0) + (archived?.input ?? 0);
+      const outputTokens = (active?.output ?? 0) + (archived?.output ?? 0);
+      const model = modelMap.get(sessionKey) || extractModelFromSessionKey(sessionKey);
+      const estimatedCost = calculateCost(inputTokens, outputTokens, model);
+
       out.push({
         sessionKey,
         sessionId: active?.sessionId,
@@ -345,8 +411,10 @@ export class MetricsService implements OnModuleInit {
         activeTokens,
         archivedTokens,
         archivedCount,
-        inputTokens: (active?.input ?? 0) + (archived?.input ?? 0),
-        outputTokens: (active?.output ?? 0) + (archived?.output ?? 0),
+        inputTokens,
+        outputTokens,
+        estimatedCost,
+        model,
       });
     }
     return out.sort((a, b) => b.totalTokens - a.totalTokens);

@@ -9,8 +9,8 @@ import { palette } from '../theme/colors';
 import zhMessages from '../locales/zh-CN';
 import enMessages from '../locales/en-US';
 
-const STORAGE_LOCALE = 'openclaw-monitor-locale';
-const STORAGE_THEME = 'openclaw-monitor-theme';
+const STORAGE_LOCALE = 'openclaw-traceflow-locale';
+const STORAGE_THEME = 'openclaw-traceflow-theme';
 
 const LocaleThemeContext = createContext(null);
 
@@ -33,7 +33,7 @@ export function LocaleThemeProvider({ children }) {
       const v = localStorage.getItem(STORAGE_THEME);
       if (v === 'light' || v === 'dark' || v === 'system') return v;
     } catch (_) {}
-    return 'system';
+    return 'dark';
   });
 
   const [systemDark, setSystemDark] = useState(getSystemDark);

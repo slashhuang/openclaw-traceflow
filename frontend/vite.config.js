@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0',
     port: 3002,
     proxy: {
       '/api': {
@@ -22,6 +23,11 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+    },
+    ws: {
+      // 禁用 Vite 自带的 WebSocket 服务器，避免与 socket.io 冲突
+      pingInterval: 60000,
+      pingTimeout: 30000,
     },
   },
   build: {

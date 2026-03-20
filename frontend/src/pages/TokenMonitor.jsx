@@ -12,6 +12,7 @@ import {
   Table,
   Tag,
   theme,
+  message,
 } from 'antd';
 import {
   PieChart,
@@ -56,10 +57,15 @@ export default function TokenMonitor() {
   const [bySessionKey, setBySessionKey] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const timeRangeMs = 86400000; // 24h
 
-  const fetchData = async () => {
+  const fetchData = async (showToast = false) => {
+    if (showToast) {
+      setRefreshing(true);
+      message.loading({ content: '正在刷新 Token 监控...', key: 'token-monitor-refresh', duration: 0 });
+    }
     try {
       const [usageRes, alertsRes, listRes, byKeyRes] = await Promise.allSettled([
         fetch('/api/sessions/token-usage'),
@@ -73,10 +79,19 @@ export default function TokenMonitor() {
       const list = listRes.status === 'fulfilled' && listRes.value?.ok ? await listRes.value.json() : [];
       setSessionList(Array.isArray(list) ? list : []);
       setBySessionKey(byKeyRes.status === 'fulfilled' && Array.isArray(byKeyRes.value) ? byKeyRes.value : []);
+      if (showToast) {
+        message.success({ content: 'Token 监控已刷新', key: 'token-monitor-refresh' });
+      }
     } catch (e) {
       console.error(e);
+      if (showToast) {
+        message.error({ content: e?.message || '刷新失败', key: 'token-monitor-refresh' });
+      }
     } finally {
       setLoading(false);
+      if (showToast) {
+        setRefreshing(false);
+      }
     }
   };
 
@@ -121,10 +136,12 @@ export default function TokenMonitor() {
         <div>
           <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'token.title' })}</Typography.Title>
           <Typography.Text type="secondary">{intl.formatMessage({ id: 'token.subtitle' })}</Typography.Text>
+          <br />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{intl.formatMessage({ id: 'token.costHint' })}</Typography.Text>
         </div>
         <span>
           <Switch checked={autoRefresh} onChange={setAutoRefresh} /> {intl.formatMessage({ id: 'token.autoRefresh' })}{' '}
-          <Button onClick={fetchData} style={{ marginLeft: 8 }}>{intl.formatMessage({ id: 'common.refresh' })}</Button>
+          <Button onClick={() => fetchData(true)} style={{ marginLeft: 8 }} loading={refreshing}>{intl.formatMessage({ id: 'common.refresh' })}</Button>
         </span>
       </div>
 
@@ -196,6 +213,7 @@ export default function TokenMonitor() {
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
                 { title: 'Token', dataIndex: 'activeTokens', width: 90, render: (v) => v?.toLocaleString(), sorter: (a, b) => (a.activeTokens ?? 0) - (b.activeTokens ?? 0) },
+                { title: 'Cost', width: 90, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.model || ''}>{r.estimatedCost != null ? `$${r.estimatedCost.toFixed(4)}` : '-'}</Typography.Text> },
                 { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>详情</Link> : null },
               ]}
             />
@@ -213,6 +231,7 @@ export default function TokenMonitor() {
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
                 { title: 'Token', dataIndex: 'archivedTokens', width: 90, render: (v) => v?.toLocaleString(), sorter: (a, b) => (a.archivedTokens ?? 0) - (b.archivedTokens ?? 0) },
+                { title: 'Cost', width: 80, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.model || ''}>{r.estimatedCost != null ? `$${r.estimatedCost.toFixed(4)}` : '-'}</Typography.Text> },
                 { title: '次', dataIndex: 'archivedCount', width: 60, render: (v) => v ?? 0 },
                 { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>详情</Link> : null },
               ]}
@@ -250,6 +269,11 @@ export default function TokenMonitor() {
                 ),
               },
               { title: 'Used', dataIndex: 'totalTokens', render: (v) => v?.toLocaleString() },
+              { title: 'Cost', render: (_, r) => {
+                  const cost = r.estimatedCost ?? r.usageCost?.total;
+                  return cost != null ? `$${cost.toFixed(4)}` : '-';
+                }
+              },
               { title: 'Limit', dataIndex: 'limit', render: (v) => v?.toLocaleString() || '∞' },
               { title: 'Rate', dataIndex: 'consumptionRate', render: (v) => `${v}/min` },
             ]}

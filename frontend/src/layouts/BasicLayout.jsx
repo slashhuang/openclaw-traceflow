@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ProLayout } from '@ant-design/pro-layout';
 import {
@@ -10,8 +10,9 @@ import {
   UnorderedListOutlined,
   SettingOutlined,
   ApiOutlined,
+  GithubOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Dropdown, Space, Tag, theme } from 'antd';
+import { Alert, Button, Dropdown, message, Space, Tag, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import { useLocaleTheme } from '../providers/LocaleThemeProvider';
@@ -24,6 +25,7 @@ export default function BasicLayout() {
   const { token } = theme.useToken();
   const { locale, setLocale, themeMode, setThemeMode, isDark } = useLocaleTheme();
   const [health, setHealth] = useState(null);
+  const didNotifyHealthErrorRef = useRef(false);
 
   useEffect(() => {
     const fetchHealth = async () => {
@@ -32,6 +34,10 @@ export default function BasicLayout() {
         setHealth(data);
       } catch {
         setHealth(null);
+        if (!didNotifyHealthErrorRef.current) {
+          didNotifyHealthErrorRef.current = true;
+          message.error(intl.formatMessage({ id: 'gateway.healthError' }));
+        }
       }
     };
     fetchHealth();
@@ -48,6 +54,7 @@ export default function BasicLayout() {
     { path: '/skills', key: '/skills', name: intl.formatMessage({ id: 'menu.skills' }), icon: <ToolOutlined /> },
     { path: '/system-prompt', key: '/system-prompt', name: intl.formatMessage({ id: 'menu.systemPrompt' }), icon: <FileTextOutlined /> },
     { path: '/tokens', key: '/tokens', name: intl.formatMessage({ id: 'menu.tokens' }), icon: <DollarOutlined /> },
+    { path: '/pricing', key: '/pricing', name: intl.formatMessage({ id: 'menu.pricing' }), icon: <DollarOutlined /> },
     { path: '/logs', key: '/logs', name: intl.formatMessage({ id: 'menu.logs' }), icon: <UnorderedListOutlined /> },
     { path: '/settings', key: '/settings', name: intl.formatMessage({ id: 'menu.settings' }), icon: <SettingOutlined /> },
   ];
@@ -93,6 +100,17 @@ export default function BasicLayout() {
                 : intl.formatMessage({ id: 'gateway.disconnected' })}
             </Tag>
           ),
+          <a
+            key="github"
+            href="https://github.com/slashhuang/openclaw-traceflow"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            aria-label={intl.formatMessage({ id: 'header.github' })}
+          >
+            <GithubOutlined />
+            <span>{intl.formatMessage({ id: 'header.github' })}</span>
+          </a>,
           <Dropdown
             key="lang"
             menu={{

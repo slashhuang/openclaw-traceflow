@@ -1,5 +1,51 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
+
+// 加载价格配置（支持配置文件覆盖）
+const MODEL_PRICING = loadModelPricing();
+
+/** 从 sessionKey 或 model 字符串中提取模型名称 */
+function extractModelFromSessionKey(sessionKey: string): string | null {
+  const parts = sessionKey.split('/');
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (lower.includes('opus') || lower.includes('sonnet') || lower.includes('haiku')) {
+      return part;
+    }
+    if (lower.includes('gpt-')) {
+      return part;
+    }
+    if (lower.includes('gemini')) {
+      return part;
+    }
+    if (lower.includes('grok')) {
+      return part;
+    }
+  }
+  return null;
+}
+
+/** 计算 token 对应的费用（USD） */
+function calculateCost(
+  inputTokens: number,
+  outputTokens: number,
+  model?: string | null,
+  cacheReadTokens?: number,
+  cacheWriteTokens?: number,
+): number {
+  if (!model) return 0;
+
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING['claude-sonnet-4-5'];
+  if (!pricing) return 0;
+
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  const cacheReadCost = cacheReadTokens ? (cacheReadTokens / 1_000_000) * (pricing.cacheRead || 0) : 0;
+  const cacheWriteCost = cacheWriteTokens ? (cacheWriteTokens / 1_000_000) * (pricing.cacheWrite || 0) : 0;
+
+  return inputCost + outputCost + cacheReadCost + cacheWriteCost;
+}
 
 export interface TokenThreshold {
   warning: number;   // 50%
@@ -20,6 +66,10 @@ export interface SessionTokenUsage {
   consumptionRate: number; // tokens per minute
   estimatedTimeToLimit?: number; // minutes
   lastUpdated: number;
+  /** 估算费用（USD） */
+  estimatedCost?: number;
+  /** 模型名称 */
+  model?: string | null;
 }
 
 export interface TokenAlert {
@@ -98,6 +148,10 @@ export class TokenMonitorService {
       // 确定阈值等级
       const threshold = this.getThresholdLevel(utilization);
 
+      // 计算费用
+      const model = session.model || extractModelFromSessionKey(sessionKey);
+      const estimatedCost = calculateCost(tokenUsage.input || 0, tokenUsage.output || 0, model);
+
       return {
         sessionKey,
         sessionId: session.sessionId,
@@ -110,6 +164,8 @@ export class TokenMonitorService {
         consumptionRate,
         estimatedTimeToLimit,
         lastUpdated: Date.now(),
+        estimatedCost,
+        model,
       };
     } catch (error) {
       this.logger.error(`Failed to get token usage for session ${sessionKey}`, error);

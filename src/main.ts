@@ -58,7 +58,7 @@ async function bootstrap() {
   // 添加 SPA 回退路由 - 所有非 API 路径都返回 index.html
   app.use((req, res, next) => {
     // 如果是 API 路径，跳过
-    if (req.path.startsWith('/api')) {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
       return next();
     }
     // 返回 index.html
@@ -92,7 +92,7 @@ async function bootstrap() {
 
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           OpenClaw Monitor UI                             ║
+║           OpenClaw TraceFlow UI                             ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  Running on: http://${host}:${port}
 ║  Gateway URL: ${config.openclawGatewayUrl}

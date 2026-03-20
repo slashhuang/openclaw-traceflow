@@ -1,16 +1,16 @@
 version: '3.8'
 
 services:
-  openclaw-monitor:
+  openclaw-traceflow:
     build: .
     # 或者使用预构建镜像
-    # image: clawfamily/openclaw-monitor:latest
-    container_name: openclaw-monitor
+    # image: clawfamily/openclaw-traceflow:latest
+    container_name: openclaw-traceflow
     ports:
       - "3001:3001"
     volumes:
       # 持久化数据
-      - openclaw-monitor-data:/app/data
+      - openclaw-traceflow-data:/app/data
       # 挂载配置文件（可选）
       - ./config:/app/config:ro
     environment:
@@ -19,7 +19,7 @@ services:
       # 访问令牌（可选，启用后需要 Bearer Token）
       # - OPENCLAW_RUNTIME_ACCESS_TOKEN=your-secret-token
       # 访问模式：local-only | token | none
-      # - OPENCLAW_ACCESS_MODE=local-only
+      # - OPENCLAW_ACCESS_MODE=none
       # 数据目录
       # - DATA_DIR=/app/data
       # PM2 日志路径（需要挂载宿主机的 PM2 日志）
@@ -34,4 +34,4 @@ services:
 
 # 持久化卷
 volumes:
-  openclaw-monitor-data:
+  openclaw-traceflow-data:

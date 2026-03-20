@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Card,
+  Alert,
   Tabs,
   Button,
   Space,
@@ -151,18 +152,33 @@ export default function SessionDetail() {
   const { token } = theme.useToken();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState(null);
+  const [tokenZeroHelpExpanded, setTokenZeroHelpExpanded] = useState(false);
   const [tab, setTab] = useState(() => (typeof window !== 'undefined' && window.location.hash === '#toolCalls' ? 'toolCalls' : 'messages'));
 
-  const fetchSession = async () => {
+  const fetchSession = async (showToast = false) => {
+    if (showToast) {
+      setRetrying(true);
+      message.loading({ content: '正在重新加载会话...', key: 'session-detail-retry', duration: 0 });
+    }
     try {
       const data = await sessionsApi.getDetail(id);
       setSession(data);
       setError(null);
+      if (showToast) {
+        message.success({ content: '会话已重新加载', key: 'session-detail-retry' });
+      }
     } catch (e) {
       setError(e?.message || 'Error');
+      if (showToast) {
+        message.error({ content: e?.message || '加载会话失败', key: 'session-detail-retry' });
+      }
     } finally {
       setLoading(false);
+      if (showToast) {
+        setRetrying(false);
+      }
     }
   };
 
@@ -186,11 +202,15 @@ export default function SessionDetail() {
     Modal.confirm({
       title: intl.formatMessage({ id: 'confirm.killSession' }),
       onOk: async () => {
+        const toastKey = 'session-kill';
+        message.loading({ content: '正在结束会话...', key: toastKey, duration: 0 });
         try {
           await sessionsApi.kill(id);
+          message.success({ content: '会话已结束', key: toastKey });
           navigate('/sessions');
         } catch (e) {
-          message.error(e?.message);
+          message.error({ content: e?.message || '结束会话失败', key: toastKey });
+          throw e;
         }
       },
     });
@@ -215,7 +235,7 @@ export default function SessionDetail() {
         <Typography.Title type="danger" level={4}>{intl.formatMessage({ id: 'session.loadError' })}</Typography.Title>
         <Typography.Paragraph>{error}</Typography.Paragraph>
         <Space>
-          <Button type="primary" onClick={fetchSession}>{intl.formatMessage({ id: 'common.retry' })}</Button>
+          <Button type="primary" onClick={() => fetchSession(true)} loading={retrying}>{intl.formatMessage({ id: 'common.retry' })}</Button>
           <Button onClick={() => navigate('/sessions')}>{intl.formatMessage({ id: 'common.back' })}</Button>
         </Space>
       </Card>
@@ -237,6 +257,12 @@ export default function SessionDetail() {
   const total = usage?.total ?? (input + output);
   const utilPct = limit && total > 0 ? Math.min(100, Math.round((total / limit) * 100)) : null;
   const usedPct = limit && total > 0 ? Math.min(100, (total / limit) * 100) : 0;
+  const tokenUsageMeta = session?.tokenUsageMeta;
+  const showTokenZeroSourceWarning =
+    total === 0 &&
+    tokenUsageMeta?.source === 'transcript' &&
+    tokenUsageMeta?.transcriptUsageObserved &&
+    !tokenUsageMeta?.storeTokenFieldsPresent;
   // 用 input/(input+output) 保证条带比例正确，避免 total 与 input+output 不一致时条带溢出
   const sumInOut = input + output;
   const inputRatio = sumInOut > 0 ? input / sumInOut : 0;
@@ -303,6 +329,103 @@ export default function SessionDetail() {
               )}
             </div>
           </div>
+          {showTokenZeroSourceWarning && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message={(
+                <span
+                  onClick={() => setTokenZeroHelpExpanded((v) => !v)}
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                >
+                  {intl.formatMessage({ id: 'session.tokenZeroTitle' })}
+                </span>
+              )}
+              description={
+                tokenZeroHelpExpanded ? (
+                  <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                          <Card size="small" styles={{ body: { padding: 10 } }}>
+                            <Typography.Text strong>{intl.formatMessage({ id: 'session.tokenZeroPoint1Title' })}</Typography.Text>
+                            <Typography.Paragraph type="secondary" style={{ margin: '6px 0 0' }}>
+                              <span dangerouslySetInnerHTML={{ __html: intl.formatMessage({ id: 'session.tokenZeroPoint1Desc' }) }} />
+                            </Typography.Paragraph>
+                          </Card>
+
+                          <Card size="small" styles={{ body: { padding: 10 } }}>
+                            <Typography.Text strong>{intl.formatMessage({ id: 'session.tokenZeroPoint2Title' })}</Typography.Text>
+                            <Typography.Paragraph type="secondary" style={{ margin: '6px 0 0' }}>
+                              {intl.formatMessage({ id: 'session.tokenZeroPoint2Desc' })}
+                              {tokenUsageMeta?.totalTokensFresh === false && (
+                                <>
+                                  <br />
+                                  {intl.formatMessage({ id: 'session.tokenZeroPoint2FreshHint' })}
+                                </>
+                              )}
+                            </Typography.Paragraph>
+                          </Card>
+
+                          <Card size="small" styles={{ body: { padding: 10 } }}>
+                            <Typography.Text strong>{intl.formatMessage({ id: 'session.tokenZeroPoint3Title' })}</Typography.Text>
+                            <div style={{ marginTop: 6, fontSize: 12, color: token.colorTextSecondary }}>
+                              {tokenUsageMeta?.stateRootAbsolute ? (
+                                <Typography.Paragraph style={{ marginBottom: 6 }}>
+                                  {intl.formatMessage({ id: 'session.tokenZeroStateRootLabel' })}
+                                  <br />
+                                  <Typography.Text copyable code style={{ fontSize: 12 }}>
+                                    {tokenUsageMeta.stateRootAbsolute}
+                                  </Typography.Text>
+                                </Typography.Paragraph>
+                              ) : (
+                                <Typography.Paragraph style={{ marginBottom: 6 }}>
+                                  {intl.formatMessage({ id: 'session.tokenZeroStateRootFallback' })}
+                                </Typography.Paragraph>
+                              )}
+                              {tokenUsageMeta?.sessionLogAbsolutePath && (
+                                <Typography.Paragraph style={{ marginBottom: 6 }}>
+                                  {intl.formatMessage({ id: 'session.tokenZeroLogFileLabel' })}
+                                  <br />
+                                  <Typography.Text copyable code style={{ fontSize: 12 }}>
+                                    {tokenUsageMeta.sessionLogAbsolutePath}
+                                  </Typography.Text>
+                                </Typography.Paragraph>
+                              )}
+                              {tokenUsageMeta?.transcriptPath && (
+                                <Typography.Paragraph style={{ marginBottom: 6 }}>
+                                  {intl.formatMessage({ id: 'session.tokenZeroRelativePathLabel' })}
+                                  <br />
+                                  <Typography.Text copyable code style={{ fontSize: 12 }}>
+                                    {tokenUsageMeta.transcriptPath}
+                                  </Typography.Text>
+                                </Typography.Paragraph>
+                              )}
+                              {tokenUsageMeta?.sessionsIndexRelativePath && (
+                                <Typography.Paragraph style={{ marginBottom: 0 }}>
+                                  {intl.formatMessage({ id: 'session.tokenZeroIndexFileLabel' })}
+                                  <br />
+                                  <Typography.Text copyable code style={{ fontSize: 12 }}>
+                                    {tokenUsageMeta.sessionsIndexRelativePath}
+                                  </Typography.Text>
+                                  <br />
+                                  {intl.formatMessage({ id: 'session.tokenZeroIndexPathHint' })}
+                                </Typography.Paragraph>
+                              )}
+                            </div>
+                          </Card>
+
+                          <Card size="small" styles={{ body: { padding: 10 } }}>
+                            <Typography.Text strong>{intl.formatMessage({ id: 'session.tokenZeroPoint4Title' })}</Typography.Text>
+                            <Typography.Paragraph type="secondary" style={{ margin: '6px 0 0' }}>
+                              {intl.formatMessage({ id: 'session.tokenZeroPoint4Desc' })}
+                            </Typography.Paragraph>
+                          </Card>
+                  </Space>
+                ) : null
+              }
+            />
+          )}
           <Space split={<Typography.Text type="secondary">·</Typography.Text>}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               In: {input.toLocaleString()}

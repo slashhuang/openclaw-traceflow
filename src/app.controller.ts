@@ -14,7 +14,7 @@ export class AppController {
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);
     } else {
-      res.send('OpenClaw Monitor UI - Running');
+      res.send('OpenClaw TraceFlow UI - Running');
     }
   }
 

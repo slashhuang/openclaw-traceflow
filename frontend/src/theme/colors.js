@@ -1,5 +1,5 @@
 /**
- * OpenClaw Monitor 颜色字典
+ * OpenClaw TraceFlow 颜色字典
  * 只改此文件即可统一调整整站主题色（偏玫瑰红/珊瑚粉）
  *
  * 修改 bodyBg 时请同步 styles/index.css 里 [data-theme] body 的首屏回退值。

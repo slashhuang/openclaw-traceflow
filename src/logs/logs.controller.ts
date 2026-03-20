@@ -8,6 +8,6 @@ export class LogsController {
   @Get()
   async getRecentLogs(@Query('limit') limit?: number): Promise<LogEntry[]> {
     const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
-    return this.logsService.getRecentLogs(limitNum);
+    return await this.logsService.getRecentLogs(limitNum);
   }
 }

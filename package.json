@@ -1,11 +1,12 @@
 {
-  "name": "openclaw-monitor",
+  "name": "openclaw-traceflow",
   "version": "0.1.0",
   "description": "OpenClaw Agent Monitor UI - 开箱即用的监控仪表盘",
   "author": "slashhuang",
   "license": "MIT",
   "private": false,
   "bin": {
+    "openclaw-traceflow": "./bin/cli.js",
     "openclaw-monitor": "./bin/cli.js"
   },
   "scripts": {
@@ -28,8 +29,15 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "docker:build": "docker build -t clawfamily/openclaw-monitor:latest .",
-    "docker:run": "docker run -d -p 3001:3001 --name openclaw-monitor clawfamily/openclaw-monitor:latest"
+    "docker:build": "docker build -t clawfamily/openclaw-traceflow:latest .",
+    "docker:run": "docker run -d -p 3001:3001 --name openclaw-traceflow clawfamily/openclaw-traceflow:latest",
+    "docker:push": "docker push clawfamily/openclaw-traceflow:latest",
+    "deploy:docker": "pnpm run build:all && pnpm run docker:build && docker run -d -p 3001:3001 --restart always --name openclaw-traceflow clawfamily/openclaw-traceflow:latest",
+    "deploy:pm2": "pnpm run build:all && pm2 start dist/main.js --name openclaw-traceflow --restart-delay=3000 --max-restarts=10",
+    "deploy:k8s": "kubectl apply -f k8s/",
+    "release": "pnpm run build:all && pnpm pack",
+    "clean": "rm -rf dist frontend/dist public/app",
+    "reset": "pnpm run clean && rm -rf node_modules && pnpm install"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",

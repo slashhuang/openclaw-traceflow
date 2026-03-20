@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import {
   resolveOpenClawPaths,
@@ -18,8 +18,64 @@ import {
 } from './system-prompt-probe';
 import { rebuildSystemPromptMarkdown } from './system-prompt-rebuild';
 import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
+import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
+import { FileSystemSessionStorage, type SessionData, type SessionStorage } from '../storage/session-storage';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// 加载价格配置（支持配置文件覆盖）
+const MODEL_PRICING = loadModelPricing();
+
+/** 从 sessionKey 或 model 字符串中提取模型名称 */
+function extractModelFromSessionKey(sessionKey: string): string | null {
+  const parts = sessionKey.split('/');
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (lower.includes('opus') || lower.includes('sonnet') || lower.includes('haiku')) {
+      return part;
+    }
+    if (lower.includes('gpt-')) {
+      return part;
+    }
+    if (lower.includes('gemini')) {
+      return part;
+    }
+    if (lower.includes('grok')) {
+      return part;
+    }
+    if (lower.includes('qwen')) {
+      return part;
+    }
+    if (lower.includes('deepseek')) {
+      return part;
+    }
+    if (lower.includes('kimi') || lower.includes('moonshot')) {
+      return part;
+    }
+  }
+  return null;
+}
+
+/** 计算 token 对应的费用（USD） */
+function calculateCost(
+  inputTokens: number,
+  outputTokens: number,
+  model?: string | null,
+  cacheReadTokens?: number,
+  cacheWriteTokens?: number,
+): number {
+  if (!model) return 0;
+
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING['claude-sonnet-4-5'];
+  if (!pricing) return 0;
+
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  const cacheReadCost = cacheReadTokens ? (cacheReadTokens / 1_000_000) * (pricing.cacheRead || 0) : 0;
+  const cacheWriteCost = cacheWriteTokens ? (cacheWriteTokens / 1_000_000) * (pricing.cacheWrite || 0) : 0;
+
+  return inputCost + outputCost + cacheReadCost + cacheWriteCost;
+}
 
 export interface OpenClawSession {
   sessionKey: string;
@@ -42,6 +98,45 @@ export interface OpenClawSession {
     total: number;
     limit?: number;
     utilization?: number;
+  };
+  /**
+   * 计费信息（来自 transcript 的 usage.cost）
+   * 注意：tokens 的汇总/展示口径必须只用 usage tokens；cost 只用于费用概念告警/展示。
+   */
+  usageCost?: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+
+  /**
+   * tokens 计数口径/数据来源说明。
+   * 用于在 tokens=0 等情况下给用户一个可核验的解释。
+   */
+  tokenUsageMeta?: {
+    /**
+     * tokens 最终来自哪里：
+     * - `transcript`: 来自 transcript 扫描到的 message.usage（即便全是 0）
+     * - `sessions.json`: 来自 sessions.json 的 totalTokens/inputTokens/outputTokens
+     * - `mixed`: 两者都有（但最终以最终合并结果为准）
+     */
+    source: 'transcript' | 'sessions.json' | 'mixed' | 'unknown';
+    /** transcript 中是否观测到 usage.totalTokens 字段（观测到但可能为 0） */
+    transcriptUsageObserved?: boolean;
+    /** sessions.json 中是否存在 totalTokens/inputTokens/outputTokens（存在即为非缺失 token 字段） */
+    storeTokenFieldsPresent?: boolean;
+    /** sessions.json 里 totalTokensFresh（若该字段存在） */
+    totalTokensFresh?: boolean;
+    /** 会话日志相对状态根目录的路径（agents/&lt;agent&gt;/sessions/&lt;id&gt;.jsonl） */
+    transcriptPath?: string;
+    /** 与服务当前解析一致的 OpenClaw 状态根目录绝对路径（便于本地打开核对） */
+    stateRootAbsolute?: string;
+    /** 本会话 .jsonl 日志文件的绝对路径 */
+    sessionLogAbsolutePath?: string;
+    /** 同 agent 下 sessions.json 相对状态根路径（agents/&lt;agent&gt;/sessions/sessions.json） */
+    sessionsIndexRelativePath?: string;
   };
 }
 
@@ -212,20 +307,100 @@ function extractSenderFromMessageEntry(entry: {
 }
 
 @Injectable()
-export class OpenClawService {
+export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OpenClawService.name);
   private baseUrl: string;
   /** 解析缓存，避免每次请求都 exec openclaw */
   private pathsCache: { at: number; paths: OpenClawResolvedPaths } | null = null;
   private static readonly PATHS_TTL_MS = 60_000;
 
+  /** 会话存储（KV 缓存 + 定时轮询） */
+  private sessionStorage: SessionStorage;
+  /** 后台轮询定时器 */
+  private backgroundSyncTimer: NodeJS.Timeout | null = null;
+  /** 轮询间隔（毫秒） */
+  private static readonly SYNC_INTERVAL_MS = 10_000;
+  /** 缓存 TTL（毫秒） */
+  private static readonly CACHE_TTL_MS = 10_000;
+  /** Promise 级别缓存（防并发重复） */
+  private pendingRefresh: Promise<void> | null = null;
+
   constructor(private configService: ConfigService) {
     this.baseUrl = this.configService.getConfig().openclawGatewayUrl;
+    this.sessionStorage = new FileSystemSessionStorage();
+  }
+
+  /** 模块初始化时启动后台轮询 */
+  async onModuleInit() {
+    this.logger.log('OpenClawService: starting background sync...');
+    const paths = await this.getResolvedPaths();
+    if (paths.stateDir) {
+      (this.sessionStorage as FileSystemSessionStorage).setStateDir(paths.stateDir);
+      // 初始加载
+      await this.refreshCache();
+      // 启动定时轮询
+      this.startBackgroundSync();
+    }
+  }
+
+  /** 模块销毁时清理定时器 */
+  onModuleDestroy() {
+    if (this.backgroundSyncTimer) {
+      clearInterval(this.backgroundSyncTimer);
+      this.backgroundSyncTimer = null;
+    }
+  }
+
+  /** 启动后台定时轮询 */
+  private startBackgroundSync() {
+    this.backgroundSyncTimer = setInterval(() => {
+      this.refreshCache().catch((err) => {
+        this.logger.error('Background sync failed:', err);
+      });
+    }, OpenClawService.SYNC_INTERVAL_MS);
+    this.logger.log(`OpenClawService: background sync started (interval=${OpenClawService.SYNC_INTERVAL_MS}ms)`);
+  }
+
+  /** 刷新缓存（带 Promise 级别锁） */
+  private async refreshCache(): Promise<void> {
+    if (this.pendingRefresh) {
+      return this.pendingRefresh;
+    }
+
+    this.pendingRefresh = (async () => {
+      try {
+        const paths = await this.getResolvedPaths();
+        if (paths.stateDir) {
+          (this.sessionStorage as FileSystemSessionStorage).setStateDir(paths.stateDir);
+        }
+
+        if (this.sessionStorage instanceof FileSystemSessionStorage) {
+          const sessions = await this.sessionStorage.loadFromFileSystem();
+          await this.sessionStorage.upsertBatch(sessions);
+          this.logger.debug(`OpenClawService: cache refreshed (${sessions.size} sessions)`);
+        }
+      } finally {
+        this.pendingRefresh = null;
+      }
+    })();
+
+    return this.pendingRefresh;
   }
 
   /** 清除路径缓存（配置更新后调用） */
   clearPathsCache(): void {
     this.pathsCache = null;
+  }
+
+  /**
+   * 获取单个会话（O(1) 查找）
+   */
+  async getSession(sessionKey: string): Promise<SessionData | null> {
+    // 如果缓存过期，触发刷新
+    if (Date.now() - this.sessionStorage.getCacheTimestamp() > OpenClawService.CACHE_TTL_MS) {
+      await this.refreshCache();
+    }
+    return this.sessionStorage.get(sessionKey);
   }
 
   /**
@@ -264,6 +439,56 @@ export class OpenClawService {
   private async stateDir(): Promise<string> {
     const p = await this.getResolvedPaths();
     return p.stateDir ?? '';
+  }
+
+  /**
+   * 从 OpenClaw 配置文件中读取 agents 配置的模型列表
+   */
+  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
+    try {
+      const paths = await this.getResolvedPaths();
+      if (!paths.configPath || !fs.existsSync(paths.configPath)) {
+        return null;
+      }
+
+      const raw = fs.readFileSync(paths.configPath, 'utf8');
+      const cfg = JSON.parse(raw) as {
+        agents?: Array<{ model?: string }> | Record<string, { model?: string }>;
+      };
+
+      const models = new Set<string>();
+
+      if (Array.isArray(cfg.agents)) {
+        // agents: [{ model: 'xxx' }, ...]
+        for (const agent of cfg.agents) {
+          if (agent?.model && typeof agent.model === 'string') {
+            models.add(agent.model);
+          }
+        }
+      } else if (cfg.agents && typeof cfg.agents === 'object') {
+        // agents: { name: { model: 'xxx' }, ... }
+        for (const agent of Object.values(cfg.agents)) {
+          if (agent && typeof agent === 'object' && 'model' in agent) {
+            const model = (agent as { model?: string }).model;
+            if (model && typeof model === 'string') {
+              models.add(model);
+            }
+          }
+        }
+      }
+
+      if (models.size === 0) {
+        return null;
+      }
+
+      return {
+        models: Array.from(models),
+        source: paths.configPath,
+      };
+    } catch (error) {
+      this.logger.warn('Failed to read configured models from OpenClaw config:', error);
+      return null;
+    }
   }
 
   /**
@@ -447,7 +672,16 @@ export class OpenClawService {
     dir: string,
     agent: string,
     sessionId: string,
-  ): { storeKey?: string; totalTokens?: number; inputTokens?: number; outputTokens?: number; contextTokens?: number; model?: string; systemSent?: boolean } | null {
+  ): {
+    storeKey?: string;
+    totalTokens?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    contextTokens?: number;
+    model?: string;
+    systemSent?: boolean;
+    totalTokensFresh?: boolean;
+  } | null {
     const storePath = path.join(dir, 'agents', agent, 'sessions', 'sessions.json');
     if (!fs.existsSync(storePath)) return null;
     try {
@@ -463,6 +697,7 @@ export class OpenClawService {
         outputTokens: typeof entry?.outputTokens === 'number' ? entry.outputTokens : undefined,
         contextTokens: typeof entry?.contextTokens === 'number' ? entry.contextTokens : undefined,
         model: typeof entry?.model === 'string' ? entry.model : undefined,
+        totalTokensFresh: typeof entry?.totalTokensFresh === 'boolean' ? entry.totalTokensFresh : undefined,
         // 保留 undefined 以便 transcript 推断：仅当 store 明确有值时才传递
         systemSent: typeof entry?.systemSent === 'boolean' ? entry.systemSent : undefined,
       });
@@ -486,131 +721,25 @@ export class OpenClawService {
   }
 
   /**
-   * 获取会话列表（从文件系统读取）
+   * 获取会话列表（从缓存读取，O(1) 复杂度）
    */
   async listSessions(): Promise<OpenClawSession[]> {
-    const dir = await this.stateDir();
-    if (!dir) {
-      this.logger.warn(
-        'State directory unknown: set OPENCLAW_STATE_DIR or install `openclaw` CLI so we can run `openclaw config file`',
-      );
-      return [];
+    // 如果缓存过期，触发刷新
+    if (Date.now() - this.sessionStorage.getCacheTimestamp() > OpenClawService.CACHE_TTL_MS) {
+      await this.refreshCache();
     }
 
-    try {
-      const agentsDir = path.join(dir, 'agents');
-      if (!fs.existsSync(agentsDir)) {
-        return [];
-      }
+    const sessionsMap = await this.sessionStorage.getAll();
+    const sessions: OpenClawSession[] = [];
 
-      const sessions: OpenClawSession[] = [];
-
-      // 读取所有 agent 目录
-      const agentDirs = fs.readdirSync(agentsDir);
-      for (const agent of agentDirs) {
-        const sessionsDir = path.join(agentsDir, agent, 'sessions');
-        if (!fs.existsSync(sessionsDir)) {
-          continue;
-        }
-
-        // 读取所有会话文件
-        const files = fs.readdirSync(sessionsDir);
-        for (const file of files) {
-          if (!file.endsWith('.jsonl') || file.includes('.reset.')) {
-            continue; // 跳过重置文件
-          }
-
-          const sessionId = file.replace('.jsonl', '');
-          const filePath = path.join(sessionsDir, file);
-          const stats = fs.statSync(filePath);
-
-          // 读取前几行以获取 user：首行可能只有 session header，user 可能在后续消息中
-          const allLines = fs.readFileSync(filePath, 'utf-8').split('\n').filter((l) => l.trim());
-          let userId: string = 'unknown';
-          let sessionData: Record<string, unknown> | null = null;
-          const firstLine = allLines[0];
-          if (firstLine) {
-            try {
-              sessionData = JSON.parse(firstLine) as Record<string, unknown>;
-              userId = (sessionData?.user as string)?.trim() || 'unknown';
-            } catch {
-              /* ignore */
-            }
-          }
-          // 若首行无 user，从前几条消息中提取 sender
-          if (userId === 'unknown' && allLines.length > 1) {
-            for (let i = 1; i < Math.min(allLines.length, 15); i++) {
-              try {
-                const entry = JSON.parse(allLines[i]);
-                const sender = extractSenderFromMessageEntry(entry);
-                if (sender) {
-                  userId = sender;
-                  break;
-                }
-              } catch {
-                /* ignore */
-              }
-            }
-          }
-
-          // 从 sessions.json 读取 totalTokens/model/contextTokens（比 transcript 更准确）
-          // storeKey（如 agent:main:main）用于类型推断，比 agent/sessionId 更准确
-          const storeEntry = this.loadStoreEntryForSession(dir, agent, sessionId);
-          const sessionKey = storeEntry?.storeKey ?? `${agent}/${sessionId}`;
-          const totalTokens = storeEntry?.totalTokens;
-          const contextTokens = storeEntry?.contextTokens;
-          const model = storeEntry?.model;
-          const parsedFromTranscript = this.parseTokenUsage(sessionData?.tokenUsage);
-          const limit = contextTokens ?? parsedFromTranscript?.limit;
-          const input =
-            storeEntry?.inputTokens ?? parsedFromTranscript?.input ?? 0;
-          const output =
-            storeEntry?.outputTokens ?? parsedFromTranscript?.output ?? 0;
-          const tokenUsage =
-            totalTokens != null && limit != null
-              ? {
-                  input,
-                  output,
-                  total: totalTokens,
-                  limit,
-                  utilization: Math.round((totalTokens / limit) * 100),
-                }
-              : parsedFromTranscript
-                ? { ...parsedFromTranscript, input, output }
-                : { input, output, total: totalTokens ?? 0, limit };
-
-          // 若 store 无 systemSent 且 userId 仍 unknown，从 transcript 推断：首条 assistant 问候语 → greeting
-          let systemSent = storeEntry?.systemSent;
-          if (systemSent === undefined && userId === 'unknown' && allLines.length > 1) {
-            systemSent = inferSystemSentFromTranscript(allLines);
-          }
-
-          try {
-            sessions.push({
-              sessionKey,
-              sessionId: sessionId,
-              userId,
-              systemSent,
-              status: this.inferSessionStatus(sessionData, stats.mtimeMs),
-              createdAt: stats.birthtimeMs,
-              lastActiveAt: stats.mtimeMs,
-              totalTokens,
-              contextTokens,
-              model,
-              tokenUsage,
-            });
-          } catch (e) {
-            // 跳过无法解析的文件
-          }
-        }
-      }
-
-      // 按最后活跃时间排序
-      return sessions.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
-    } catch (error) {
-      this.logger.error('Failed to list sessions from filesystem:', error);
-      return [];
+    for (const [_, data] of sessionsMap) {
+      // 移除 fileMeta 字段（内部使用，不暴露给前端）
+      const { fileMeta, ...session } = data;
+      sessions.push(session);
     }
+
+    // 按最后活跃时间排序
+    return sessions.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
   }
 
   private parseTokenUsage(val: unknown): OpenClawSession['tokenUsage'] | undefined {
@@ -741,9 +870,17 @@ export class OpenClawService {
 
       let firstUserData: any = null;
       let tokenUsage: any = null;
+      let usageCost: any = null;
+      let transcriptUsageObserved = false;
       let sumInput = 0;
       let sumOutput = 0;
       let lastTotal = 0;
+      let sumCostInput = 0;
+      let sumCostOutput = 0;
+      let sumCostCacheRead = 0;
+      let sumCostCacheWrite = 0;
+      let sumCostTotal = 0;
+      let hasCostField = false;
 
       for (const line of lines) {
         try {
@@ -762,11 +899,23 @@ export class OpenClawService {
           // 提取 token 使用：支持 entry.tokenUsage 或 entry.message.usage，多轮会话累加
           const usage = (entry?.message as any)?.usage ?? entry?.tokenUsage;
           if (usage && typeof usage.totalTokens === 'number') {
+            transcriptUsageObserved = true;
             const inp = typeof usage.input === 'number' ? usage.input : 0;
             const out = typeof usage.output === 'number' ? usage.output : 0;
             sumInput += inp;
             sumOutput += out;
             lastTotal = usage.totalTokens;
+
+            // usage.cost 由 provider/model cost 配置驱动；用于异常告警展示
+            const cost = (usage as any)?.cost;
+            if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
+              hasCostField = true;
+              sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
+              sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
+              sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
+              sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
+              sumCostTotal += cost.total;
+            }
             tokenUsage = {
               input: sumInput,
               output: sumOutput,
@@ -905,6 +1054,71 @@ export class OpenClawService {
       const agent = sessionFile.sessionId.split('/')[0];
       const dir = await this.stateDir();
       const storeEntry = dir ? this.loadStoreEntryForSession(dir, agent, sessionId) : null;
+      if (hasCostField) {
+        usageCost = {
+          input: sumCostInput,
+          output: sumCostOutput,
+          cacheRead: sumCostCacheRead,
+          cacheWrite: sumCostCacheWrite,
+          total: sumCostTotal,
+        };
+      } else {
+        // 降级方案：当 transcript 中没有 usage.cost 数据时，使用配置价格进行估算
+        const model = storeEntry?.model || extractModelFromSessionKey(sessionId);
+        const input = storeEntry?.inputTokens ?? (tokenUsage?.input ?? 0);
+        const output = storeEntry?.outputTokens ?? (tokenUsage?.output ?? 0);
+        const estimatedCost = calculateCost(input, output, model);
+        if (estimatedCost > 0) {
+          usageCost = {
+            input: estimatedCost,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: estimatedCost,
+          };
+        }
+      }
+
+      const storeTokenFieldsPresent = !!(
+        storeEntry &&
+        (typeof storeEntry.totalTokens === 'number' ||
+          typeof storeEntry.inputTokens === 'number' ||
+          typeof storeEntry.outputTokens === 'number')
+      );
+
+      const transcriptHasNonZero =
+        !!tokenUsage &&
+        (((tokenUsage.input ?? 0) + (tokenUsage.output ?? 0)) > 0 || (tokenUsage.total ?? 0) > 0);
+
+      let tokenUsageSource: NonNullable<OpenClawSession['tokenUsageMeta']>['source'] = 'unknown';
+      if (transcriptUsageObserved && storeTokenFieldsPresent) {
+        // 代码实现里：当 transcript 有非零 tokens 时优先使用 transcript，否则再用 store
+        tokenUsageSource = transcriptHasNonZero ? 'transcript' : 'sessions.json';
+      } else if (transcriptUsageObserved) {
+        tokenUsageSource = 'transcript';
+      } else if (storeTokenFieldsPresent) {
+        tokenUsageSource = 'sessions.json';
+      }
+
+      const transcriptPath =
+        dir && sessionFile.filePath.startsWith(dir)
+          ? sessionFile.filePath.slice(dir.length + 1)
+          : sessionFile.filePath;
+
+      const sessionsIndexRelativePath =
+        dir && agent ? path.join('agents', agent, 'sessions', 'sessions.json').replace(/\\/g, '/') : undefined;
+
+      const tokenUsageMeta: OpenClawSession['tokenUsageMeta'] = {
+        source: tokenUsageSource,
+        transcriptUsageObserved,
+        storeTokenFieldsPresent,
+        totalTokensFresh: storeEntry?.totalTokensFresh,
+        transcriptPath,
+        stateRootAbsolute: dir || undefined,
+        sessionLogAbsolutePath: sessionFile.filePath,
+        sessionsIndexRelativePath,
+      };
+
       const base = { ...tokenUsage };
       if (storeEntry) {
         // transcript 有数据时优先用 transcript（多轮会话更准确），store 仅补 limit
@@ -941,6 +1155,8 @@ export class OpenClawService {
         contextTokens: storeEntry?.contextTokens,
         model: storeEntry?.model,
         tokenUsage: mergedTokenUsage,
+        usageCost: usageCost ?? undefined,
+        tokenUsageMeta,
         messages,
         toolCalls,
         invokedSkills,
@@ -1150,7 +1366,7 @@ export class OpenClawService {
   /**
    * 使用 Gateway 侧 systemPromptReport（sessions.usage + includeContextWeight），
    * 结合本地 workspace/skills 内容，离线重建一个与 openclaw 拼装结构尽量一致的 system prompt 正文。
-   * 该接口不会读取 transcript，也不会调用会触发模型输出的“system 嗅探”链路。
+   * 该接口不会读取 transcript，也不会调用会触发模型输出的"system 嗅探"链路。
    */
   async probeSystemPrompt(): Promise<SystemPromptProbeResult> {
     const empty: SystemPromptProbeResult = {
@@ -1316,7 +1532,7 @@ export class OpenClawService {
       ? this.readWorkspaceInjectedContents(workspaceDirStr, workspaceFiles)
       : [];
 
-    // 仅离线重建：不读取 transcript、不调用工具目录，以避免任何“真实请求链路”。
+    // 仅离线重建：不读取 transcript、不调用工具目录，以避免任何"真实请求链路"。
     let systemPromptMarkdown = '';
     let systemPromptSource: SystemPromptProbeResult['systemPromptSource'] = 'none';
     if (workspaceDirStr) {

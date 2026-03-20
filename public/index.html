@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
+  <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaw Monitor</title>
+    <title>OpenClaw TraceFlow</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -169,7 +169,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>👋 欢迎使用 OpenClaw Monitor</h1>
+    <h1>👋 欢迎使用 OpenClaw TraceFlow</h1>
     <p class="subtitle">OpenClaw Agent 监控仪表盘</p>
 
     <div id="status-area"></div>
@@ -189,7 +189,7 @@
       <div class="step">
         <div class="step-title">第二步：设置访问保护</div>
         <div class="mode-cards">
-          <div class="mode-card selected" data-mode="local-only" onclick="selectMode('local-only')">
+          <div class="mode-card" data-mode="local-only" onclick="selectMode('local-only')">
             <h3>仅本机访问</h3>
             <p>最安全，推荐个人使用</p>
           </div>
@@ -197,7 +197,7 @@
             <h3>Access Token</h3>
             <p>需要公网访问时</p>
           </div>
-          <div class="mode-card" data-mode="none" onclick="selectMode('none')">
+          <div class="mode-card selected" data-mode="none" onclick="selectMode('none')">
             <h3>无保护</h3>
             <p>仅限完全可信环境</p>
           </div>
@@ -208,7 +208,7 @@
             自动生成 Token
           </button>
         </div>
-        <p class="tip"><strong>提示：</strong>如果只在本地使用，选择"仅本机访问"即可</p>
+        <p class="tip"><strong>提示：</strong>当前默认是"无保护"，如需限制访问请改为"仅本机访问"或 "Access Token"</p>
       </div>
 
       <!-- 步骤 3: 完成 -->
@@ -220,7 +220,7 @@
   </div>
 
   <script>
-    let selectedMode = 'local-only';
+    let selectedMode = 'none';
     let currentToken = '';
 
     // 初始化：检查当前状态
@@ -332,7 +332,7 @@
         const data = await res.json();
 
         if (data.success) {
-          showStatus('配置已保存！正在跳转...', 'success');
+          showStatus('已保存到配置文件！正在跳转...', 'success');
           setTimeout(() => {
             window.location.href = '/dashboard';
           }, 1000);

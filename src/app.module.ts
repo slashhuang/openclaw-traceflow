@@ -10,6 +10,8 @@ import { MetricsModule } from './metrics/metrics.module';
 import { ActionsModule } from './actions/actions.module';
 import { SetupModule } from './setup/setup.module';
 import { SkillsModule } from './skills/skills.module';
+import { PricingConfigModule } from './config/pricing-config.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { SkillsModule } from './skills/skills.module';
     ActionsModule,
     SetupModule,
     SkillsModule,
+    PricingConfigModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

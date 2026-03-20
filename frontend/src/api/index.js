@@ -26,6 +26,7 @@ export const sessionsApi = {
   list: () => api.get('/sessions').then(res => res.data),
   getDetail: (id) => api.get(`/sessions/${id}`).then(res => res.data),
   kill: (id) => api.post(`/sessions/${id}/kill`).then(res => res.data),
+  getConfiguredModels: () => api.get('/sessions/config/models').then(res => res.data),
 };
 
 export const logsApi = {
@@ -58,6 +59,15 @@ export const metricsApi = {
 export const actionsApi = {
   restart: () => api.post('/actions/restart').then(res => res.data),
   cleanupLogs: () => api.post('/actions/cleanup-logs').then(res => res.data),
+};
+
+export const pricingApi = {
+  getAll: () => api.get('/pricing').then(res => res.data),
+  getConfig: () => api.get('/pricing/config').then(res => res.data),
+  updateConfig: (config) => api.post('/pricing/config', config).then(res => res.data),
+  updateModelPrice: (name, pricing) => api.post(`/pricing/model/${name}`, pricing).then(res => res.data),
+  removeModelPrice: (name) => api.delete(`/pricing/model/${name}`).then(res => res.data),
+  resetToDefaults: () => api.post('/pricing/reset').then(res => res.data),
 };
 
 export default api;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Spin } from 'antd';
+import { Spin, message } from 'antd';
 import { useIntl } from 'react-intl';
 import { setupApi } from './api';
 import BasicLayout from './layouts/BasicLayout';
@@ -13,6 +13,7 @@ import Skills from './pages/Skills';
 import SystemPrompt from './pages/SystemPrompt';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
+import Pricing from './pages/Pricing';
 
 function AppInner() {
   const intl = useIntl();
@@ -24,6 +25,7 @@ function AppInner() {
         const data = await setupApi.getStatus();
         setIsSetup(data.isSetup);
       } catch {
+        message.error(intl.formatMessage({ id: 'app.initStatusError' }));
         setIsSetup(false);
       }
     };
@@ -52,6 +54,7 @@ function AppInner() {
           <Route path="/skills" element={<Skills />} />
           <Route path="/system-prompt" element={<SystemPrompt />} />
           <Route path="/tokens" element={<TokenMonitor />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
         </Route>

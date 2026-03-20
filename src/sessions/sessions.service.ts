@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OpenClawService } from '../openclaw/openclaw.service';
+import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
 import { inferSessionTypeLabel, resolveDisplayUser } from '../common/session-user-resolver';
 
 export interface Session {
@@ -21,6 +21,15 @@ export interface Session {
     limit?: number;
     utilization?: number; // 0-100%
   };
+  usageCost?: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+
+  tokenUsageMeta?: OpenClawSession['tokenUsageMeta'];
 }
 
 export interface InvokedSkill {
@@ -75,6 +84,7 @@ export class SessionsService {
         totalTokens: s.totalTokens,
         contextTokens: s.contextTokens,
         model: s.model,
+          usageCost: s.usageCost,
         tokenUsage: s.tokenUsage && 'limit' in s.tokenUsage && s.tokenUsage.limit
           ? {
               ...s.tokenUsage,
@@ -114,6 +124,8 @@ export class SessionsService {
               utilization: Math.round((detail.tokenUsage.total / detail.tokenUsage.limit) * 100),
             }
           : detail.tokenUsage as any,
+        usageCost: detail.usageCost,
+        tokenUsageMeta: detail.tokenUsageMeta,
         messages: (detail.messages || []).map((m: any) => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
@@ -144,5 +156,12 @@ export class SessionsService {
 
   async killSession(id: string): Promise<boolean> {
     return this.openclawService.killSession(id);
+  }
+
+  /**
+   * 获取 OpenClaw 配置文件中配置的模型列表
+   */
+  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
+    return this.openclawService.getConfiguredModels();
   }
 }

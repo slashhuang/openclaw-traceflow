@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-OpenClaw Monitor - OpenClaw Agent 监控仪表盘，开箱即用的 NestJS 服务。
+OpenClaw TraceFlow - OpenClaw Agent 追踪流仪表盘，开箱即用的 NestJS 服务。
 
 ## 技术栈
 
@@ -182,13 +182,13 @@ pnpm run test:e2e
 ```bash
 docker run -d -p 3001:3001 \
   -e OPENCLAW_GATEWAY_URL=http://your-gateway:3000 \
-  clawfamily/openclaw-monitor:latest
+  clawfamily/openclaw-traceflow:latest
 ```
 
 ### npx
 
 ```bash
-npx openclaw-monitor
+npx openclaw-traceflow
 ```
 
 ### 源码

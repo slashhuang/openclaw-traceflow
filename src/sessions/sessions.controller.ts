@@ -28,4 +28,9 @@ export class SessionsController {
     const success = await this.sessionsService.killSession(id);
     return { success };
   }
+
+  @Get('config/models')
+  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
+    return this.sessionsService.getConfiguredModels();
+  }
 }
