@@ -13,6 +13,7 @@ import {
   Tag,
   theme,
   message,
+  Pagination,
 } from 'antd';
 import {
   PieChart,
@@ -59,6 +60,10 @@ export default function TokenMonitor() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [activePage, setActivePage] = useState(1);
+  const [archivedPage, setArchivedPage] = useState(1);
+  const [activeTotal, setActiveTotal] = useState(0);
+  const [archivedTotal, setArchivedTotal] = useState(0);
   const timeRangeMs = 86400000; // 24h
 
   const fetchData = async (showToast = false) => {
@@ -67,18 +72,24 @@ export default function TokenMonitor() {
       message.loading({ content: '正在刷新 Token 监控...', key: 'token-monitor-refresh', duration: 0 });
     }
     try {
-      const [usageRes, alertsRes, listRes, byKeyRes] = await Promise.allSettled([
-        fetch('/api/sessions/token-usage'),
+      const [usageRes, alertsRes, listRes, activeByKeyRes, archivedByKeyRes] = await Promise.allSettled([
+        fetch('/api/sessions/token-usage?page=1&pageSize=200'),
         fetch('/api/sessions/token-alerts/history'),
-        fetch('/api/sessions'),
-        metricsApi.getTokenUsageBySessionKey(timeRangeMs),
+        fetch('/api/sessions?page=1&pageSize=200'),
+        metricsApi.getTokenUsageBySessionKeyPaged({ timeRangeMs, page: activePage, pageSize: 20 }),
+        metricsApi.getTokenUsageBySessionKeyPaged({ timeRangeMs, page: archivedPage, pageSize: 20 }),
       ]);
-      const usageData = usageRes.status === 'fulfilled' && usageRes.value?.ok ? await usageRes.value.json() : [];
-      setSessions(Array.isArray(usageData) ? usageData : []);
+      const usageData = usageRes.status === 'fulfilled' && usageRes.value?.ok ? await usageRes.value.json() : { items: [] };
+      setSessions(Array.isArray(usageData?.items) ? usageData.items : []);
       setAlerts(alertsRes.status === 'fulfilled' && alertsRes.value?.ok ? await alertsRes.value.json() : []);
       const list = listRes.status === 'fulfilled' && listRes.value?.ok ? await listRes.value.json() : [];
-      setSessionList(Array.isArray(list) ? list : []);
-      setBySessionKey(byKeyRes.status === 'fulfilled' && Array.isArray(byKeyRes.value) ? byKeyRes.value : []);
+      setSessionList(Array.isArray(list?.items) ? list.items : (Array.isArray(list) ? list : []));
+      const activeByKey = activeByKeyRes.status === 'fulfilled' ? activeByKeyRes.value : null;
+      const archivedByKey = archivedByKeyRes.status === 'fulfilled' ? archivedByKeyRes.value : null;
+      const merged = [...(activeByKey?.items || []), ...(archivedByKey?.items || [])];
+      setBySessionKey(merged);
+      setActiveTotal(activeByKey?.total || 0);
+      setArchivedTotal(archivedByKey?.total || 0);
       if (showToast) {
         message.success({ content: 'Token 监控已刷新', key: 'token-monitor-refresh' });
       }
@@ -97,13 +108,13 @@ export default function TokenMonitor() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [activePage, archivedPage]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const t = setInterval(fetchData, 30000);
     return () => clearInterval(t);
-  }, [autoRefresh]);
+  }, [autoRefresh, activePage, archivedPage]);
 
   const thresholdDistribution = [
     { name: 'normal', value: sessions.filter((s) => s.threshold === 'normal').length, color: THRESHOLD_COLORS.normal },
@@ -208,7 +219,8 @@ export default function TokenMonitor() {
               rowKey={(r) => r.sessionKey}
               size="small"
               scroll={{ x: true }}
-              dataSource={[...bySessionKey].filter((r) => (r.activeTokens || 0) > 0).sort((a, b) => (b.activeTokens ?? 0) - (a.activeTokens ?? 0))}
+              pagination={false}
+              dataSource={[...bySessionKey].filter((r) => (r.activeTokens || 0) > 0)}
               columns={[
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
@@ -216,6 +228,14 @@ export default function TokenMonitor() {
                 { title: 'Cost', width: 90, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.model || ''}>{r.estimatedCost != null ? `$${r.estimatedCost.toFixed(4)}` : '-'}</Typography.Text> },
                 { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>详情</Link> : null },
               ]}
+            />
+            <Pagination
+              size="small"
+              style={{ marginTop: 12, textAlign: 'right' }}
+              current={activePage}
+              pageSize={20}
+              total={activeTotal}
+              onChange={(p) => setActivePage(p)}
             />
           </Card>
         </Col>
@@ -226,7 +246,8 @@ export default function TokenMonitor() {
               rowKey={(r) => r.sessionKey}
               size="small"
               scroll={{ x: true }}
-              dataSource={[...bySessionKey].filter((r) => (r.archivedTokens || 0) > 0).sort((a, b) => (b.archivedTokens ?? 0) - (a.archivedTokens ?? 0))}
+              pagination={false}
+              dataSource={[...bySessionKey].filter((r) => (r.archivedTokens || 0) > 0)}
               columns={[
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
@@ -235,6 +256,14 @@ export default function TokenMonitor() {
                 { title: '次', dataIndex: 'archivedCount', width: 60, render: (v) => v ?? 0 },
                 { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>详情</Link> : null },
               ]}
+            />
+            <Pagination
+              size="small"
+              style={{ marginTop: 12, textAlign: 'right' }}
+              current={archivedPage}
+              pageSize={20}
+              total={archivedTotal}
+              onChange={(p) => setArchivedPage(p)}
             />
           </Card>
         </Col>

@@ -12,6 +12,7 @@ import { SetupModule } from './setup/setup.module';
 import { SkillsModule } from './skills/skills.module';
 import { PricingConfigModule } from './config/pricing-config.module';
 import { StorageModule } from './storage/storage.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { StorageModule } from './storage/storage.module';
     SkillsModule,
     PricingConfigModule,
     StorageModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

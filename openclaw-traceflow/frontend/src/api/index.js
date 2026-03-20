@@ -23,7 +23,7 @@ export const statusApi = {
 };
 
 export const sessionsApi = {
-  list: () => api.get('/sessions').then(res => res.data),
+  list: (params) => api.get('/sessions', { params }).then(res => res.data),
   getDetail: (id) => api.get(`/sessions/${id}`).then(res => res.data),
   kill: (id) => api.post(`/sessions/${id}/kill`).then(res => res.data),
   getConfiguredModels: () => api.get('/sessions/config/models').then(res => res.data),
@@ -49,11 +49,17 @@ export const metricsApi = {
   getLatency: () => api.get('/metrics/latency').then(res => res.data),
   getTools: () => api.get('/metrics/tools').then(res => res.data),
   getTokenSummary: () => api.get('/metrics/token-summary').then(res => res.data),
-  getTokenUsage: () => api.get('/metrics/token-usage').then(res => res.data),
+  getTokenUsage: (params) => api.get('/metrics/token-usage', { params }).then(res => res.data),
   getTokenUsageBySessionKey: (timeRangeMs = 86400000) =>
-    api.get(`/metrics/token-usage-by-session-key?timeRangeMs=${timeRangeMs}`).then(res => res.data),
+    api.get('/metrics/token-usage-by-session-key', { params: { timeRangeMs } }).then(res => res.data),
+  getTokenUsageBySessionKeyPaged: (params) =>
+    api.get('/metrics/token-usage-by-session-key', { params }).then(res => res.data),
   getArchiveCountBySessionKey: () =>
     api.get('/metrics/archive-count-by-session-key').then(res => res.data),
+};
+
+export const dashboardApi = {
+  getOverview: () => api.get('/dashboard/overview').then(res => res.data),
 };
 
 export const actionsApi = {

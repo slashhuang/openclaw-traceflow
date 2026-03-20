@@ -559,7 +559,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    */
   async getHealth(): Promise<OpenClawHealth> {
     try {
-      const response = await fetch(`${this.baseUrl}/health`);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(`${this.baseUrl}/health`, { signal: controller.signal });
+      clearTimeout(timer);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -1299,7 +1302,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         return false;
       }
 
-      fs.unlinkSync(sessionFile.filePath);
+      await fs.promises.unlink(sessionFile.filePath);
       this.logger.log(`Killed session: ${sessionId}`);
       return true;
     } catch (error) {
@@ -1325,7 +1328,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         return [];
       }
 
-      const content = fs.readFileSync(logPath, 'utf-8');
+      const content = await fs.promises.readFile(logPath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim());
 
       // 返回最后 N 行
