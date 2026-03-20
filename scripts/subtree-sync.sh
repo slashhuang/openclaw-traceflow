@@ -11,7 +11,7 @@ cd "$REPO_ROOT"
 
 # 定义 subtree 配置 (使用并行数组保证顺序)
 SUBTREE_DIRS=("claw-family" "futu-openD" "openclaw-traceflow" "external-refs/openclaw")
-SUBTREE_REMOTES=("claw-family-upstream" "futu-openD-upstream" "openclaw-upstream" "openclaw-upstream")
+SUBTREE_REMOTES=("claw-family-upstream" "futu-openD-upstream" "openclaw-traceflow" "openclaw-upstream")
 
 # 获取上游分支名（可配置）
 UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-main}"
