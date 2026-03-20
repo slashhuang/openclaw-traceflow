@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Steps, Form, Input, Button, Space, Row, Col, Typography, message, Tag } from 'antd';
+import { Card, Steps, Form, Input, Button, Space, Row, Col, Typography, message, Tag, Alert } from 'antd';
 import { useIntl } from 'react-intl';
 import { setupApi } from '../api';
 
@@ -9,16 +9,22 @@ export default function SetupWizard({ onComplete }) {
   const [form] = Form.useForm();
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [generatingToken, setGeneratingToken] = useState(false);
   const [connected, setConnected] = useState(false);
 
   const gatewayUrl = Form.useWatch('openclawGatewayUrl', form) || 'http://localhost:18789';
-  const accessMode = Form.useWatch('accessMode', form) || 'local-only';
+  const accessMode = Form.useWatch('accessMode', form) || 'none';
   const accessToken = Form.useWatch('accessToken', form);
 
   const handleTest = async () => {
     const v = await form.validateFields(['openclawGatewayUrl']).catch(() => null);
-    if (!v) return;
+    if (!v) {
+      message.warning('请先填写 Gateway URL');
+      return;
+    }
     setTesting(true);
+    const toastKey = 'setup-test-connection';
+    message.loading({ content: '正在测试连接...', key: toastKey, duration: 0 });
     try {
       const vals = form.getFieldsValue();
       const result = await setupApi.testConnection({
@@ -28,12 +34,12 @@ export default function SetupWizard({ onComplete }) {
       });
       setConnected(!!result.connected);
       if (result.connected) {
-        message.success(result.message || 'OK');
+        message.success({ content: result.message || '连接成功', key: toastKey });
       } else {
-        message.error(result.error || result.message || 'Failed');
+        message.error({ content: result.error || result.message || '连接失败', key: toastKey });
       }
     } catch (e) {
-      message.error(e?.message || 'Error');
+      message.error({ content: e?.message || '连接失败', key: toastKey });
       setConnected(false);
     } finally {
       setTesting(false);
@@ -41,16 +47,24 @@ export default function SetupWizard({ onComplete }) {
   };
 
   const handleGenerate = async () => {
+    setGeneratingToken(true);
+    const toastKey = 'setup-generate-token';
+    message.loading({ content: '正在生成 Token...', key: toastKey, duration: 0 });
     try {
       const r = await setupApi.generateToken();
       form.setFieldsValue({ accessToken: r.token });
+      message.success({ content: 'Token 已生成', key: toastKey });
     } catch (e) {
-      message.error(e?.message || 'Error');
+      message.error({ content: e?.message || '生成 Token 失败', key: toastKey });
+    } finally {
+      setGeneratingToken(false);
     }
   };
 
   const handleFinish = async () => {
     setSaving(true);
+    const toastKey = 'setup-save-config';
+    message.loading({ content: '正在保存配置...', key: toastKey, duration: 0 });
     try {
       const vals = form.getFieldsValue();
       await setupApi.configure({
@@ -60,9 +74,10 @@ export default function SetupWizard({ onComplete }) {
         accessMode: vals.accessMode,
         accessToken: vals.accessMode === 'token' ? vals.accessToken : undefined,
       });
-      onComplete();
+      message.success({ content: intl.formatMessage({ id: 'settings.saveSuccess' }), key: toastKey });
+      setTimeout(() => onComplete(), 300);
     } catch (e) {
-      message.error(e?.message || 'Error');
+      message.error({ content: e?.message || '保存失败', key: toastKey });
     } finally {
       setSaving(false);
     }
@@ -101,7 +116,7 @@ export default function SetupWizard({ onComplete }) {
           layout="vertical"
           initialValues={{
             openclawGatewayUrl: 'http://localhost:18789',
-            accessMode: 'local-only',
+            accessMode: 'none',
           }}
         >
           {step === 0 && (
@@ -131,6 +146,12 @@ export default function SetupWizard({ onComplete }) {
             <>
               <Typography.Title level={5}>{intl.formatMessage({ id: 'setup.step2.title' })}</Typography.Title>
               <Typography.Paragraph type="secondary">{intl.formatMessage({ id: 'setup.step2.desc' })}</Typography.Paragraph>
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message={intl.formatMessage({ id: 'settings.access.scope' })}
+              />
               <Form.Item name="accessMode" label={intl.formatMessage({ id: 'settings.access' })}>
                 <Row gutter={[12, 12]}>
                   {modes.map((m) => (
@@ -152,19 +173,36 @@ export default function SetupWizard({ onComplete }) {
                 </Row>
               </Form.Item>
               {accessMode === 'token' && (
-                <Form.Item
-                  name="accessToken"
-                  label={intl.formatMessage({ id: 'setup.accessToken' })}
-                  rules={[{ required: true, message: 'Required' }]}
-                >
-                  <Input
-                    addonAfter={
-                      <Button type="link" size="small" onClick={handleGenerate} style={{ padding: 0 }}>
-                        {intl.formatMessage({ id: 'setup.generate' })}
-                      </Button>
+                <>
+                  <Form.Item
+                    name="accessToken"
+                    label={intl.formatMessage({ id: 'setup.accessToken' })}
+                    rules={[{ required: true, message: 'Required' }]}
+                  >
+                    <Input
+                      placeholder={intl.formatMessage({ id: 'setup.accessToken.placeholder' })}
+                      addonAfter={
+                        <Button type="link" size="small" onClick={handleGenerate} style={{ padding: 0 }} loading={generatingToken}>
+                          {intl.formatMessage({ id: 'setup.generate' })}
+                        </Button>
+                      }
+                    />
+                  </Form.Item>
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={intl.formatMessage({ id: 'settings.access.tokenHelpTitle' })}
+                    description={
+                      <div>
+                        <Typography.Paragraph style={{ marginBottom: 8 }}>
+                          {intl.formatMessage({ id: 'settings.access.tokenHelpDesc' })}
+                        </Typography.Paragraph>
+                        <Typography.Text code>Authorization: Bearer YOUR_TOKEN</Typography.Text>
+                      </div>
                     }
                   />
-                </Form.Item>
+                </>
               )}
               <Space>
                 <Button onClick={() => setStep(0)}>{intl.formatMessage({ id: 'setup.prev' })}</Button>

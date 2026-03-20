@@ -36,11 +36,39 @@ export class HealthService {
     private skillsService: SkillsService,
   ) {}
 
+  private async collectLocalRuntimeStats(): Promise<{
+    memoryMb: number;
+    cpuPercent: number;
+    uptimeSec: number;
+  }> {
+    const cpuStart = process.cpuUsage();
+    const hrStart = process.hrtime.bigint();
+
+    // 短窗口采样，计算当前进程 CPU 占比（单核口径，可能 >100%）
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    const cpuDiff = process.cpuUsage(cpuStart);
+    const hrDiffNs = Number(process.hrtime.bigint() - hrStart);
+    const elapsedUs = hrDiffNs / 1000;
+    const cpuTotalUs = cpuDiff.user + cpuDiff.system;
+    const cpuPercent = elapsedUs > 0 ? (cpuTotalUs / elapsedUs) * 100 : 0;
+
+    return {
+      memoryMb: Math.round((process.memoryUsage().rss / 1024 / 1024) * 10) / 10,
+      cpuPercent: Math.round(cpuPercent * 10) / 10,
+      uptimeSec: Math.round(process.uptime()),
+    };
+  }
+
   async getHealthStatus(): Promise<HealthStatus> {
+    const localStats = await this.collectLocalRuntimeStats();
     const status: HealthStatus = {
       status: 'HEALTHY',
       gateway: {
         running: false,
+        memory: localStats.memoryMb,
+        cpu: localStats.cpuPercent,
+        uptime: localStats.uptimeSec,
       },
       skills: [],
       apiQuota: {
@@ -73,10 +101,10 @@ export class HealthService {
 
       // 如果返回了详细信息，使用它
       if (health && typeof health === 'object' && 'status' in health) {
-        status.gateway.uptime = (health as any).uptime;
-        status.gateway.memory = (health as any).memoryUsage;
+        status.gateway.uptime = (health as any).uptime ?? status.gateway.uptime;
+        status.gateway.memory = (health as any).memoryUsage ?? status.gateway.memory;
         status.gateway.pid = (health as any).pid;
-        status.gateway.cpu = (health as any).cpu;
+        status.gateway.cpu = (health as any).cpu ?? status.gateway.cpu;
         status.skills = (health as any).skills || [];
 
         if ((health as any).status === 'unhealthy') {

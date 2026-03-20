@@ -1,6 +1,11 @@
 # 🦞 OpenClaw TraceFlow
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](/LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.11.0-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-%3E%3D9.0.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 
 **让 AI 助手更可观测——OpenClaw 追踪流（进行中）**
 
@@ -13,13 +18,69 @@
 >
 > 说明：该项目仍在持续开发中，功能与文档可能会随版本迭代更新。
 >
-> 项目为个人维护（slashhuang），不是 OpenClaw Team。
+---
+
+## 📋 环境要求
+
+启动前请先确认本机版本，避免依赖安装失败或运行报错：
+
+- Node.js：`>= 20.11.0`（推荐 Node.js 20 LTS）
+- pnpm：`>= 9.0.0`（本仓库 lockfile 为 v9）
+- PM2（可选）：若使用 PM2 部署
+
+可用以下命令快速检查：
+
+```bash
+node -v
+pnpm -v
+```
+
+若未安装 pnpm，可执行（更常见）：
+
+```bash
+npm i -g pnpm
+```
+
+> 说明：也可用 Corepack（Node 自带）来启用 pnpm，但这里默认用更常见的全局安装方式，减少陌生概念。
 
 ---
 
-## 🚀 30 秒快速开始
+## 🛠️ 构建与部署
 
-### 方式一：源码运行（开发者）
+### 一键部署命令
+
+| 命令 | 说明 |
+|------|------|
+| `pnpm run build:all` | 构建后端 + 前端全部代码 |
+| `pnpm run deploy:pm2` | **一键 PM2 部署（推荐）**：构建 → PM2 启动（带重启保护） |
+| `pnpm run release` | 构建并打包成 npm 包 |
+
+### PM2 部署（生产环境，推荐）
+
+```bash
+# 一键部署（推荐）
+pnpm run deploy:pm2
+
+# 或手动执行
+pnpm run build:all
+pm2 start dist/main.js --name openclaw-traceflow \
+  --restart-delay=3000 \
+  --max-restarts=10
+```
+
+## 🚀 30 秒快速开始（先部署）
+
+### 方式一：PM2（推荐）
+
+```bash
+# 在 openclaw-traceflow 目录下执行
+pnpm install
+pnpm run deploy:pm2
+```
+
+浏览器打开 `http://localhost:3001`
+
+### 方式二：源码运行（开发者）
 
 ```bash
 # 进入 openclaw-traceflow 目录
@@ -32,27 +93,6 @@ pnpm install
 pnpm run start:dev
 
 # 访问 http://localhost:3001
-```
-
-### 方式二：Docker（推荐）
-
-```bash
-# 在 openclaw-traceflow 目录下执行
-docker run -d --name openclaw-traceflow \
-  -p 3001:3001 \
-  -e OPENCLAW_GATEWAY_URL=http://your-gateway:3000 \
-  -e OPENCLAW_ACCESS_MODE=local-only \
-  -e DATA_DIR=/app/data \
-  -v "$(pwd)/data:/app/data" \
-  clawfamily/openclaw-traceflow:latest
-```
-
-浏览器打开 `http://localhost:3001`
-
-### 方式三：npx（若已发布为 npm 包）
-
-```bash
-npx openclaw-traceflow
 ```
 
 ---
@@ -86,13 +126,13 @@ npx openclaw-traceflow
 
 ## 📸 界面预览
 
-本项目的界面与功能定位参考了 `openclaw-dashboard`，下面截图仅用于帮助理解“布局与数据展示”的直观效果（入口以本仓库实际路由为准）：
+下面截图用于帮助理解本项目的“布局与数据展示”直观效果（入口以本仓库实际路由为准）：
 
-- `../openclaw-dashboard/docs/screenshot.png`（总体预览）
-- `../openclaw-dashboard/docs/overview.png`（概览）
-- `../openclaw-dashboard/docs/sessions.png`（会话）
-- `../openclaw-dashboard/docs/limits.png`（限流/阈值）
-- `../openclaw-dashboard/docs/logs.png`（日志）
+- `./docs/traceFlowSnapshots/screenshot.png`（总体预览）
+- `./docs/traceFlowSnapshots/overview.png`（概览）
+- `./docs/traceFlowSnapshots/sessions.png`（会话）
+- `./docs/traceFlowSnapshots/limits.png`（限流/阈值）
+- `./docs/traceFlowSnapshots/logs.png`（日志）
 
 ## 📊 功能亮点
 
@@ -254,7 +294,7 @@ export function inferInvokedSkillsFromToolCalls(toolCalls) {
 | `OPENCLAW_LOG_PATH` | OpenClaw 输出日志文件路径（可选；Gateway 不可用时的回退） | 无 |
 | `OPENCLAW_CLI` | `openclaw` CLI 可执行文件名（可选，用于写入配置） | `openclaw` |
 | `OPENCLAW_RUNTIME_ACCESS_TOKEN` | Dash/API Access Token（仅在 `OPENCLAW_ACCESS_MODE=token` 时用于 `api/setup/*`） | 无 |
-| `OPENCLAW_ACCESS_MODE` | 访问模式：`local-only` \| `token` \| `none` | `local-only` |
+| `OPENCLAW_ACCESS_MODE` | 访问模式：`local-only` \| `token` \| `none` | `none` |
 | `HOST` | 监听地址 | `127.0.0.1` |
 | `PORT` | 监听端口 | `3001` |
 | `DATA_DIR` | 数据目录（metrics/快照等；相对启动目录） | `./data` |
@@ -360,6 +400,24 @@ Socket.IO 命名空间：`logs`
   - Gateway 不可用且配置了 `OPENCLAW_LOG_PATH` 时才会从本地文件回退读取
 - `token` 模式下无法打开设置页：
   - 因为受保护的是 `api/setup/*`，前端当前不会自动携带 `Authorization`，需要你用带 header 的方式请求或先切回 `local-only`
+- Token 显示为 `0`：
+  <details>
+  <summary>展开查看：可能原因与核对方式（点击可收起）</summary>
+
+  - 常见原因：
+    - 当前会话还没有产生可统计的 token 事件（例如刚启动、仅心跳会话）。
+    - Gateway 返回的会话中缺少 token 字段，或字段值本身就是 `0`。
+    - 你查看的时间窗口内暂无有效数据（例如筛选范围过窄）。
+  - 核对方式（建议按顺序）：
+    - 打开 `Dashboard` 看 `token summary` 是否有总量增长。
+    - 访问 `GET /api/metrics/token-summary`，确认 `active/archived/total` 是否都为 `0`。
+    - 访问 `GET /api/sessions/token-usage`，确认会话级 token 是否有非零记录。
+    - 切换到有真实对话负载的 session，等待 1~2 个轮询周期后刷新再看。
+  - 结论判断：
+    - 如果上述接口也都是 `0`，通常是上游暂未产生日志/指标，不是前端展示问题。
+    - 如果接口有值但页面为 `0`，请提 issue 并附上接口返回片段便于排查。
+
+  </details>
 
 ## 🎯 Roadmap
 
