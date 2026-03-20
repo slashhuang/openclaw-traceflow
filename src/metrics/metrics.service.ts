@@ -328,6 +328,8 @@ export class MetricsService implements OnModuleInit {
    * 按 sessionKey 聚合 token 消耗（进行中 + 归档）
    * 进行中：取最新一条 active 记录的 total_tokens
    * 归档：SUM 所有 archived 记录的 total_tokens
+   * 
+   * 优化：使用 OpenClawService.getSession() 获取模型信息（O(1) 查找）
    */
   async getTokenUsageBySessionKey(timeRangeMs: number = 86400000): Promise<TokenUsageBySessionKey[]> {
     if (!this.db) return [];
@@ -381,12 +383,12 @@ export class MetricsService implements OnModuleInit {
       }
     }
 
-    // 从 OpenClaw sessions 获取模型信息
-    const sessions = await this.openclawService.listSessions();
+    // 从 OpenClaw 缓存获取模型信息（O(1) 查找，不再全量扫描）
     const modelMap = new Map<string, string>();
-    for (const session of sessions) {
-      if (session.model && !modelMap.has(session.sessionKey)) {
-        modelMap.set(session.sessionKey, session.model);
+    for (const sessionKey of sessionKeys) {
+      const session = await this.openclawService.getSession(sessionKey);
+      if (session?.model) {
+        modelMap.set(sessionKey, session.model);
       }
     }
 
