@@ -75,3 +75,7 @@ build/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Runtime data and build outputs
+data/config/snapshot.json
+public/app/
