@@ -10,6 +10,7 @@ import {
   UnorderedListOutlined,
   SettingOutlined,
   ApiOutlined,
+  GithubOutlined,
 } from '@ant-design/icons';
 import { Alert, Button, Dropdown, message, Space, Tag, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -99,6 +100,17 @@ export default function BasicLayout() {
                 : intl.formatMessage({ id: 'gateway.disconnected' })}
             </Tag>
           ),
+          <a
+            key="github"
+            href="https://github.com/slashhuang/openclaw-traceflow"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            aria-label={intl.formatMessage({ id: 'header.github' })}
+          >
+            <GithubOutlined />
+            <span>{intl.formatMessage({ id: 'header.github' })}</span>
+          </a>,
           <Dropdown
             key="lang"
             menu={{

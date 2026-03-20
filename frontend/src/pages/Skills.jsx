@@ -14,6 +14,7 @@ import {
   theme,
   Tooltip as AntdTooltip,
   Select,
+  message,
 } from 'antd';
 import {
   BarChart,
@@ -69,6 +70,7 @@ export default function Skills() {
         setSkillToolUsage(skillToolData || []);
       } catch (e) {
         console.error(e);
+        message.error(e?.message || '技能数据加载失败');
       } finally {
         setLoading(false);
       }

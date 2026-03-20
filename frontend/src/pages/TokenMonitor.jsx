@@ -12,6 +12,7 @@ import {
   Table,
   Tag,
   theme,
+  message,
 } from 'antd';
 import {
   PieChart,
@@ -56,10 +57,15 @@ export default function TokenMonitor() {
   const [bySessionKey, setBySessionKey] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const timeRangeMs = 86400000; // 24h
 
-  const fetchData = async () => {
+  const fetchData = async (showToast = false) => {
+    if (showToast) {
+      setRefreshing(true);
+      message.loading({ content: '正在刷新 Token 监控...', key: 'token-monitor-refresh', duration: 0 });
+    }
     try {
       const [usageRes, alertsRes, listRes, byKeyRes] = await Promise.allSettled([
         fetch('/api/sessions/token-usage'),
@@ -73,10 +79,19 @@ export default function TokenMonitor() {
       const list = listRes.status === 'fulfilled' && listRes.value?.ok ? await listRes.value.json() : [];
       setSessionList(Array.isArray(list) ? list : []);
       setBySessionKey(byKeyRes.status === 'fulfilled' && Array.isArray(byKeyRes.value) ? byKeyRes.value : []);
+      if (showToast) {
+        message.success({ content: 'Token 监控已刷新', key: 'token-monitor-refresh' });
+      }
     } catch (e) {
       console.error(e);
+      if (showToast) {
+        message.error({ content: e?.message || '刷新失败', key: 'token-monitor-refresh' });
+      }
     } finally {
       setLoading(false);
+      if (showToast) {
+        setRefreshing(false);
+      }
     }
   };
 
@@ -126,7 +141,7 @@ export default function TokenMonitor() {
         </div>
         <span>
           <Switch checked={autoRefresh} onChange={setAutoRefresh} /> {intl.formatMessage({ id: 'token.autoRefresh' })}{' '}
-          <Button onClick={fetchData} style={{ marginLeft: 8 }}>{intl.formatMessage({ id: 'common.refresh' })}</Button>
+          <Button onClick={() => fetchData(true)} style={{ marginLeft: 8 }} loading={refreshing}>{intl.formatMessage({ id: 'common.refresh' })}</Button>
         </span>
       </div>
 

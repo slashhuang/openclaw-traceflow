@@ -19,7 +19,7 @@ services:
       # 访问令牌（可选，启用后需要 Bearer Token）
       # - OPENCLAW_RUNTIME_ACCESS_TOKEN=your-secret-token
       # 访问模式：local-only | token | none
-      # - OPENCLAW_ACCESS_MODE=local-only
+      # - OPENCLAW_ACCESS_MODE=none
       # 数据目录
       # - DATA_DIR=/app/data
       # PM2 日志路径（需要挂载宿主机的 PM2 日志）

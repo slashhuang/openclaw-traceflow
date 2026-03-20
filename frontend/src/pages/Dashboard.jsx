@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useIntl } from 'react-intl';
 import {
@@ -200,7 +200,7 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [healthData, statusData, sessionsData, logsData, latencyData, toolsData, tokenSummaryData, tokenUsageData, tokenByKeyData, archiveCountMap] =
         await Promise.all([
@@ -239,13 +239,13 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     const t = setInterval(fetchData, 3000);
     return () => clearInterval(t);
-  }, []);
+  }, [fetchData]);
 
   if (loading) {
     return (
@@ -369,7 +369,7 @@ export default function Dashboard() {
             </Typography.Paragraph>
             <Typography.Paragraph style={{ marginBottom: 4 }}>
               <Tooltip title={intl.formatMessage({ id: 'dashboard.healthMemoryDesc' })}>
-                <span style={{ cursor: 'help' }}>Memory: {health?.gateway?.memory ? `${Math.round(health.gateway.memory / 1024 / 1024)} MB` : '—'}</span>
+                <span style={{ cursor: 'help' }}>Memory: {health?.gateway?.memory != null ? `${Math.round(health.gateway.memory)} MB` : '—'}</span>
               </Tooltip>
             </Typography.Paragraph>
             <Typography.Paragraph style={{ marginBottom: 0 }}>

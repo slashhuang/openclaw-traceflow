@@ -33,7 +33,7 @@ export function LocaleThemeProvider({ children }) {
       const v = localStorage.getItem(STORAGE_THEME);
       if (v === 'light' || v === 'dark' || v === 'system') return v;
     } catch (_) {}
-    return 'system';
+    return 'dark';
   });
 
   const [systemDark, setSystemDark] = useState(getSystemDark);
