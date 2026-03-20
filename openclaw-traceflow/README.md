@@ -70,35 +70,6 @@ pm2 start dist/main.js --name openclaw-traceflow \
   --max-restarts=10
 ```
 
-## 🚀 30 秒快速开始（先部署）
-
-### 方式一：PM2（推荐）
-
-```bash
-# 在 openclaw-traceflow 目录下执行
-pnpm install
-pnpm run deploy:pm2
-```
-
-浏览器打开 `http://localhost:3001`
-
-### 方式二：源码运行（开发者）
-
-```bash
-# 进入 openclaw-traceflow 目录
-cd openclaw-traceflow
-
-# 安装依赖并启动
-pnpm install
-
-# 启动
-pnpm run start:dev
-
-# 访问 http://localhost:3001
-```
-
----
-
 ## ✨ 核心能力
 
 | 能力 | Control-UI | OpenClaw TraceFlow | 优势 |
@@ -135,6 +106,33 @@ pnpm run start:dev
 ![Session Detail](./docs/traceFlowSnapshots/session-detail.png)
 ![Skills](./docs/traceFlowSnapshots/skills.png)
 ![Tokens](./docs/traceFlowSnapshots/tokens.png)
+
+## 🚀 30 秒快速开始
+
+### 方式一：PM2（推荐）
+
+```bash
+# 在 openclaw-traceflow 目录下执行
+pnpm install
+pnpm run deploy:pm2
+```
+
+浏览器打开 `http://localhost:3001`
+
+### 方式二：源码运行（开发者）
+
+```bash
+# 进入 openclaw-traceflow 目录
+cd openclaw-traceflow
+
+# 安装依赖并启动
+pnpm install
+
+# 启动
+pnpm run start:dev
+
+# 访问 http://localhost:3001
+```
 
 ## 📊 功能亮点
 
