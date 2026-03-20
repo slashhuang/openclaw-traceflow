@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "lastUpdated": null,
+  "note": "Custom model pricing overrides. Only include models you want to override from defaults.",
+  "models": {
+    "// Example": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    }
+  }
+}

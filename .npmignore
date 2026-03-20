@@ -1,0 +1,10 @@
+dist/
+node_modules/
+data/
+config/*.json
+*.log
+.pm2/
+coverage/
+.env
+.env.local
+.DS_Store
