@@ -11,6 +11,7 @@ import { ActionsModule } from './actions/actions.module';
 import { SetupModule } from './setup/setup.module';
 import { SkillsModule } from './skills/skills.module';
 import { PricingConfigModule } from './config/pricing-config.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PricingConfigModule } from './config/pricing-config.module';
     SetupModule,
     SkillsModule,
     PricingConfigModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],
