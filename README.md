@@ -295,7 +295,7 @@ export function inferInvokedSkillsFromToolCalls(toolCalls) {
 | `OPENCLAW_CLI` | `openclaw` CLI 可执行文件名（可选，用于写入配置） | `openclaw` |
 | `OPENCLAW_RUNTIME_ACCESS_TOKEN` | Dash/API Access Token（仅在 `OPENCLAW_ACCESS_MODE=token` 时用于 `api/setup/*`） | 无 |
 | `OPENCLAW_ACCESS_MODE` | 访问模式：`local-only` \| `token` \| `none` | `none` |
-| `HOST` | 监听地址 | `127.0.0.1` |
+| `HOST` | 监听地址 | `0.0.0.0`（支持 IP 访问） |
 | `PORT` | 监听端口 | `3001` |
 | `DATA_DIR` | 数据目录（metrics/快照等；相对启动目录） | `./data` |
 
