@@ -230,3 +230,4 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 | `self-improving-agent` | TS | 自我学习与改进 |
 | `code-sync` | TS | 代码同步 |
 | `inspiration-hub` | TS | 灵感中心 |
+| `traceflow-deploy` | Shell | 部署/启动 openclaw-traceflow（默认 PM2） |
