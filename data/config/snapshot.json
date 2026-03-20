@@ -3,6 +3,5 @@
   "port": 3001,
   "openclawGatewayUrl": "http://localhost:18789",
   "accessMode": "none",
-  "dataDir": "/Users/huangxiaogang/claw-sources/openclaw-traceflow/data",
-  "openclawGatewayToken": "[REDACTED]"
+  "dataDir": "/Users/huangxiaogang/claw-sources/openclaw-traceflow/data"
 }
