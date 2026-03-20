@@ -72,6 +72,8 @@ Thumbs.db
 
 # Build output
 build/
+frontend/dist/
+frontend/.vite/
 
 # TypeScript cache
 *.tsbuildinfo
