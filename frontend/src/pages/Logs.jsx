@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { Card, Select, Button, Space, Typography, Spin, theme } from 'antd';
+import { Card, Select, Button, Space, Typography, Spin, theme, message } from 'antd';
 import { useIntl } from 'react-intl';
 import { logsApi } from '../api';
 
@@ -22,6 +22,7 @@ export default function Logs() {
         setLogs(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error(e);
+        message.error(e?.message || '日志加载失败');
       } finally {
         setLoading(false);
       }
@@ -97,7 +98,15 @@ export default function Logs() {
           >
             {intl.formatMessage({ id: 'logs.scrollBottom' })}
           </Button>
-          <Button danger onClick={() => setLogs([])}>{intl.formatMessage({ id: 'logs.clear' })}</Button>
+          <Button
+            danger
+            onClick={() => {
+              setLogs([]);
+              message.success('日志已清空');
+            }}
+          >
+            {intl.formatMessage({ id: 'logs.clear' })}
+          </Button>
         </Space>
       </div>
       <Card styles={{ body: { padding: 12 } }}>

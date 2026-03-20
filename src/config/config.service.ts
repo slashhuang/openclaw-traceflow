@@ -50,7 +50,7 @@ export class ConfigService {
       openclawGatewayUrl: 'http://localhost:18789',
       /** 留空则由 OpenClawService 通过 CLI / 环境变量自动解析 */
       openclawStateDir: undefined,
-      accessMode: 'local-only',
+      accessMode: 'none',
       dataDir: path.join(realCwd, 'data'),
       /** OpenClaw 日志路径，需用户配置（OpenClaw 输出到该文件） */
       openclawLogPath: undefined,

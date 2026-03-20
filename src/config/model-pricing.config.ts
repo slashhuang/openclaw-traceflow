@@ -11,10 +11,10 @@ export interface ModelPricing {
 
 /**
  * 2026 年主流模型价格表（USD per million tokens）
- * 只保留最常用的国内外大模型
+ * 只保留最常用的中国/海外大模型
  *
- * 国内：通义千问、DeepSeek、Kimi
- * 国外：Anthropic Claude、OpenAI GPT、Google Gemini
+ * 中国：通义千问、DeepSeek、Kimi
+ * 海外：Anthropic Claude、OpenAI GPT、Google Gemini
  */
 export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
   // ========== Anthropic Claude 系列 ==========

@@ -52,6 +52,11 @@ export default function Pricing() {
   const [searchText, setSearchText] = useState('');
   const [showCustomOnly, setShowCustomOnly] = useState(false);
   const [activeTab, setActiveTab] = useState('used');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [savingAdd, setSavingAdd] = useState(false);
+  const [deletingModel, setDeletingModel] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // 获取用户实际使用的模型列表（从 sessions + 配置文件）
   const fetchUsedModels = async () => {
@@ -87,7 +92,11 @@ export default function Pricing() {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (showToast = false) => {
+    if (showToast) {
+      setRefreshing(true);
+      message.loading({ content: '正在刷新价格配置...', key: 'pricing-refresh', duration: 0 });
+    }
     try {
       const [pricesRes, configRes] = await Promise.all([
         pricingApi.getAll(),
@@ -96,11 +105,21 @@ export default function Pricing() {
       setPrices(pricesRes);
       setConfig(configRes);
       await fetchUsedModels();
+      if (showToast) {
+        message.success({ content: '价格配置已刷新', key: 'pricing-refresh' });
+      }
     } catch (error) {
       console.error('Failed to fetch pricing:', error);
-      message.error(intl.formatMessage({ id: 'pricing.message.loadError' }));
+      if (showToast) {
+        message.error({ content: intl.formatMessage({ id: 'pricing.message.loadError' }), key: 'pricing-refresh' });
+      } else {
+        message.error(intl.formatMessage({ id: 'pricing.message.loadError' }));
+      }
     } finally {
       setLoading(false);
+      if (showToast) {
+        setRefreshing(false);
+      }
     }
   };
 
@@ -126,6 +145,9 @@ export default function Pricing() {
   };
 
   const handleSave = async () => {
+    setSavingEdit(true);
+    const toastKey = 'pricing-update-model';
+    message.loading({ content: '正在保存模型价格...', key: toastKey, duration: 0 });
     try {
       const values = await form.validateFields();
       await pricingApi.updateModelPrice(editingModel, {
@@ -134,15 +156,25 @@ export default function Pricing() {
         cacheRead: values.cacheRead,
         cacheWrite: values.cacheWrite,
       });
-      message.success(intl.formatMessage({ id: 'pricing.message.updateSuccess' }));
+      message.success({ content: intl.formatMessage({ id: 'pricing.message.updateSuccess' }), key: toastKey });
       setModalVisible(false);
-      fetchData();
+      await fetchData();
     } catch (error) {
       console.error('Failed to update price:', error);
+      if (!error?.errorFields) {
+        message.error({ content: intl.formatMessage({ id: 'pricing.message.loadError' }), key: toastKey });
+      } else {
+        message.destroy(toastKey);
+      }
+    } finally {
+      setSavingEdit(false);
     }
   };
 
   const handleAddSubmit = async () => {
+    setSavingAdd(true);
+    const toastKey = 'pricing-add-model';
+    message.loading({ content: '正在新增模型价格...', key: toastKey, duration: 0 });
     try {
       const values = await addForm.validateFields();
       await pricingApi.updateModelPrice(values.modelName, {
@@ -151,31 +183,50 @@ export default function Pricing() {
         cacheRead: values.cacheRead,
         cacheWrite: values.cacheWrite,
       });
-      message.success(intl.formatMessage({ id: 'pricing.message.addSuccess' }));
+      message.success({ content: intl.formatMessage({ id: 'pricing.message.addSuccess' }), key: toastKey });
       setAddModalVisible(false);
-      fetchData();
+      await fetchData();
     } catch (error) {
       console.error('Failed to add model:', error);
+      if (!error?.errorFields) {
+        message.error({ content: intl.formatMessage({ id: 'pricing.message.loadError' }), key: toastKey });
+      } else {
+        message.destroy(toastKey);
+      }
+    } finally {
+      setSavingAdd(false);
     }
   };
 
   const handleDelete = async (modelName) => {
+    setDeletingModel(modelName);
+    const toastKey = 'pricing-delete-model';
+    message.loading({ content: '正在删除模型价格...', key: toastKey, duration: 0 });
     try {
       await pricingApi.removeModelPrice(modelName);
-      message.success(intl.formatMessage({ id: 'pricing.message.deleteSuccess' }));
-      fetchData();
+      message.success({ content: intl.formatMessage({ id: 'pricing.message.deleteSuccess' }), key: toastKey });
+      await fetchData();
     } catch (error) {
       console.error('Failed to delete:', error);
+      message.error({ content: intl.formatMessage({ id: 'pricing.message.loadError' }), key: toastKey });
+    } finally {
+      setDeletingModel('');
     }
   };
 
   const handleReset = async () => {
+    setResetting(true);
+    const toastKey = 'pricing-reset-defaults';
+    message.loading({ content: '正在恢复默认价格...', key: toastKey, duration: 0 });
     try {
       await pricingApi.resetToDefaults();
-      message.success(intl.formatMessage({ id: 'pricing.message.resetSuccess' }));
-      fetchData();
+      message.success({ content: intl.formatMessage({ id: 'pricing.message.resetSuccess' }), key: toastKey });
+      await fetchData();
     } catch (error) {
       console.error('Failed to reset:', error);
+      message.error({ content: intl.formatMessage({ id: 'pricing.message.loadError' }), key: toastKey });
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -227,12 +278,12 @@ export default function Pricing() {
         return 0;
       });
     } else if (activeTab === 'domestic') {
-      // 国内模型
+      // 中国模型
       entries = entries.filter(([modelName]) => {
         return getModelCategory(modelName).group === 'domestic';
       });
     } else if (activeTab === 'foreign') {
-      // 国外模型
+      // 海外模型
       entries = entries.filter(([modelName]) => {
         return getModelCategory(modelName).group === 'foreign';
       });
@@ -335,7 +386,7 @@ export default function Pricing() {
               okText={intl.formatMessage({ id: 'common.yes' })}
               cancelText={intl.formatMessage({ id: 'common.cancel' })}
             >
-              <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} loading={deletingModel === record.model} />
             </Popconfirm>
           )}
         </Space>
@@ -389,7 +440,7 @@ export default function Pricing() {
           )}
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={fetchData}>
+          <Button icon={<ReloadOutlined />} onClick={() => fetchData(true)} loading={refreshing}>
             {intl.formatMessage({ id: 'common.refresh' })}
           </Button>
           <Button icon={<PlusOutlined />} onClick={handleAdd}>
@@ -402,7 +453,7 @@ export default function Pricing() {
             okText={intl.formatMessage({ id: 'common.yes' })}
             cancelText={intl.formatMessage({ id: 'common.cancel' })}
           >
-            <Button danger>{intl.formatMessage({ id: 'pricing.resetDefaults' })}</Button>
+            <Button danger loading={resetting}>{intl.formatMessage({ id: 'pricing.resetDefaults' })}</Button>
           </Popconfirm>
         </Space>
       </div>
@@ -454,6 +505,7 @@ export default function Pricing() {
         title={intl.formatMessage({ id: 'pricing.modal.editTitle' }, { model: editingModel })}
         open={modalVisible}
         onOk={handleSave}
+        okButtonProps={{ loading: savingEdit }}
         onCancel={() => setModalVisible(false)}
         width={450}
       >
@@ -518,6 +570,7 @@ export default function Pricing() {
         title={intl.formatMessage({ id: 'pricing.modal.addTitle' })}
         open={addModalVisible}
         onOk={handleAddSubmit}
+        okButtonProps={{ loading: savingAdd }}
         onCancel={() => setAddModalVisible(false)}
         width={450}
       >
