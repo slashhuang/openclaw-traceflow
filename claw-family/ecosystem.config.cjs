@@ -75,6 +75,10 @@ module.exports = {
         NODE_ENV: 'production',
         OPENCLAW_ENV: 'production',
         NODE_OPTIONS: '--max-old-space-size=2048',
+        // OpenClaw 在「完整进程重启」时会 fork 子进程并让当前进程 exit(0)；PM2 托管的是父进程，
+        // 父进程退出会被 PM2 当成崩溃而再次拉起 start-openclaw.sh，与内部重启叠加形成循环。
+        // 设为 1 时改为进程内重启，父进程不退出，与 PM2 兼容。见 external-refs/openclaw/src/infra/process-respawn.ts
+        OPENCLAW_NO_RESPAWN: '1',
       },
       // 开发环境
       env_dev: envConfigs.dev,
