@@ -15,7 +15,11 @@ import {
 import { useIntl } from 'react-intl';
 import { ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined } from '@ant-design/icons';
 import { sessionsApi, metricsApi } from '../api';
-import { inferSessionTypeLabel, inferSessionChatKind } from '../utils/session-user';
+import {
+  inferSessionTypeLabel,
+  inferSessionChatKind,
+  formatSessionParticipantDisplay,
+} from '../utils/session-user';
 
 function formatDuration(ms) {
   if (!ms) return '—';
@@ -116,9 +120,7 @@ export default function Sessions() {
         case 'status':
           return String(s.status || '').toLowerCase();
         case 'user': {
-          const typeLabel = s.typeLabel || inferSessionTypeLabel(s.sessionKey, s.sessionId);
-          const sys = ['heartbeat', 'cron', 'boot'].includes(typeLabel);
-          return sys ? typeLabel : String(s.user || '').toLowerCase();
+          return String(formatSessionParticipantDisplay(s).toLowerCase());
         }
         default:
           return 0;
@@ -279,26 +281,28 @@ export default function Sessions() {
     },
     {
       title: (
-        <SortableTitle
-          label={intl.formatMessage({ id: 'sessions.column.user' })}
-          active={sortKey === 'user'}
-          order={sortOrder}
-          onClick={() => {
-            if (sortKey !== 'user') {
-              setSortKey('user');
-              setSortOrder('asc');
-            } else {
-              setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
-            }
-          }}
-        />
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.participantTooltip' })}>
+          <span style={{ cursor: 'help' }}>
+            <SortableTitle
+              label={intl.formatMessage({ id: 'sessions.column.user' })}
+              active={sortKey === 'user'}
+              order={sortOrder}
+              onClick={() => {
+                if (sortKey !== 'user') {
+                  setSortKey('user');
+                  setSortOrder('asc');
+                } else {
+                  setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+                }
+              }}
+            />
+          </span>
+        </Tooltip>
       ),
       key: 'user',
       width: 170,
       render: (_, r) => {
-        const typeLabel = r.typeLabel || inferSessionTypeLabel(r.sessionKey, r.sessionId);
-        const sys = typeLabel === 'heartbeat' || typeLabel === 'cron' || typeLabel === 'boot';
-        const v = sys ? typeLabel : r.user || '—';
+        const v = formatSessionParticipantDisplay(r);
         return (
           <Link
             to={`/sessions/${encodeURIComponent(r.sessionId)}`}

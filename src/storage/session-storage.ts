@@ -11,6 +11,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import type { OpenClawSession } from '../openclaw/openclaw.service';
+import { formatParticipantSummary, isPlaceholderParticipantId } from '../common/participant-summary';
+
+/** 参与者扫描逻辑升级时递增，使内存缓存命中后仍会重扫 transcript */
+const TRANSCRIPT_PARTICIPANT_SCAN_VERSION = 3;
 
 /**
  * 会话数据接口（KV 存储的 value）
@@ -161,7 +165,8 @@ export class FileSystemSessionStorage implements SessionStorage {
             cachedMeta.mtimeMs === stats.mtimeMs &&
             cachedSession &&
             cachedSession.messageCount != null &&
-            cachedSession.transcriptFileSizeBytes != null
+            cachedSession.transcriptFileSizeBytes != null &&
+            cachedSession.transcriptParticipantScanVersion === TRANSCRIPT_PARTICIPANT_SCAN_VERSION
           ) {
             newCache.set(sessionKey, cachedSession);
             continue;
@@ -279,8 +284,8 @@ export class FileSystemSessionStorage implements SessionStorage {
       
       let userId: string = 'unknown';
       let sessionData: Record<string, unknown> | null = null;
-      
-      // 读取首行获取 user
+
+      // 读取首行获取 user（索引元数据）
       const firstLine = allLines[0];
       if (firstLine) {
         try {
@@ -291,20 +296,32 @@ export class FileSystemSessionStorage implements SessionStorage {
         }
       }
 
-      // 若首行无 user，从前几条消息中提取 sender
-      if (userId === 'unknown' && allLines.length > 1) {
-        for (let i = 1; i < Math.min(allLines.length, 15); i++) {
-          try {
-            const entry = JSON.parse(allLines[i]);
-            const sender = this.extractSenderFromMessageEntry(entry);
-            if (sender) {
-              userId = sender;
-              break;
-            }
-          } catch {
-            /* ignore */
+      // 全量扫描：消息条数 + 去重参与者（群聊多人时列表列需展示多人摘要）
+      const distinctSenders: string[] = [];
+      const senderSeen = new Set<string>();
+      let messageCount = 0;
+      for (const line of allLines) {
+        try {
+          const entry = JSON.parse(line) as { message?: unknown };
+          if (entry?.message != null) messageCount++;
+          const sender = this.extractSenderFromMessageEntry(entry);
+          if (!sender) continue;
+          const t = sender.trim();
+          if (!t || t.length > 200) continue;
+          if (!senderSeen.has(t)) {
+            senderSeen.add(t);
+            distinctSenders.push(t);
           }
+        } catch {
+          /* ignore */
         }
+      }
+
+      const participantSummary = formatParticipantSummary(distinctSenders);
+
+      const humanSenders = distinctSenders.filter((t) => !isPlaceholderParticipantId(t));
+      if (humanSenders.length >= 1 && isPlaceholderParticipantId(userId)) {
+        userId = humanSenders[0];
       }
 
       // 解析 token usage
@@ -373,16 +390,6 @@ export class FileSystemSessionStorage implements SessionStorage {
         systemSent = this.inferSystemSentFromTranscript(allLines);
       }
 
-      let messageCount = 0;
-      for (const line of allLines) {
-        try {
-          const entry = JSON.parse(line) as { message?: unknown };
-          if (entry?.message != null) messageCount++;
-        } catch {
-          /* ignore */
-        }
-      }
-
       const sessionKey = meta?.storeKey ?? `${agent}/${sessionId}`;
       const actualStats = stats || await fs.promises.stat(filePath);
 
@@ -401,6 +408,9 @@ export class FileSystemSessionStorage implements SessionStorage {
         usageCost,
         messageCount,
         transcriptFileSizeBytes: actualStats.size,
+        transcriptParticipantScanVersion: TRANSCRIPT_PARTICIPANT_SCAN_VERSION,
+        ...(humanSenders.length > 0 ? { participantIds: humanSenders } : {}),
+        ...(participantSummary ? { participantSummary } : {}),
         fileMeta: {
           size: actualStats.size,
           mtimeMs: actualStats.mtimeMs,
@@ -433,7 +443,10 @@ export class FileSystemSessionStorage implements SessionStorage {
     if (typeof msg.senderLabel === 'string' && msg.senderLabel.trim()) {
       return msg.senderLabel.trim();
     }
-    
+    if (typeof msg.sender === 'string' && msg.sender.trim()) {
+      return msg.sender.trim();
+    }
+
     if (msg.role !== 'user') return null;
     
     const content = msg.content;
@@ -467,6 +480,20 @@ export class FileSystemSessionStorage implements SessionStorage {
       try {
         const obj = JSON.parse(senderBlockMatch[1]);
         const v = obj?.label || obj?.name || obj?.username || obj?.e164 || obj?.id;
+        if (typeof v === 'string' && v.trim()) return v.trim();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // Conversation info 块（与 openclaw.service extractSenderFromMessageContent 对齐）
+    const convBlockMatch = trimmed.match(
+      /Conversation info \(untrusted metadata\):\s*\n```json\s*\n([\s\S]*?)\n```/
+    );
+    if (convBlockMatch) {
+      try {
+        const obj = JSON.parse(convBlockMatch[1]);
+        const v = obj?.sender;
         if (typeof v === 'string' && v.trim()) return v.trim();
       } catch {
         /* ignore */
