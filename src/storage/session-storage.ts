@@ -152,15 +152,18 @@ export class FileSystemSessionStorage implements SessionStorage {
           const stats = await fs.promises.stat(filePath);
           const sessionKey = sessionsMeta.get(sessionId)?.storeKey ?? `${agent}/${sessionId}`;
 
-          // 增量扫描：只读取新增/变更的文件
+          // 增量扫描：只读取新增/变更的文件（或缓存缺 messageCount / 文件大小时重扫）
           const cachedMeta = this.fileMetaCache.get(filePath);
-          if (cachedMeta && 
-              cachedMeta.size === stats.size && 
-              cachedMeta.mtimeMs === stats.mtimeMs &&
-              this.cache.has(sessionKey)) {
-            // 文件未变更，复用缓存
-            const cached = this.cache.get(sessionKey)!;
-            newCache.set(sessionKey, cached);
+          const cachedSession = this.cache.get(sessionKey);
+          if (
+            cachedMeta &&
+            cachedMeta.size === stats.size &&
+            cachedMeta.mtimeMs === stats.mtimeMs &&
+            cachedSession &&
+            cachedSession.messageCount != null &&
+            cachedSession.transcriptFileSizeBytes != null
+          ) {
+            newCache.set(sessionKey, cachedSession);
             continue;
           }
 
@@ -370,6 +373,16 @@ export class FileSystemSessionStorage implements SessionStorage {
         systemSent = this.inferSystemSentFromTranscript(allLines);
       }
 
+      let messageCount = 0;
+      for (const line of allLines) {
+        try {
+          const entry = JSON.parse(line) as { message?: unknown };
+          if (entry?.message != null) messageCount++;
+        } catch {
+          /* ignore */
+        }
+      }
+
       const sessionKey = meta?.storeKey ?? `${agent}/${sessionId}`;
       const actualStats = stats || await fs.promises.stat(filePath);
 
@@ -386,6 +399,8 @@ export class FileSystemSessionStorage implements SessionStorage {
         model,
         tokenUsage,
         usageCost,
+        messageCount,
+        transcriptFileSizeBytes: actualStats.size,
         fileMeta: {
           size: actualStats.size,
           mtimeMs: actualStats.mtimeMs,

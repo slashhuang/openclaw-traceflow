@@ -1,6 +1,22 @@
-# 运行时配置
+# Runtime configuration / 运行时配置
 
-## `openclaw.runtime.json`（本地，勿提交仓库）
+## English
+
+- **`openclaw.runtime.json`** is **local-only** and **gitignored**. Copy from the example:
+
+  ```bash
+  cp config/openclaw.runtime.example.json config/openclaw.runtime.json
+  ```
+
+- **`dataDir`**: Do not commit absolute paths. If omitted, data lives under **`./data` relative to the process cwd** (same as when you run `pnpm run start:dev`). Override with `dataDir` in this file or with the **`DATA_DIR`** env var (env wins).
+
+- **Secrets** (Gateway token/password, access token) should prefer **environment variables** (e.g. `OPENCLAW_GATEWAY_TOKEN`) over committed JSON.
+
+---
+
+## 中文
+
+### `openclaw.runtime.json`（本地，勿提交仓库）
 
 首次使用请复制示例：
 
@@ -8,14 +24,14 @@
 cp config/openclaw.runtime.example.json config/openclaw.runtime.json
 ```
 
-再按需编辑。`openclaw.runtime.json` 已列入 `.gitignore`，避免把本机路径、Token 等推送到开源仓库。
+再按需编辑。该文件已列入 `.gitignore`，避免把本机路径、Token 等推送到远程。
 
-## `dataDir`（数据目录）
+### `dataDir`（数据目录）
 
-- **不要**在示例或共享配置里写死绝对路径。
-- **省略 `dataDir`**：使用进程**启动时工作目录**下的 `./data`（与 `pnpm run start:dev` 时 `cwd` 一致）。
+- **不要**在示例或共享配置里写死绝对路径。  
+- **省略 `dataDir`**：使用进程**启动时工作目录**下的 `./data`（与 `pnpm run start:dev` 的 `cwd` 一致）。  
 - 需要固定目录时：在本机 `openclaw.runtime.json` 里写 `dataDir`，或设置环境变量 **`DATA_DIR`**（优先级更高）。
 
-## 敏感配置
+### 敏感配置
 
-Gateway Token / Password、Access Token 等请优先用环境变量（如 `OPENCLAW_GATEWAY_TOKEN`），不要写入会提交的 JSON。
+Gateway Token / Password、Access Token 等请优先用环境变量（如 `OPENCLAW_GATEWAY_TOKEN`），不要写入会被提交的 JSON。

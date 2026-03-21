@@ -25,6 +25,12 @@ export class SessionsController {
     return this.sessionsService.listSessionsPaged(page, pageSize, filter);
   }
 
+  /** 静态子路径放在 :id 之前，避免被误匹配 */
+  @Get('config/models')
+  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
+    return this.sessionsService.getConfiguredModels();
+  }
+
   @Get(':id')
   async getSession(@Param('id') id: string): Promise<SessionDetail | null> {
     return this.sessionsService.getSessionById(id);
@@ -42,10 +48,5 @@ export class SessionsController {
   async killSession(@Param('id') id: string): Promise<{ success: boolean }> {
     const success = await this.sessionsService.killSession(id);
     return { success };
-  }
-
-  @Get('config/models')
-  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
-    return this.sessionsService.getConfiguredModels();
   }
 }

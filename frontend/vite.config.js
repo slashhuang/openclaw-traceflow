@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+/** 开发时 /api 代理目标；若 3001 不是本项目的 Nest（例如跑了别的 Monitor），可设为 TraceFlow 实际端口 */
+const API_PROXY_TARGET = process.env.VITE_API_PROXY_TARGET || 'http://localhost:3001'
+
 export default defineConfig({
   plugins: [react()],
   root: '.',
@@ -15,11 +18,11 @@ export default defineConfig({
     port: 3002,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: API_PROXY_TARGET,
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://localhost:3001',
+        target: API_PROXY_TARGET,
         changeOrigin: true,
         ws: true,
       },

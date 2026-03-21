@@ -4,12 +4,8 @@ import {
   resolveOpenClawPaths,
   type OpenClawResolvedPaths,
 } from './openclaw-paths.resolver';
-import { fetchRuntimePathsFromGateway } from './gateway-ws-paths';
-import {
-  callGatewayRpc,
-  fetchStatusOverview,
-  type StatusOverviewResult,
-} from './gateway-rpc';
+import { type StatusOverviewResult } from './gateway-rpc';
+import { GatewayConnectionService } from './gateway-connection.service';
 import {
   buildBreakdownFromReport,
   parseSystemPromptSections,
@@ -111,6 +107,11 @@ export interface OpenClawSession {
     total: number;
   };
 
+  /** JSONL 中带 entry.message 的行数（与详情页 messages 口径一致） */
+  messageCount?: number;
+  /** 当前会话 transcript .jsonl 文件大小（字节） */
+  transcriptFileSizeBytes?: number;
+
   /**
    * tokens 计数口径/数据来源说明。
    * 用于在 tokens=0 等情况下给用户一个可核验的解释。
@@ -137,6 +138,8 @@ export interface OpenClawSession {
     sessionLogAbsolutePath?: string;
     /** 同 agent 下 sessions.json 相对状态根路径（agents/&lt;agent&gt;/sessions/sessions.json） */
     sessionsIndexRelativePath?: string;
+    /** 与 transcriptFileSizeBytes 同源，便于前端在顶层字段缺失时回退展示 */
+    sessionLogFileSizeBytes?: number;
   };
 }
 
@@ -178,7 +181,38 @@ export interface OpenClawSessionDetail extends OpenClawSession {
     timestamp: number;
     payload: any;
   }>;
+  /** 当前会话 .jsonl 日志文件大小（字节），便于前端展示预期 */
+  transcriptFileSizeBytes: number;
+  /**
+   * full：整文件读入并逐行解析；
+   * head_tail：文件超过阈值时仅读取首尾字节窗口，只解析首部/尾部分片内的 JSONL 行（消息列表仅反映尾部）
+   */
+  transcriptParseMode: 'full' | 'head_tail';
+  /** 全量解析时的 JSONL 行数（非空行） */
+  transcriptJsonlLineCount?: number;
+  /** 首尾模式：头部分片内解析到的 JSONL 行数（用于元信息/首条 user 等） */
+  transcriptHeadJsonlLineCount?: number;
+  /** 首尾模式：尾部分片内解析到的 JSONL 行数（消息/工具主要来自此段） */
+  transcriptTailJsonlLineCount?: number;
 }
+
+type SessionJsonlScan = {
+  messages: OpenClawSessionDetail['messages'];
+  toolCalls: OpenClawSessionDetail['toolCalls'];
+  events: OpenClawSessionDetail['events'];
+  firstUserData: any;
+  tokenUsage: any;
+  transcriptUsageObserved: boolean;
+  sumInput: number;
+  sumOutput: number;
+  lastTotal: number;
+  hasCostField: boolean;
+  sumCostInput: number;
+  sumCostOutput: number;
+  sumCostCacheRead: number;
+  sumCostCacheWrite: number;
+  sumCostTotal: number;
+};
 
 export interface OpenClawHealth {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -322,10 +356,19 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private static readonly SYNC_INTERVAL_MS = 10_000;
   /** 缓存 TTL（毫秒） */
   private static readonly CACHE_TTL_MS = 10_000;
+  /** 小于此大小的 .jsonl 一次性读入并全量解析 */
+  private static readonly SESSION_JSONL_FULL_SCAN_MAX_BYTES = 5 * 1024 * 1024;
+  /** 大文件时读取文件头部字节数（用于首条 user / 元信息） */
+  private static readonly SESSION_JSONL_HEAD_MAX_BYTES = 128 * 1024;
+  /** 大文件时读取文件尾部字节数（近期消息、usage 多在尾部） */
+  private static readonly SESSION_JSONL_TAIL_MAX_BYTES = 16 * 1024 * 1024;
   /** Promise 级别缓存（防并发重复） */
   private pendingRefresh: Promise<void> | null = null;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private gatewayConnection: GatewayConnectionService,
+  ) {
     this.baseUrl = this.configService.getConfig().openclawGatewayUrl;
     this.sessionStorage = new FileSystemSessionStorage();
   }
@@ -504,12 +547,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
     const token = cfg.openclawGatewayToken?.trim();
     const password = cfg.openclawGatewayPassword?.trim();
-    const result = await fetchRuntimePathsFromGateway({
-      gatewayHttpUrl: gatewayUrl,
-      token: token || undefined,
-      password: password || undefined,
-      timeoutMs: 5000,
-    });
+    const result = await this.gatewayConnection.fetchRuntimePaths();
 
     if (result.ok) {
       return { connected: true };
@@ -541,17 +579,72 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     if (!gatewayUrl) {
       return null;
     }
-    const result = await fetchStatusOverview({
-      gatewayHttpUrl: gatewayUrl,
-      token: cfg.openclawGatewayToken || undefined,
-      password: cfg.openclawGatewayPassword || undefined,
-      timeoutMs: 8000,
-    });
-    if (result.ok) {
-      return result.payload;
+    const seq = await this.gatewayConnection.runSequence([
+      { method: 'status', methodParams: {} },
+      { method: 'usage.status', methodParams: {} },
+    ]);
+    if (seq.ok) {
+      const [statusPayload, usagePayload] = seq.payloads;
+      return {
+        version: seq.gatewayVersion,
+        status: statusPayload as Record<string, unknown>,
+        usage: usagePayload as Record<string, unknown>,
+      };
     }
-    this.logger.debug(`Status overview failed: ${result.error}`);
+    this.logger.debug(`Status overview failed: ${seq.error}`);
     return null;
+  }
+
+  /**
+   * 在长驻 Gateway WebSocket 上串行拉取 status + usage + logs.tail（与 Control UI 同思路，不断连重连）
+   */
+  async getDashboardGatewayBundle(limit: number): Promise<
+    | { ok: true; statusOverview: StatusOverviewResult; logsTail: { cursor?: number; lines: string[] } }
+    | { ok: false; error: string }
+  > {
+    const cfg = this.configService.getConfig();
+    const gatewayUrl = cfg.openclawGatewayUrl?.trim();
+    if (!gatewayUrl) {
+      return { ok: false, error: 'Gateway URL 未配置' };
+    }
+
+    const seq = await this.gatewayConnection.runSequence([
+      { method: 'status', methodParams: {} },
+      { method: 'usage.status', methodParams: {} },
+      {
+        method: 'logs.tail',
+        methodParams: {
+          limit,
+          maxBytes: Math.max(250_000, limit * 4_000),
+        },
+      },
+    ]);
+
+    if (!seq.ok) {
+      return { ok: false, error: seq.error };
+    }
+
+    const [statusPayload, usagePayload, tailPayload] = seq.payloads;
+    const tail = tailPayload as {
+      cursor?: number;
+      lines?: unknown;
+    };
+    const rawLines = Array.isArray(tail?.lines)
+      ? tail.lines.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+      : [];
+
+    return {
+      ok: true,
+      statusOverview: {
+        version: seq.gatewayVersion,
+        status: statusPayload as Record<string, unknown>,
+        usage: usagePayload as Record<string, unknown>,
+      },
+      logsTail: {
+        cursor: typeof tail?.cursor === 'number' ? tail.cursor : undefined,
+        lines: rawLines,
+      },
+    };
   }
 
   /**
@@ -664,12 +757,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 从 sessions.json 读取 session 的 totalTokens/model/contextTokens，以及 store 中的 key（用于类型推断）
-   */
-  /**
-   * 从 sessions.json 读取 session 的 totalTokens/model/contextTokens。
-   * 同一 sessionId 可能对应多个 sessionKey（如 cron 的 run 子 session），
-   * 取 totalTokens 最大（或 updatedAt 最新）的 entry，保证 token 数据与直接读 sessions.json 一致。
+   * 从 sessions.json 读取 session 的 totalTokens/model/contextTokens 与 storeKey。
+   * OpenClaw 模型为 sessionKey -> SessionEntry；按 sessionId 反查时与 Gateway 一致使用首个匹配项（见 openclaw resolveSessionKeyForRequest）。
    */
   private loadStoreEntryForSession(
     dir: string,
@@ -704,16 +793,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         // 保留 undefined 以便 transcript 推断：仅当 store 明确有值时才传递
         systemSent: typeof entry?.systemSent === 'boolean' ? entry.systemSent : undefined,
       });
-      let best: { key: string; entry: any } | null = null;
-      for (const [key, entry] of Object.entries(store)) {
-        if (entry?.sessionId !== sessionId) continue;
-        const total = typeof entry?.totalTokens === 'number' ? entry.totalTokens : 0;
-        const bestTotal = best ? (typeof best.entry?.totalTokens === 'number' ? best.entry.totalTokens : 0) : 0;
-        if (!best || total > bestTotal || (total === bestTotal && (entry?.updatedAt ?? 0) > (best.entry?.updatedAt ?? 0))) {
-          best = { key, entry };
-        }
+      const foundKey = Object.keys(store).find((key) => store[key]?.sessionId === sessionId);
+      if (foundKey) {
+        return toEntry(foundKey, store[foundKey]);
       }
-      if (best) return toEntry(best.key, best.entry);
       if (store[sessionId]) return toEntry(sessionId, store[sessionId]);
       const altKey = `${agent}/${sessionId}`;
       if (store[altKey]) return toEntry(altKey, store[altKey]);
@@ -721,6 +804,44 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       /* ignore */
     }
     return null;
+  }
+
+  /**
+   * 从 sessionStorage 扫描缓存读取 .jsonl 的 fileMeta.size（与列表页同源）。
+   * 详情接口若顶层/ tokenUsageMeta 未带上字节数时，SessionsService 可据此兜底。
+   */
+  async getTranscriptFileSizeFromSessionCache(idParam: string): Promise<number | undefined> {
+    try {
+      if (Date.now() - this.sessionStorage.getCacheTimestamp() > OpenClawService.CACHE_TTL_MS) {
+        await this.refreshCache();
+      }
+      const map = await this.sessionStorage.getAll();
+      const bare = idParam.includes('/') ? idParam.slice(idParam.lastIndexOf('/') + 1) : idParam;
+      for (const [, data] of map) {
+        const sz = data.fileMeta?.size;
+        if (typeof sz !== 'number' || !Number.isFinite(sz)) continue;
+        if (data.sessionId === idParam || data.sessionId === bare) return sz;
+        if (data.sessionKey === idParam) return sz;
+        if (data.sessionKey.endsWith(`/${bare}`)) return sz;
+      }
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }
+
+  /**
+   * 直接对 transcript .jsonl 做一次 stat（不解析内容）。
+   * 当详情对象里 transcriptFileSizeBytes / tokenUsageMeta / 缓存均缺失时兜底。
+   */
+  async getTranscriptFileStatBytes(idParam: string): Promise<number | undefined> {
+    try {
+      const f = await this.findSessionFile(idParam);
+      if (!f) return undefined;
+      return Number(fs.statSync(f.filePath).size);
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -842,8 +963,237 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  private readFileUtf8Slice(filePath: string, position: number, length: number): string {
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const n = Math.max(0, length | 0);
+      const buf = Buffer.allocUnsafe(n);
+      const read = fs.readSync(fd, buf, 0, n, Math.max(0, position));
+      return buf.subarray(0, read).toString('utf-8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  /** 解析 transcript JSONL 行（全量与首尾分片共用） */
+  private scanSessionJsonlLines(lines: string[]): SessionJsonlScan {
+    const messages: OpenClawSessionDetail['messages'] = [];
+    const toolCalls: OpenClawSessionDetail['toolCalls'] = [];
+    const events: OpenClawSessionDetail['events'] = [];
+    const toolCallIdToIndex = new Map<string, number>();
+    const legacyToolUseNames = new Set<string>();
+
+    let firstUserData: any = null;
+    let tokenUsage: any = null;
+    let transcriptUsageObserved = false;
+    let sumInput = 0;
+    let sumOutput = 0;
+    let lastTotal = 0;
+    let sumCostInput = 0;
+    let sumCostOutput = 0;
+    let sumCostCacheRead = 0;
+    let sumCostCacheWrite = 0;
+    let sumCostTotal = 0;
+    let hasCostField = false;
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+
+        // 提取用户信息：优先 entry.user，否则从消息内容中提取 sender
+        if (!firstUserData) {
+          const sender = extractSenderFromMessageEntry(entry);
+          if (sender) {
+            firstUserData = { user: sender };
+          } else if (entry.user) {
+            firstUserData = entry;
+          }
+        }
+
+        // 提取 token 使用：支持 entry.tokenUsage 或 entry.message.usage，多轮会话累加
+        const usage = (entry?.message as any)?.usage ?? entry?.tokenUsage;
+        if (usage && typeof usage.totalTokens === 'number') {
+          transcriptUsageObserved = true;
+          const inp = typeof usage.input === 'number' ? usage.input : 0;
+          const out = typeof usage.output === 'number' ? usage.output : 0;
+          sumInput += inp;
+          sumOutput += out;
+          lastTotal = usage.totalTokens;
+
+          // usage.cost 由 provider/model cost 配置驱动；用于异常告警展示
+          const cost = (usage as any)?.cost;
+          if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
+            hasCostField = true;
+            sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
+            sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
+            sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
+            sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
+            sumCostTotal += cost.total;
+          }
+          tokenUsage = {
+            input: sumInput,
+            output: sumOutput,
+            total: lastTotal,
+            limit: typeof usage.limit === 'number' ? usage.limit : undefined,
+          };
+        }
+
+        // 提取消息
+        if (entry.message) {
+          const msg = entry.message;
+          const messageContent = msg.content;
+          const role = msg.role as string;
+
+          // 顶层 + content 级：toolResult 消息（role=toolResult）关联到之前的 toolCall
+          if (role === 'toolResult') {
+            const toolCallId = msg.toolCallId as string | undefined;
+            const toolName = msg.toolName as string | undefined;
+            const isError = msg.isError === true;
+            const details = msg.details as { durationMs?: number; status?: string } | undefined;
+            const durationMs = details?.durationMs ?? 0;
+
+            let output: any = {};
+            if (Array.isArray(messageContent)) {
+              const texts: string[] = [];
+              for (const item of messageContent) {
+                if (item?.type === 'text' && typeof item.text === 'string') {
+                  texts.push(item.text);
+                }
+              }
+              output = texts.length === 1 ? texts[0] : texts.length > 1 ? texts : {};
+            }
+            if (details && Object.keys(details).length > 0 && (typeof output !== 'object' || Object.keys(output as object).length === 0)) {
+              output = details;
+            }
+
+            if (toolCallId && toolCallIdToIndex.has(toolCallId)) {
+              const idx = toolCallIdToIndex.get(toolCallId)!;
+              toolCalls[idx] = {
+                ...toolCalls[idx],
+                output,
+                durationMs,
+                success: !isError,
+                error: isError ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined,
+              };
+            } else {
+              toolCalls.push({
+                name: toolName || 'unknown',
+                input: {},
+                output,
+                durationMs,
+                success: !isError,
+                error: isError ? (typeof output === 'string' ? output : undefined) : undefined,
+              });
+            }
+          }
+
+          // 处理 content 可能是数组或字符串的情况
+          let contentText = '';
+          if (Array.isArray(messageContent)) {
+            for (const item of messageContent) {
+              if (item.type === 'toolCall') {
+                const id = item.id || item.toolCallId;
+                const name = item.name || item.toolName || 'unknown';
+                const args = item.arguments || item.input || {};
+                const idx = toolCalls.length;
+                toolCalls.push({
+                  name,
+                  input: args,
+                  output: {},
+                  durationMs: 0,
+                  success: true,
+                  error: undefined,
+                });
+                if (id) toolCallIdToIndex.set(id, idx);
+              } else if (item.type === 'text') {
+                contentText += item.text || '';
+              } else if (item.type === 'thinking') {
+                // 跳过 thinking 内容，不显示
+              }
+            }
+            if (!contentText && role === 'assistant') {
+              const tcNames = messageContent.filter((c: any) => c?.type === 'toolCall').map((c: any) => c.name || c.toolName).filter(Boolean);
+              if (tcNames.length > 0) {
+                contentText = '[工具调用：' + tcNames.join(', ') + ']';
+              } else if (!contentText) {
+                contentText = '[无内容]';
+              }
+            } else if (!contentText) {
+              contentText = '[无内容]';
+            }
+          } else {
+            contentText = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
+          }
+
+          const sender =
+            role === 'user'
+              ? (msg.senderLabel as string) || extractSenderFromMessageContent(contentText)
+              : undefined;
+          const displayRole = role === 'toolResult' ? 'assistant' : (role as 'user' | 'assistant' | 'system');
+          messages.push({
+            role: displayRole,
+            content: contentText,
+            timestamp: entry.timestamp || Date.now(),
+            tokenCount: msg.tokenCount,
+            ...(sender ? { sender } : {}),
+          });
+        }
+
+        // 提取工具调用（兼容旧的 toolUse 格式）
+        if (entry.toolUse) {
+          const legacyToolName = entry.toolUse.name as string;
+          if (!legacyToolUseNames.has(legacyToolName)) {
+            legacyToolUseNames.add(legacyToolName);
+            toolCalls.push({
+              name: entry.toolUse.name,
+              input: entry.toolUse.input || {},
+              output: entry.toolUse.output || {},
+              durationMs: entry.toolUse.durationMs || 0,
+              success: entry.toolUse.success !== false,
+              error: entry.toolUse.error,
+            });
+          }
+        }
+
+        // 提取事件
+        if (entry.type && !entry.message && !entry.toolUse) {
+          events.push({
+            type: entry.type,
+            timestamp: entry.timestamp || Date.now(),
+            payload: entry,
+          });
+        }
+      } catch (e) {
+        // 跳过无法解析的行
+      }
+    }
+
+
+    return {
+      messages,
+      toolCalls,
+      events,
+      firstUserData,
+      tokenUsage,
+      transcriptUsageObserved,
+      sumInput,
+      sumOutput,
+      lastTotal,
+      hasCostField,
+      sumCostInput,
+      sumCostOutput,
+      sumCostCacheRead,
+      sumCostCacheWrite,
+      sumCostTotal,
+    };
+  }
+
   /**
    * 获取会话详情（从文件系统读取）
+   *
+   * 性能：超过 `SESSION_JSONL_FULL_SCAN_MAX_BYTES`（默认 5MB）的 .jsonl 只读取
+   * 头部（首条 user 等）+ 尾部（近期消息与 usage）字节窗口，并返回首尾各自解析到的 JSONL 行数；
+   * 响应中始终包含 `transcriptFileSizeBytes` 与 `transcriptParseMode`。
    */
   async getSessionDetail(sessionId: string): Promise<OpenClawSessionDetail | null> {
     if (!(await this.stateDir())) {
@@ -858,205 +1208,90 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         return null;
       }
 
-      const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim());
+      const stats = fs.statSync(sessionFile.filePath);
+      /** JSON 序列化不支持 bigint；统一为 number */
+      const size = Number(stats.size);
+      const splitJsonl = (t: string) => t.split('\n').filter((line) => line.trim());
+      const FULL = OpenClawService.SESSION_JSONL_FULL_SCAN_MAX_BYTES;
+      const HEAD = OpenClawService.SESSION_JSONL_HEAD_MAX_BYTES;
+      const TAIL = OpenClawService.SESSION_JSONL_TAIL_MAX_BYTES;
 
-      if (lines.length === 0) {
-        return null;
-      }
+      let transcriptParseMode: 'full' | 'head_tail' = 'full';
+      let transcriptJsonlLineCount: number | undefined;
+      let transcriptHeadJsonlLineCount: number | undefined;
+      let transcriptTailJsonlLineCount: number | undefined;
+      let linesForInfer: string[];
+      let scan: SessionJsonlScan;
 
-      const messages: OpenClawSessionDetail['messages'] = [];
-      const toolCalls: OpenClawSessionDetail['toolCalls'] = [];
-      const events: OpenClawSessionDetail['events'] = [];
-      /** toolCallId -> index in toolCalls，用于关联 toolResult */
-      const toolCallIdToIndex = new Map<string, number>();
-
-      let firstUserData: any = null;
-      let tokenUsage: any = null;
-      let usageCost: any = null;
-      let transcriptUsageObserved = false;
-      let sumInput = 0;
-      let sumOutput = 0;
-      let lastTotal = 0;
-      let sumCostInput = 0;
-      let sumCostOutput = 0;
-      let sumCostCacheRead = 0;
-      let sumCostCacheWrite = 0;
-      let sumCostTotal = 0;
-      let hasCostField = false;
-
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line);
-
-          // 提取用户信息：优先 entry.user，否则从消息内容中提取 sender
-          if (!firstUserData) {
-            const sender = extractSenderFromMessageEntry(entry);
-            if (sender) {
-              firstUserData = { user: sender };
-            } else if (entry.user) {
-              firstUserData = entry;
-            }
+      if (size <= FULL) {
+        const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
+        const lines = splitJsonl(content);
+        if (lines.length === 0) {
+          return null;
+        }
+        scan = this.scanSessionJsonlLines(lines);
+        linesForInfer = lines;
+        transcriptJsonlLineCount = lines.length;
+      } else {
+        const headLen = Math.min(HEAD, size);
+        const tailLen = Math.min(TAIL, size);
+        if (headLen + tailLen >= size) {
+          const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
+          const lines = splitJsonl(content);
+          if (lines.length === 0) {
+            return null;
           }
+          scan = this.scanSessionJsonlLines(lines);
+          linesForInfer = lines;
+          transcriptJsonlLineCount = lines.length;
+        } else {
+          transcriptParseMode = 'head_tail';
+          const headText = this.readFileUtf8Slice(sessionFile.filePath, 0, headLen);
+          const tailBufStart = size - tailLen;
+          const tailRaw = this.readFileUtf8Slice(sessionFile.filePath, tailBufStart, tailLen);
+          const nl = tailRaw.indexOf('\n');
+          const tailText = nl === -1 ? tailRaw : tailRaw.slice(nl + 1);
 
-          // 提取 token 使用：支持 entry.tokenUsage 或 entry.message.usage，多轮会话累加
-          const usage = (entry?.message as any)?.usage ?? entry?.tokenUsage;
-          if (usage && typeof usage.totalTokens === 'number') {
-            transcriptUsageObserved = true;
-            const inp = typeof usage.input === 'number' ? usage.input : 0;
-            const out = typeof usage.output === 'number' ? usage.output : 0;
-            sumInput += inp;
-            sumOutput += out;
-            lastTotal = usage.totalTokens;
-
-            // usage.cost 由 provider/model cost 配置驱动；用于异常告警展示
-            const cost = (usage as any)?.cost;
-            if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
-              hasCostField = true;
-              sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
-              sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
-              sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
-              sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
-              sumCostTotal += cost.total;
-            }
-            tokenUsage = {
-              input: sumInput,
-              output: sumOutput,
-              total: lastTotal,
-              limit: typeof usage.limit === 'number' ? usage.limit : undefined,
-            };
+          const headLines = splitJsonl(headText);
+          const tailLines = splitJsonl(tailText);
+          if (headLines.length === 0 && tailLines.length === 0) {
+            return null;
           }
-
-          // 提取消息
-          if (entry.message) {
-            const msg = entry.message;
-            const messageContent = msg.content;
-            const role = msg.role as string;
-
-            // 顶层 + content 级：toolResult 消息（role=toolResult）关联到之前的 toolCall
-            if (role === 'toolResult') {
-              const toolCallId = msg.toolCallId as string | undefined;
-              const toolName = msg.toolName as string | undefined;
-              const isError = msg.isError === true;
-              const details = msg.details as { durationMs?: number; status?: string } | undefined;
-              const durationMs = details?.durationMs ?? 0;
-
-              let output: any = {};
-              if (Array.isArray(messageContent)) {
-                const texts: string[] = [];
-                for (const item of messageContent) {
-                  if (item?.type === 'text' && typeof item.text === 'string') {
-                    texts.push(item.text);
-                  }
-                }
-                output = texts.length === 1 ? texts[0] : texts.length > 1 ? texts : {};
-              }
-              if (details && Object.keys(details).length > 0 && (typeof output !== 'object' || Object.keys(output as object).length === 0)) {
-                output = details;
-              }
-
-              if (toolCallId && toolCallIdToIndex.has(toolCallId)) {
-                const idx = toolCallIdToIndex.get(toolCallId)!;
-                toolCalls[idx] = {
-                  ...toolCalls[idx],
-                  output,
-                  durationMs,
-                  success: !isError,
-                  error: isError ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined,
-                };
-              } else {
-                toolCalls.push({
-                  name: toolName || 'unknown',
-                  input: {},
-                  output,
-                  durationMs,
-                  success: !isError,
-                  error: isError ? (typeof output === 'string' ? output : undefined) : undefined,
-                });
-              }
-            }
-
-            // 处理 content 可能是数组或字符串的情况
-            let contentText = '';
-            if (Array.isArray(messageContent)) {
-              for (const item of messageContent) {
-                if (item.type === 'toolCall') {
-                  const id = item.id || item.toolCallId;
-                  const name = item.name || item.toolName || 'unknown';
-                  const args = item.arguments || item.input || {};
-                  const idx = toolCalls.length;
-                  toolCalls.push({
-                    name,
-                    input: args,
-                    output: {},
-                    durationMs: 0,
-                    success: true,
-                    error: undefined,
-                  });
-                  if (id) toolCallIdToIndex.set(id, idx);
-                } else if (item.type === 'text') {
-                  contentText += item.text || '';
-                } else if (item.type === 'thinking') {
-                  // 跳过 thinking 内容，不显示
-                }
-              }
-              if (!contentText && role === 'assistant') {
-                const tcNames = messageContent.filter((c: any) => c?.type === 'toolCall').map((c: any) => c.name || c.toolName).filter(Boolean);
-                if (tcNames.length > 0) {
-                  contentText = '[工具调用：' + tcNames.join(', ') + ']';
-                } else if (!contentText) {
-                  contentText = '[无内容]';
-                }
-              } else if (!contentText) {
-                contentText = '[无内容]';
-              }
-            } else {
-              contentText = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
-            }
-
-            const sender =
-              role === 'user'
-                ? (msg.senderLabel as string) || extractSenderFromMessageContent(contentText)
-                : undefined;
-            const displayRole = role === 'toolResult' ? 'assistant' : (role as 'user' | 'assistant' | 'system');
-            messages.push({
-              role: displayRole,
-              content: contentText,
-              timestamp: entry.timestamp || Date.now(),
-              tokenCount: msg.tokenCount,
-              ...(sender ? { sender } : {}),
-            });
-          }
-
-          // 提取工具调用（兼容旧的 toolUse 格式）
-          if (entry.toolUse && !toolCalls.some(tc => tc.name === entry.toolUse.name)) {
-            toolCalls.push({
-              name: entry.toolUse.name,
-              input: entry.toolUse.input || {},
-              output: entry.toolUse.output || {},
-              durationMs: entry.toolUse.durationMs || 0,
-              success: entry.toolUse.success !== false,
-              error: entry.toolUse.error,
-            });
-          }
-
-          // 提取事件
-          if (entry.type && !entry.message && !entry.toolUse) {
-            events.push({
-              type: entry.type,
-              timestamp: entry.timestamp || Date.now(),
-              payload: entry,
-            });
-          }
-        } catch (e) {
-          // 跳过无法解析的行
+          transcriptHeadJsonlLineCount = headLines.length;
+          transcriptTailJsonlLineCount = tailLines.length;
+          const headScan = this.scanSessionJsonlLines(headLines);
+          const tailScan = this.scanSessionJsonlLines(tailLines);
+          scan = {
+            ...tailScan,
+            firstUserData: headScan.firstUserData ?? tailScan.firstUserData,
+          };
+          linesForInfer = [...headLines.slice(0, 80), ...tailLines.slice(0, 80)];
         }
       }
 
-      const stats = fs.statSync(sessionFile.filePath);
+      const {
+        messages,
+        toolCalls,
+        events,
+        firstUserData,
+        tokenUsage,
+        transcriptUsageObserved,
+        hasCostField,
+        sumCostInput,
+        sumCostOutput,
+        sumCostCacheRead,
+        sumCostCacheWrite,
+        sumCostTotal,
+      } = scan;
+
+      let usageCost: any = null;
       const agent = sessionFile.sessionId.split('/')[0];
       const dir = await this.stateDir();
-      const storeEntry = dir ? this.loadStoreEntryForSession(dir, agent, sessionId) : null;
+      /** 路由可能是 agent/uuid，sessions.json 中一般为纯 uuid */
+      const sessionIdForStore = sessionId.includes('/')
+        ? sessionId.slice(sessionId.lastIndexOf('/') + 1)
+        : sessionId;
+      const storeEntry = dir ? this.loadStoreEntryForSession(dir, agent, sessionIdForStore) : null;
       if (hasCostField) {
         usageCost = {
           input: sumCostInput,
@@ -1120,6 +1355,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         stateRootAbsolute: dir || undefined,
         sessionLogAbsolutePath: sessionFile.filePath,
         sessionsIndexRelativePath,
+        sessionLogFileSizeBytes: size,
       };
 
       const base = { ...tokenUsage };
@@ -1142,8 +1378,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const userId = firstUserData?.user || 'unknown';
       // 若 store 无 systemSent 且 userId 仍 unknown，从 transcript 推断 greeting
       let systemSent = storeEntry?.systemSent;
-      if (systemSent === undefined && userId === 'unknown' && lines.length > 1) {
-        systemSent = inferSystemSentFromTranscript(lines);
+      if (systemSent === undefined && userId === 'unknown' && linesForInfer.length > 1) {
+        systemSent = inferSystemSentFromTranscript(linesForInfer);
       }
 
       return {
@@ -1164,6 +1400,17 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         toolCalls,
         invokedSkills,
         events,
+        transcriptFileSizeBytes: size,
+        transcriptParseMode,
+        ...(transcriptParseMode === 'full' && transcriptJsonlLineCount != null
+          ? { transcriptJsonlLineCount }
+          : {}),
+        ...(transcriptParseMode === 'head_tail'
+          ? {
+              transcriptHeadJsonlLineCount: transcriptHeadJsonlLineCount ?? 0,
+              transcriptTailJsonlLineCount: transcriptTailJsonlLineCount ?? 0,
+            }
+          : {}),
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);
@@ -1265,22 +1512,56 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
 
+    const toSessionFile = (
+      filePath: string,
+      agent: string,
+      /** 与 listSessions / 磁盘文件名（不含 .jsonl）一致的 id 段 */
+      fileStem: string,
+    ): SessionFile => {
+      const stats = fs.statSync(filePath);
+      return {
+        sessionId: `${agent}/${fileStem}`,
+        filePath,
+        createdAt: stats.birthtimeMs,
+        updatedAt: stats.mtimeMs,
+      };
+    };
+
     const agentDirs = fs.readdirSync(agentsDir);
+
     for (const agent of agentDirs) {
       const sessionsDir = path.join(agentsDir, agent, 'sessions');
       if (!fs.existsSync(sessionsDir)) {
         continue;
       }
 
-      const filePath = path.join(sessionsDir, `${sessionId}.jsonl`);
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
-        return {
-          sessionId: `${agent}/${sessionId}`,
-          filePath,
-          createdAt: stats.birthtimeMs,
-          updatedAt: stats.mtimeMs,
-        };
+      // 1) 与 list 一致：agents/<agent>/sessions/<id>.jsonl，id 通常为纯 UUID
+      const direct = path.join(sessionsDir, `${sessionId}.jsonl`);
+      if (fs.existsSync(direct)) {
+        return toSessionFile(direct, agent, sessionId);
+      }
+    }
+
+    // 2) 路由为 agent/<uuid> 时，不能用 path.join(sessions, `${sessionId}.jsonl`)（会变成子目录）
+    const slash = sessionId.indexOf('/');
+    if (slash !== -1) {
+      const agentHint = sessionId.slice(0, slash);
+      const bareId = sessionId.slice(slash + 1);
+      if (!bareId) return null;
+
+      const hintedDir = path.join(agentsDir, agentHint, 'sessions');
+      const hintedPath = path.join(hintedDir, `${bareId}.jsonl`);
+      if (fs.existsSync(hintedPath)) {
+        return toSessionFile(hintedPath, agentHint, bareId);
+      }
+
+      for (const agent of agentDirs) {
+        const sessionsDir = path.join(agentsDir, agent, 'sessions');
+        if (!fs.existsSync(sessionsDir)) continue;
+        const p = path.join(sessionsDir, `${bareId}.jsonl`);
+        if (fs.existsSync(p)) {
+          return toSessionFile(p, agent, bareId);
+        }
       }
     }
 
@@ -1446,19 +1727,16 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       };
 
       const rpc = async (extra: Record<string, unknown>) =>
-        callGatewayRpc<{ sessions?: UsageSess[] }>({
-          gatewayHttpUrl: gw,
-          token: cfg.openclawGatewayToken,
-          password: cfg.openclawGatewayPassword,
-          method: 'sessions.usage',
-          methodParams: {
+        this.gatewayConnection.request<{ sessions?: UsageSess[] }>(
+          'sessions.usage',
+          {
             ...dr,
             limit: 100,
             includeContextWeight: true,
             ...extra,
           },
-          timeoutMs: 35000,
-        });
+          35_000,
+        );
 
       const pickReportFromSessions = (sessions: UsageSess[] | undefined) => {
         if (!sessions?.length) return null;
