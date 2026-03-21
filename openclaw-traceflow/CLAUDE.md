@@ -6,6 +6,8 @@ This file guides Claude Code and other AI assistants working in **openclaw-trace
 
 OpenClaw TraceFlow：OpenClaw Agent **可观测**仪表盘（NestJS + React）。通过 **Gateway WebSocket（长连接）** 与 **本地会话数据** 提供会话、Skill、Token、延迟、System Prompt、价格与日志等能力。
 
+面向使用者的说明：**[README.md](README.md)**（英文）、**[README.zh-CN.md](README.zh-CN.md)**（中文）；开发与 AI 助手以本文件与代码为准。
+
 ## 技术栈
 
 - **后端**: NestJS 11 + TypeScript  
@@ -27,7 +29,7 @@ src/
 │   ├── openclaw.module.ts     # OpenClawService + GatewayConnectionService（@Global）
 │   ├── openclaw.service.ts
 │   ├── gateway-connection.service.ts   # 单例：按 URL+token 签名缓存 WS 客户端
-│   ├── gateway-persistent-client.ts    # 与 Control UI 同类：connect 后复用 request
+│   ├── gateway-persistent-client.ts    # 与 OpenClaw 默认 Control UI 同类：connect 后复用 request
 │   ├── gateway-rpc.ts                  # 一次性 WS RPC（备用/低频路径）
 │   └── gateway-ws-paths.ts             # HTTP→WS URL；fetchRuntimePathsFromGateway（路径解析）
 ├── auth/auth.guard.ts
@@ -57,11 +59,11 @@ pnpm run build
 pnpm run build:frontend
 pnpm run build:all
 pnpm run start:prod
-pnpm run deploy:pm2
+pnpm run deploy:pm2         # install + build + PM2
 pnpm test
 ```
 
-## API（与 README 一致；实现以 controller 为准）
+## API（与 README / README.zh-CN 一致；实现以 controller 为准）
 
 | 端点 | 说明 |
 |------|------|
@@ -109,5 +111,5 @@ docker run -d -p 3001:3001 \
 - 前端构建输出：`public/app/`  
 - SPA 路由：`app.controller.ts`  
 - i18n：新增文案需同时改 `frontend/src/locales/en-US.js` 与 `zh-CN.js`  
-- 修改 Gateway 相关行为时同步更新 **README.md**、本文件与 **`config/README.md`**
+- 修改 Gateway 相关行为时同步更新 **README.md**、**README.zh-CN.md**、本文件与 **`config/README.md`**
 - **性能与已知瓶颈**：`MetricsService.refreshToolStatsSnapshot()` 对每个会话调用 `getSessionDetail`（会话多时 O(n) 磁盘/解析）；后台 `MetricsModule` 定时任务同路径；详见 **`ROADMAP.md`**

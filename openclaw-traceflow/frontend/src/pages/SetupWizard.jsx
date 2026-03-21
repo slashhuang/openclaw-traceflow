@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Steps, Form, Input, Button, Space, Row, Col, Typography, message, Tag, Alert } from 'antd';
 import { useIntl } from 'react-intl';
-import { setupApi } from '../api';
+import { setupApi, extractApiErrorMessage } from '../api';
 
 export default function SetupWizard({ onComplete }) {
   const intl = useIntl();
@@ -11,6 +11,7 @@ export default function SetupWizard({ onComplete }) {
   const [saving, setSaving] = useState(false);
   const [generatingToken, setGeneratingToken] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   const gatewayUrl = Form.useWatch('openclawGatewayUrl', form) || 'http://localhost:18789';
   const accessMode = Form.useWatch('accessMode', form) || 'none';
@@ -23,6 +24,7 @@ export default function SetupWizard({ onComplete }) {
       return;
     }
     setTesting(true);
+    setTestResult(null);
     const toastKey = 'setup-test-connection';
     message.loading({ content: '正在测试连接...', key: toastKey, duration: 0 });
     try {
@@ -33,14 +35,20 @@ export default function SetupWizard({ onComplete }) {
         openclawGatewayPassword: vals.openclawGatewayPassword || undefined,
       });
       setConnected(!!result.connected);
+      const resultMessage = result.error || result.message || (result.connected ? '连接成功' : '连接失败');
+      message.destroy(toastKey);
       if (result.connected) {
-        message.success({ content: result.message || '连接成功', key: toastKey });
+        message.success({ content: resultMessage });
       } else {
-        message.error({ content: result.error || result.message || '连接失败', key: toastKey });
+        message.error({ content: resultMessage });
       }
+      setTestResult({ ok: !!result.connected, message: resultMessage });
     } catch (e) {
-      message.error({ content: e?.message || '连接失败', key: toastKey });
+      const errorMessage = extractApiErrorMessage(e, '连接失败');
+      message.destroy(toastKey);
+      message.error({ content: errorMessage });
       setConnected(false);
+      setTestResult({ ok: false, message: errorMessage });
     } finally {
       setTesting(false);
     }
@@ -55,7 +63,7 @@ export default function SetupWizard({ onComplete }) {
       form.setFieldsValue({ accessToken: r.token });
       message.success({ content: 'Token 已生成', key: toastKey });
     } catch (e) {
-      message.error({ content: e?.message || '生成 Token 失败', key: toastKey });
+      message.error({ content: extractApiErrorMessage(e, '生成 Token 失败'), key: toastKey });
     } finally {
       setGeneratingToken(false);
     }
@@ -77,7 +85,7 @@ export default function SetupWizard({ onComplete }) {
       message.success({ content: intl.formatMessage({ id: 'settings.saveSuccess' }), key: toastKey });
       setTimeout(() => onComplete(), 300);
     } catch (e) {
-      message.error({ content: e?.message || '保存失败', key: toastKey });
+      message.error({ content: extractApiErrorMessage(e, '保存失败'), key: toastKey });
     } finally {
       setSaving(false);
     }
@@ -140,6 +148,15 @@ export default function SetupWizard({ onComplete }) {
                   {intl.formatMessage({ id: 'setup.next' })}
                 </Button>
               </Space>
+              {testResult && (
+                <Alert
+                  style={{ marginTop: 12 }}
+                  showIcon
+                  type={testResult.ok ? 'success' : 'error'}
+                  message={testResult.ok ? '连接测试成功' : '连接测试失败'}
+                  description={testResult.message}
+                />
+              )}
             </>
           )}
           {step === 1 && (

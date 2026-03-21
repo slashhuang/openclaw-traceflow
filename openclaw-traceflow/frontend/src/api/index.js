@@ -7,6 +7,25 @@ const api = axios.create({
   timeout: 10000,
 });
 
+export function extractApiErrorMessage(error, fallback = 'Request failed') {
+  const data = error?.response?.data;
+  if (typeof data === 'string' && data.trim()) {
+    return data.trim();
+  }
+  if (data && typeof data === 'object') {
+    if (typeof data.error === 'string' && data.error.trim()) {
+      return data.error.trim();
+    }
+    if (typeof data.message === 'string' && data.message.trim()) {
+      return data.message.trim();
+    }
+  }
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    return error.message.trim();
+  }
+  return fallback;
+}
+
 export const skillsApi = {
   getUsage: () => api.get('/skills/usage').then(res => res.data),
   getUsageByUser: () => api.get('/skills/usage-by-user').then(res => res.data),

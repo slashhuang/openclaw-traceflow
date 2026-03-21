@@ -40,10 +40,9 @@ Also apply for equivalent Chinese phrasing:
 
 1. Locate monorepo and enter `openclaw-traceflow`.
 2. Verify dependencies: `node`, `pnpm`, `pm2`.
-3. Install dependencies if needed (`node_modules` missing).
-4. Run `pnpm run deploy:pm2`.
-5. Verify process with `pm2 status openclaw-traceflow`.
-6. Print recent logs with `pm2 logs openclaw-traceflow --lines 50 --nostream`.
+3. Run `pnpm run deploy:pm2` (runs `pnpm install`, build, then PM2 start/reload).
+4. Verify process with `pm2 status openclaw-traceflow`.
+5. Print recent logs with `pm2 logs openclaw-traceflow --lines 50 --nostream`.
 
 ## Manual Command
 
@@ -57,7 +56,7 @@ From `claw-family` directory:
 
 ```text
 [traceflow-deploy] Using monorepo root: /path/to/claw-sources
-[traceflow-deploy] Running production deployment via PM2...
+[traceflow-deploy] Running deploy:pm2 (pnpm install + build + PM2)...
 [traceflow-deploy] Checking PM2 process status...
 [traceflow-deploy] Recent logs (50 lines, no stream)...
 [traceflow-deploy] Done.
@@ -80,4 +79,4 @@ From `claw-family` directory:
 
 - Default behavior is production deployment.
 - For local development, use `openclaw-traceflow` project commands directly (`pnpm run start:dev`).
-- Canonical docs for ports, env vars, and APIs: monorepo `openclaw-traceflow/README.md` and `openclaw-traceflow/CLAUDE.md` (TraceFlow defaults: UI **3001**, Gateway **18789**, dashboard poll **~10s** when tab visible).
+- Canonical user docs: `openclaw-traceflow/README.md` (EN), `openclaw-traceflow/README.zh-CN.md` (中文); implementation notes: `openclaw-traceflow/CLAUDE.md` (defaults: UI **3001**, Gateway **18789**, dashboard poll **~10s** when tab visible).
