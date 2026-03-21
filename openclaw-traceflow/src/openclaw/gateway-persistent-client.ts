@@ -318,27 +318,19 @@ export class TraceflowGatewayPersistentClient {
   }
 
   /**
-   * 与 gateway-ws-paths.fetchRuntimePathsFromGateway 等价，但复用当前连接（connect 后仅再打 skills.status）
+   * 与 gateway-ws-paths.fetchRuntimePathsFromGateway 一致：仅用 connect 响应中的 snapshot（stateDir/configPath）。
+   * 不在此调用 skills.status（backend + 无设备身份时 Gateway 会清空 scopes，RPC 会报 missing scope: operator.read）。
    */
   async fetchRuntimePaths(): Promise<GatewayWsPathsResult> {
     await this.connect();
     if (!this.snapshotStateDir) {
       return { ok: false, error: 'snapshot missing stateDir' };
     }
-    const r = await this.request<{ workspaceDir?: string }>('skills.status', {}, 12_000);
-    if (!r.ok) {
-      return { ok: false, error: r.error };
-    }
-    let workspaceDir: string | null = null;
-    const p = r.payload as { workspaceDir?: string };
-    if (typeof p?.workspaceDir === 'string' && p.workspaceDir.trim()) {
-      workspaceDir = p.workspaceDir.trim();
-    }
     return {
       ok: true,
       stateDir: this.snapshotStateDir,
       configPath: this.snapshotConfigPath,
-      workspaceDir,
+      workspaceDir: null,
     };
   }
 }

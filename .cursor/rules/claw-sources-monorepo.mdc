@@ -1,0 +1,12 @@
+---
+description: claw-sources monorepo — where to edit, TraceFlow vs subtrees
+alwaysApply: true
+---
+
+# claw-sources
+
+- This repo is a **monorepo**. There is **no** root-level Nest app (no root `package.json` / `src/` / `frontend/`).
+- **OpenClaw TraceFlow** (NestJS + React dashboard) lives only under **`openclaw-traceflow/`**. Run `pnpm install` and `pnpm run start:dev` **inside that directory**.
+- Other subtree projects: **`claw-family/`**, **`futu-openD/`**. **`external-refs/`** is reference code only.
+- For **Gateway WebSocket** work in TraceFlow, read **`AGENTS.md`** at repo root: backend clients without device identity get **cleared scopes**; use **`health` RPC** for overview, not `status`/`skills.status` alone, to avoid **`missing scope: operator.read`**.
+- Upstream for TraceFlow: `git@github.com:slashhuang/openclaw-traceflow.git`.

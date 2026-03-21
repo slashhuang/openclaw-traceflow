@@ -1,30 +1,30 @@
 # Monorepo 开发流程
 
-本文档说明如何在 `claw-sources` monorepo 中开发和管理一方仓库（claw-family、futu-openD）。
+本文档说明如何在 `claw-sources` monorepo 中开发和管理一方仓库（**openclaw-traceflow**、claw-family、futu-openD）。三者均以 **git subtree** 维护；本仓库 **不包含** 独立的「OpenClaw Monitor」子工程。
 
 ## 架构图
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│           claw-sources/ (Monorepo Root)                 │
-│           Single Source of Truth                        │
-│  git@github.com:slashhuang/claw-sources.git            │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐         ┌──────────────┐             │
-│  │ claw-family/ │         │ futu-openD/  │             │
-│  │ 一方仓库      │         │ 一方仓库      │             │
-│  │ (OpenClaw)   │         │ (富途 OpenD)  │             │
-│  └──────┬───────┘         └──────┬───────┘             │
-│         │                        │                       │
-│         │ subtree push           │ subtree push         │
-│         ↓                        ↓                       │
-│  ┌──────────────┐         ┌──────────────┐             │
-│  │ upstream     │         │ upstream     │             │
-│  │ slashhuang/  │         │ slashhuang/  │             │
-│  │ claw-family  │         │ futu-openD   │             │
-│  └──────────────┘         └──────────────┘             │
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│           claw-sources/ (Monorepo Root)                            │
+│           Single Source of Truth                                   │
+│  git@github.com:slashhuang/claw-sources.git                        │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌────────────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │ openclaw-traceflow/│  │ claw-family/ │  │ futu-openD/  │       │
+│  │ 一方仓库 (subtree)  │  │ 一方仓库      │  │ 一方仓库      │       │
+│  │ 可观测仪表盘        │  │ (OpenClaw…)  │  │ (富途 OpenD)  │       │
+│  └─────────┬──────────┘  └──────┬───────┘  └──────┬───────┘       │
+│            │                    │                  │               │
+│            │ subtree push       │ subtree push     │ subtree push  │
+│            ↓                    ↓                  ↓               │
+│  ┌──────────────────────────────┐    ┌──────────────┐    ┌──────────────┐
+│  │ upstream                     │    │ upstream     │    │ upstream     │
+│  │ git@github.com:slashhuang/   │    │ slashhuang/  │    │ slashhuang/  │
+│  │ openclaw-traceflow.git       │    │ claw-family  │    │ futu-openD   │
+│  └──────────────────────────────┘    └──────────────┘    └──────────────┘
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 核心原则
@@ -40,7 +40,15 @@
 
 ### 2. 上游是发布目标
 
-上游仓库（`github.com:slashhuang/claw-family`）的角色：
+一方仓库（git subtree）与上游远程对应关系（示例）：
+
+| 子目录 | 上游仓库 |
+|--------|----------|
+| `openclaw-traceflow/` | `git@github.com:slashhuang/openclaw-traceflow.git` |
+| `claw-family/` | `github.com:slashhuang/claw-family`（以你本地 `git remote` 为准） |
+| `futu-openD/` | `github.com:slashhuang/futu-openD`（以你本地 `git remote` 为准） |
+
+上游仓库的角色：
 - 发布目标（subtree push）
 - 独立使用者克隆入口
 - **不是**开发源头
@@ -193,17 +201,7 @@ git subtree push --prefix claw-family claw-family-upstream v1.0.0
 
 ### 共享依赖
 
-在 monorepo 根目录统一管理：
-
-```bash
-# 根目录 package.json（如果有）
-{
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "eslint": "^8.0.0"
-  }
-}
-```
+`claw-sources` 根目录 **无** `package.json`；依赖在各子项目内安装（如 `openclaw-traceflow/`、`claw-family/`）。
 
 ### 项目独立依赖
 

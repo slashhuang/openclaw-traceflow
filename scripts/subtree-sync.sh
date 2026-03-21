@@ -10,6 +10,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
 # 定义 subtree 配置 (使用并行数组保证顺序)
+# openclaw-traceflow 上游: git@github.com:slashhuang/openclaw-traceflow.git（remote 名 openclaw-traceflow）
 SUBTREE_DIRS=("claw-family" "futu-openD" "openclaw-traceflow" "external-refs/openclaw")
 SUBTREE_REMOTES=("claw-family-upstream" "futu-openD-upstream" "openclaw-traceflow" "openclaw-upstream")
 

@@ -4,6 +4,7 @@ import {
   resolveOpenClawPaths,
   type OpenClawResolvedPaths,
 } from './openclaw-paths.resolver';
+import { buildStatusOverviewFromHealth } from './gateway-overview-health';
 import { type StatusOverviewResult } from './gateway-rpc';
 import { GatewayConnectionService } from './gateway-connection.service';
 import {
@@ -628,24 +629,18 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     if (!gatewayUrl) {
       return null;
     }
-    const seq = await this.gatewayConnection.runSequence([
-      { method: 'status', methodParams: {} },
-      { method: 'usage.status', methodParams: {} },
-    ]);
+    const seq = await this.gatewayConnection.runSequence([{ method: 'health', methodParams: {} }]);
     if (seq.ok) {
-      const [statusPayload, usagePayload] = seq.payloads;
-      return {
-        version: seq.gatewayVersion,
-        status: statusPayload as Record<string, unknown>,
-        usage: usagePayload as Record<string, unknown>,
-      };
+      return buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
     }
     this.logger.debug(`Status overview failed: ${seq.error}`);
     return null;
   }
 
   /**
-   * 在长驻 Gateway WebSocket 上串行拉取 status + usage + logs.tail（与 OpenClaw 默认 Control UI 同思路，不断连重连）
+   * 在长驻 Gateway WebSocket 上拉取 health 映射的概览 + 尽力 logs.tail。
+   * 使用 `health` 替代 `status`/`usage.status`，避免无设备身份 backend 连接报 missing scope: operator.read。
+   * `logs.tail` 仍可能因 scope 失败，此时返回空日志并打 debug。
    */
   async getDashboardGatewayBundle(limit: number): Promise<
     | { ok: true; statusOverview: StatusOverviewResult; logsTail: { cursor?: number; lines: string[] } }
@@ -657,40 +652,41 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       return { ok: false, error: 'Gateway URL 未配置' };
     }
 
-    const seq = await this.gatewayConnection.runSequence([
-      { method: 'status', methodParams: {} },
-      { method: 'usage.status', methodParams: {} },
-      {
-        method: 'logs.tail',
-        methodParams: {
-          limit,
-          maxBytes: Math.max(250_000, limit * 4_000),
-        },
-      },
-    ]);
-
+    const seq = await this.gatewayConnection.runSequence([{ method: 'health', methodParams: {} }]);
     if (!seq.ok) {
       return { ok: false, error: seq.error };
     }
 
-    const [statusPayload, usagePayload, tailPayload] = seq.payloads;
-    const tail = tailPayload as {
+    const statusOverview = buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
+
+    const tailParams = {
+      limit,
+      maxBytes: Math.max(250_000, limit * 4_000),
+    };
+    const logsRes = await this.gatewayConnection.request<{
       cursor?: number;
       lines?: unknown;
-    };
-    const rawLines = Array.isArray(tail?.lines)
+    }>('logs.tail', tailParams, 20_000);
+
+    if (!logsRes.ok) {
+      this.logger.debug(`Gateway logs.tail skipped (scope or other): ${logsRes.error}`);
+      return {
+        ok: true,
+        statusOverview,
+        logsTail: { lines: [] },
+      };
+    }
+
+    const tail = logsRes.payload ?? {};
+    const rawLines = Array.isArray(tail.lines)
       ? tail.lines.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
       : [];
 
     return {
       ok: true,
-      statusOverview: {
-        version: seq.gatewayVersion,
-        status: statusPayload as Record<string, unknown>,
-        usage: usagePayload as Record<string, unknown>,
-      },
+      statusOverview,
       logsTail: {
-        cursor: typeof tail?.cursor === 'number' ? tail.cursor : undefined,
+        cursor: typeof tail.cursor === 'number' ? tail.cursor : undefined,
         lines: rawLines,
       },
     };

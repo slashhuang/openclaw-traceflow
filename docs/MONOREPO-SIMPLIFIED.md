@@ -3,11 +3,15 @@
 ## 项目结构
 
 ```
-claw-sources/ (唯一开发仓库)
-├── claw-family/       ← 独立可运行项目（OpenClaw + 飞书）
-├── futu-openD/        ← 独立可运行项目（富途 OpenD）
-└── external-refs/     ← 参考代码
+claw-sources/ (唯一开发仓库，monorepo)
+├── openclaw-traceflow/  ← git subtree：OpenClaw 可观测仪表盘（NestJS + React）
+├── claw-family/         ← git subtree：一方仓库（OpenClaw + 飞书等）
+├── futu-openD/          ← git subtree：富途 OpenD
+├── docs/                ← 本 monorepo 说明文档
+└── external-refs/       ← 参考代码（非 subtree 子项目）
 ```
+
+**说明**：本仓库 **没有** 名为「OpenClaw Monitor」的独立子工程；**仪表盘仅 `openclaw-traceflow/`**，根目录不再保留 Nest `src/` / `frontend/` / `package.json`。
 
 ## 核心原则
 
@@ -24,11 +28,11 @@ git commit -am "feat: 新功能"
 
 ### 2. 子包天然独立
 
-每个子目录都是完整项目，随时可以拆分：
+以 **git subtree** 维护的一方子项目各自独立，随时可以 `subtree push` 到上游或拆分：
 
-- `claw-family/` 有独立的 `package.json`、`bootstrap.sh`
-- `futu-openD/` 有独立的 `package.json`、配置文件
-- 可以直接复制出来独立运行
+- `openclaw-traceflow/`：`package.json`、`frontend/`、`pnpm` 脚本
+- `claw-family/`：`package.json`、`bootstrap.sh`
+- `futu-openD/`：`package.json`、配置文件
 
 ### 3. 上游仓库是可选的
 
@@ -122,6 +126,16 @@ git push origin main
 ## 子包独立性检查
 
 每个子包应该能独立运行：
+
+### openclaw-traceflow
+
+上游（subtree push 目标）：`git@github.com:slashhuang/openclaw-traceflow.git`
+
+```bash
+cd openclaw-traceflow
+pnpm install
+pnpm run start:dev
+```
 
 ### claw-family
 
