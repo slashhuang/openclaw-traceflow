@@ -127,6 +127,13 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 | `/logs` | Live logs (Socket.IO) |
 | `/settings` | Gateway URL, paths, access |
 
+### Sessions and the “Participant” column
+
+- **One row** is one **conversation thread** in OpenClaw (one `sessionId` / one transcript). In **group** chats, many people usually share the **same** session row.
+- **`sessionKey`** encodes **routing/shape** (provider, group/channel/DM, etc.); it is not the same thing as “who” appears in the participant column.
+- The **Participant** column prefers the **indexed or resolved identity** (e.g. Feishu `open_id`). Messages may include `Sender (untrusted metadata)` blocks; TraceFlow attaches **per-message `sender`** when parsed. If a real identity is present on the session, the list shows it **even** when the session is also tagged as a system type (heartbeat/cron/boot) in the **Session** column.
+- **`unknown`** usually means the index had no id or the first transcript lines could not infer one—see session detail help text.
+
 ---
 
 ## Performance & capacity

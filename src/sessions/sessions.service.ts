@@ -6,7 +6,11 @@ export interface Session {
   sessionKey: string;
   sessionId: string;
   user: string;
-  /** 任务类型：heartbeat | cron | wave用户 | 其他 channel */
+  /** 多人会话时 transcript 去重后的参与者摘要（列表列优先展示） */
+  participantSummary?: string;
+  /** 详情页：与 participantSummary 同源的去重 id 列表（由会话缓存合并） */
+  participantIds?: string[];
+  /** 任务类型：主会话 | cron | wave用户 | 各 channel 等（与 session-user-resolver 一致） */
   typeLabel?: string;
   status: 'active' | 'idle' | 'completed' | 'failed';
   lastActive: number;
@@ -53,6 +57,8 @@ export interface SessionDetail extends Session {
     duration: number;
     success: boolean;
     error?: string;
+    /** 调用时间（毫秒时间戳，来自 transcript 行） */
+    timestamp?: number;
   }>;
   /** 基于 read path 反推的 skill 调用 */
   invokedSkills?: InvokedSkill[];
@@ -85,7 +91,8 @@ export class SessionsService {
         return {
           sessionKey: s.sessionKey,
           sessionId: s.sessionId,
-          user: resolveDisplayUser(s.userId, typeLabel, s.systemSent),
+          user: s.participantSummary || resolveDisplayUser(s.userId, typeLabel, s.systemSent),
+          ...(s.participantSummary ? { participantSummary: s.participantSummary } : {}),
           typeLabel,
         status: s.status,
         lastActive: s.lastActiveAt,
@@ -152,11 +159,30 @@ export class SessionsService {
           : detail.tokenUsageMeta;
 
       const typeLabel = inferSessionTypeLabel(detail.sessionKey, detail.sessionId);
+
+      let participantIds: string[] | undefined;
+      let participantSummaryFromCache: string | undefined;
+      try {
+        const cached = await this.openclawService.getSession(detail.sessionKey);
+        if (cached?.participantIds?.length) {
+          participantIds = cached.participantIds;
+        }
+        if (cached?.participantSummary) {
+          participantSummaryFromCache = cached.participantSummary;
+        }
+      } catch {
+        /* ignore */
+      }
+
       return {
         sessionKey: detail.sessionKey,
         sessionId: detail.sessionId,
-        user: resolveDisplayUser(detail.userId, typeLabel, detail.systemSent),
+        user:
+          participantSummaryFromCache ||
+          resolveDisplayUser(detail.userId, typeLabel, detail.systemSent),
         typeLabel,
+        ...(participantSummaryFromCache ? { participantSummary: participantSummaryFromCache } : {}),
+        ...(participantIds?.length ? { participantIds } : {}),
         status: detail.status,
         model: detail.model,
         contextTokens: detail.contextTokens,
@@ -183,6 +209,7 @@ export class SessionsService {
           duration: t.durationMs,
           success: t.success,
           error: t.error,
+          ...(typeof t.timestamp === 'number' ? { timestamp: t.timestamp } : {}),
         })),
         invokedSkills: detail.invokedSkills || [],
         events: detail.events || [],

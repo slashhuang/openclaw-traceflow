@@ -129,7 +129,7 @@ export default {
   'dashboard.tokenTopArchived': 'Archived token top 10',
   'dashboard.tokenTopArchivedDesc': 'Top 10 archived sessions by token usage in 24h',
   'dashboard.colType': 'Type',
-  'dashboard.colTypeDesc': 'Session type: user, heartbeat, cron, Wave',
+  'dashboard.colTypeDesc': 'Session type: user, main bucket (agent:*:main), heartbeat, cron, Wave, …',
   'dashboard.colUser': 'User',
   'dashboard.colUserDesc': 'Session owner or identifier',
   'dashboard.colTotal': 'Total',
@@ -187,7 +187,13 @@ export default {
   'sessions.chatKind.tooltip':
     'Inferred from :group: / :channel: / DM routing in sessionKey (complements channel labels like Feishu / heartbeat).',
   'sessions.column.status': 'Status',
-  'sessions.column.user': 'User',
+  'sessions.column.user': 'Participant',
+  'sessions.column.participantTooltip':
+    'One row = one conversation thread in OpenClaw; sessionKey encodes routing (DM / group / channel). “Main session” is the default DM bucket (agent:*:main) when dmScope is main; it is not the same as the heartbeat job. Identity shown here comes from the session index (e.g. Feishu open_id). Use with the channel/kind tags in the Session column.',
+  'sessions.detailParticipantLabel': 'Participant',
+  'session.participantsListTitle': 'All participants ({n})',
+  'session.participantsGroupHint':
+    'Sender identities parsed from the transcript (deduped by first appearance). In group chats this may not match the full channel roster.',
   'sessions.column.lastActive': 'Last active',
   'sessions.column.duration': 'Duration',
   'sessions.column.messages': 'Messages',
@@ -202,6 +208,21 @@ export default {
   'session.messageCountTooltip':
     'Counts rows that contain a conversation `message` field (e.g. user / assistant / toolResult). The JSONL line count in “Parse scope” is all non-empty lines in the file, including metadata such as session, model changes, and custom events—so “Message count” is usually lower; that is expected.',
   'session.tools': 'Tool calls',
+  'session.msgRoleFilterLabel': 'Kind',
+  'session.msgRoleFilterAll': 'All',
+  'session.msgRoleFilterTooltip':
+    'Filter by display label: user/assistant from JSONL role; boot matches boot-style content (including assistant replies). Use All for heartbeat/cron.',
+  'session.detailSearchPlaceholder': 'Search… (matches content, role, tool names…)',
+  'session.detailSortHint': 'Newest first',
+  'session.detailSortSubline':
+    'Sorted by time with the newest at the top; scroll down for older entries.',
+  'session.msgExpandTooltip': 'Click the row or arrow to expand',
+  'session.msgCollapseTooltip': 'Click the arrow to collapse',
+  'session.detailSortTooltip':
+    'Messages, tool calls, events, and Skills tabs are all reverse-chronological: newest at the top, older below.',
+  'session.detailNewestBadge': 'Latest',
+  'session.detailSearchMatch': 'Showing {n} of {total} matches',
+  'session.toolCalledAt': 'Called at',
   'session.toolArgs': 'Arguments',
   'session.toolOutput': 'Output',
   'session.events': 'Events',
@@ -265,7 +286,7 @@ export default {
   'token.chartTopRate': 'Top 10 avg rate (tok/min)',
   'token.chartTopRateDesc': 'Total tokens ÷ session duration; denominator is at least 1 min. Axis shows a sessionKey suffix in parens to disambiguate.',
   'session.tokenZeroTitle': 'Tokens showing 0 — Explanation and verification',
-  'session.tokenZeroExpandLabel': '▶ Click to expand/collapse details and verification steps',
+  'session.tokenZeroExpandLabel': 'Expand to read the explanation and verification steps; collapse again to save space',
   'session.tokenZeroPoint1Title': '1) Where do the numbers come from',
   'session.tokenZeroPoint1Desc': 'TraceFlow reads <strong>session logs</strong> (each session is a <code>.jsonl</code> file) under <code>agents</code> in the OpenClaw <strong>state directory</strong>. Each assistant reply includes <code>usage</code> (including input/output/totalTokens, etc.), and this page summarizes based on these fields. It is not related to <code>usage.cost</code>.',
   'session.tokenZeroPoint2Title': '2) Why is it 0',
