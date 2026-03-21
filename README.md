@@ -56,7 +56,7 @@ pnpm run start:dev
 
 - **会话管理**: 列表/详情查看、Token 用量可视化、会话终止
 - **实时日志**: WebSocket 推送、日志级别过滤、自动滚动
-- **系统设置**: Gateway 配置、访问模式切换、快速操作（重启/清理日志）
+- **系统设置**: Gateway 配置、访问模式切换、快速操作（本机重启 Gateway）
 - **首次启动向导**: 3 步快速配置
 
 ### 后端 API
@@ -68,7 +68,7 @@ pnpm run start:dev
   - `latency` - Hook 耗时、P50/P95/P99（过去 1 小时）
   - `tools` - 工具调用统计（按调用次数分组，计算成功率）
   - `concurrency` - 并发指标
-- **快速操作** (`/api/actions`): 重启 Gateway、终止会话、清理日志
+- **快速操作** (`/api/actions`): 本机重启 Gateway（`openclaw gateway restart`）、终止会话
 - **开箱即用**: 默认 local-only 模式，可选 Access Token 保护
 - **零侵入集成**: 通过文件系统读取 OpenClaw 会话数据，无需修改 OpenClaw 代码
 

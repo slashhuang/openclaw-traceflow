@@ -75,7 +75,7 @@ pnpm test
 | `GET /api/metrics/latency` | P50/P95/P99 |
 | `GET /api/metrics/tools` | tools + skills Top 5 |
 | `GET /api/metrics/concurrency` | 并发（可能占位） |
-| `POST /api/actions/restart` | 重启 Gateway |
+| `POST /api/actions/restart` | 本机 `openclaw gateway restart`（非远程 URL） |
 | `GET /api/setup/status` | 配置状态（受 access mode 保护） |
 | `POST /api/setup/configure` | 保存配置 |
 | `POST /api/setup/test-connection` | 测试 Gateway |

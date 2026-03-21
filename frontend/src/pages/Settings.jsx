@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Space, Typography, message, Modal, Row, Col } from 'antd';
+import { Card, Form, Input, Button, Typography, message, Modal, Row, Col } from 'antd';
 import { useIntl } from 'react-intl';
 import { setupApi, actionsApi } from '../api';
 
@@ -150,29 +150,21 @@ export default function Settings() {
       </Form>
 
       <Card title={intl.formatMessage({ id: 'settings.quick' })} style={{ marginTop: 16 }}>
-        <Space>
-          <Button
-            danger
-            onClick={() => {
-              Modal.confirm({
-                title: intl.formatMessage({ id: 'confirm.restart' }),
-                onOk: () => actionsApi.restart().then(() => message.success('OK')).catch((e) => message.error(e.message)),
-              });
-            }}
-          >
-            {intl.formatMessage({ id: 'settings.restart' })}
-          </Button>
-          <Button
-            onClick={() => {
-              Modal.confirm({
-                title: intl.formatMessage({ id: 'confirm.cleanup' }),
-                onOk: () => actionsApi.cleanupLogs().then(() => message.success('OK')).catch((e) => message.error(e.message)),
-              });
-            }}
-          >
-            {intl.formatMessage({ id: 'settings.cleanup' })}
-          </Button>
-        </Space>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          {intl.formatMessage({ id: 'settings.restartHint' })}
+        </Typography.Paragraph>
+        <Button
+          danger
+          onClick={() => {
+            Modal.confirm({
+              title: intl.formatMessage({ id: 'confirm.restart' }),
+              content: intl.formatMessage({ id: 'settings.restartHint' }),
+              onOk: () => actionsApi.restart().then(() => message.success('OK')).catch((e) => message.error(e.message)),
+            });
+          }}
+        >
+          {intl.formatMessage({ id: 'settings.restart' })}
+        </Button>
       </Card>
 
       <Card title={intl.formatMessage({ id: 'settings.info' })} style={{ marginTop: 16 }}>

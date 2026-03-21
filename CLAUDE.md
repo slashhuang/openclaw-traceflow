@@ -54,7 +54,7 @@ src/
 │   └── metrics.module.ts
 └── actions/                # 快速操作模块
     ├── actions.controller.ts # POST /api/actions/*
-    ├── actions.service.ts  # PM2 重启、清理日志
+    ├── actions.service.ts  # 本机 openclaw gateway restart
     └── actions.module.ts
 
 frontend/                   # React 前端
@@ -116,7 +116,7 @@ pnpm run test:e2e
 | `/api/metrics/latency` | GET | P50/P95/P99 延迟（默认过去 1 小时） |
 | `/api/metrics/tools` | GET | `{ tools, skills }`：工具调用 Top 5 + Skills（read SKILL.md）Top 5 |
 | `/api/metrics/concurrency` | GET | 并发指标 |
-| `/api/actions/restart` | POST | 重启 Gateway |
+| `/api/actions/restart` | POST | 本机执行 `openclaw gateway restart`（非远程 URL） |
 | `/api/actions/kill-session/:id` | POST | 终止会话 |
 | `/api/setup/status` | GET | 配置状态 |
 | `/api/setup/configure` | POST | 更新配置 |

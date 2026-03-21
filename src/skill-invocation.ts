@@ -50,3 +50,41 @@ export function inferInvokedSkillsFromToolCalls(
     .map(([skillName, readCount]) => ({ skillName, readCount }))
     .sort((a, b) => b.readCount - a.readCount);
 }
+
+/**
+ * 按 transcript 顺序将工具调用归因到「当前激活」的 skill：
+ * 遇到 read 且路径为 skills/xxx/SKILL.md 时切换当前 skill；其后工具（含读其他文件）
+ * 计入该 skill，直到下一次 SKILL.md 的 read。避免同一会话多 skill 时重复累加全会话工具。
+ */
+export function attributeToolCallsToSkillsByOrder(
+  toolCalls: Array<{ name: string; input?: Record<string, unknown> }>,
+): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  let current: string | null = null;
+
+  const bump = (skill: string, toolName: string) => {
+    let m = out.get(skill);
+    if (!m) {
+      m = new Map();
+      out.set(skill, m);
+    }
+    m.set(toolName, (m.get(toolName) ?? 0) + 1);
+  };
+
+  for (const tc of toolCalls || []) {
+    const name = tc?.name || 'unknown';
+    if (name === 'read') {
+      const skillFromSkillMd = findSkillPathInArgs(tc.input ?? {});
+      if (skillFromSkillMd) {
+        current = skillFromSkillMd;
+        bump(current, 'read');
+      } else if (current) {
+        bump(current, 'read');
+      }
+    } else if (current) {
+      bump(current, name);
+    }
+  }
+
+  return out;
+}

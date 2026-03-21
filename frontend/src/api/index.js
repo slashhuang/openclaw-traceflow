@@ -58,7 +58,6 @@ export const metricsApi = {
 
 export const actionsApi = {
   restart: () => api.post('/actions/restart').then(res => res.data),
-  cleanupLogs: () => api.post('/actions/cleanup-logs').then(res => res.data),
 };
 
 export default api;

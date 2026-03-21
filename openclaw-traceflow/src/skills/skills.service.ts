@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService } from '../openclaw/openclaw.service';
-import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
+import {
+  attributeToolCallsToSkillsByOrder,
+  inferInvokedSkillsFromToolCalls,
+} from '../skill-invocation';
 import { inferSessionTypeLabel, resolveDisplayUser } from '../common/session-user-resolver';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -327,7 +330,7 @@ export class SkillsService {
 
   /**
    * 获取 skill × tool 关联统计
-   * 原理：在推断出 skill 被调用的会话中，统计该会话内各工具的调用次数并聚合
+   * 原理：按 transcript 顺序，在 read skills/xxx/SKILL.md 之后将后续工具归因到该 skill（见 attributeToolCallsToSkillsByOrder）
    */
   async getSkillToolUsage(): Promise<
     Array<{
@@ -344,16 +347,8 @@ export class SkillsService {
         const detail = await this.openclaw.getSessionDetail(session.sessionId);
         if (!detail?.toolCalls?.length) continue;
 
-        const invoked = inferInvokedSkillsFromToolCalls(detail.toolCalls);
-        if (invoked.length === 0) continue;
-
-        const toolCounts = new Map<string, number>();
-        for (const tc of detail.toolCalls) {
-          const name = tc?.name || 'unknown';
-          toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1);
-        }
-
-        for (const { skillName } of invoked) {
+        const perSkill = attributeToolCallsToSkillsByOrder(detail.toolCalls);
+        for (const [skillName, toolCounts] of perSkill) {
           let toolMap = skillToolMap.get(skillName);
           if (!toolMap) {
             toolMap = new Map<string, number>();
