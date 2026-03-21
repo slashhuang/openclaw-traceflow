@@ -31,6 +31,8 @@ import {
 import { useIntl } from 'react-intl';
 import { metricsApi } from '../api';
 import { inferSessionTypeLabel, formatSessionParticipantDisplay } from '../utils/session-user';
+import TokenMetricHint from '../components/TokenMetricHint';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 const THRESHOLD_COLORS = {
   normal: '#52c41a',
@@ -127,8 +129,8 @@ export default function TokenMonitor() {
     { name: 'limit', value: sessions.filter((s) => s.threshold === 'limit').length, color: THRESHOLD_COLORS.limit },
   ];
 
-  const topConsumptionSessions = [...sessions]
-    .sort((a, b) => b.consumptionRate - a.consumptionRate)
+  const topTokenSessions = [...sessions]
+    .sort((a, b) => (b.totalTokens ?? 0) - (a.totalTokens ?? 0))
     .slice(0, 10)
     .map((s) => {
       const label = userLabelForTokenRow(s, sessionList);
@@ -138,7 +140,7 @@ export default function TokenMonitor() {
       return {
         name,
         nameTip: s.sessionKey,
-        rate: s.consumptionRate,
+        totalTokens: s.totalTokens ?? 0,
       };
     });
 
@@ -152,7 +154,10 @@ export default function TokenMonitor() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'token.title' })}</Typography.Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'token.title' })}</Typography.Title>
+            <SectionScopeHint intl={intl} messageId="token.pageScopeDesc" />
+          </div>
           <Typography.Text type="secondary">{intl.formatMessage({ id: 'token.subtitle' })}</Typography.Text>
           <br />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>{intl.formatMessage({ id: 'token.costHint' })}</Typography.Text>
@@ -163,8 +168,27 @@ export default function TokenMonitor() {
         </span>
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {intl.formatMessage({ id: 'token.kpiSectionTitle' })}
+        </Typography.Text>
+        <SectionScopeHint intl={intl} messageId="token.kpiRowDesc" />
+      </div>
+
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={8} sm={4}><Card size="small"><Statistic title={intl.formatMessage({ id: 'token.sessionsCount' })} value={sessions.length} /></Card></Col>
+        <Col xs={8} sm={4}>
+          <Card size="small">
+            <Statistic
+              title={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {intl.formatMessage({ id: 'token.sessionsCount' })}
+                  <SectionScopeHint intl={intl} messageId="token.sessionsCountDesc" />
+                </span>
+              }
+              value={sessions.length}
+            />
+          </Card>
+        </Col>
         <Col xs={8} sm={4}><Card size="small"><Statistic title="OK" value={thresholdDistribution[0].value} valueStyle={{ color: THRESHOLD_COLORS.normal }} /></Card></Col>
         <Col xs={8} sm={4}><Card size="small"><Statistic title="Warn" value={thresholdDistribution[1].value} valueStyle={{ color: THRESHOLD_COLORS.warning }} /></Card></Col>
         <Col xs={12} sm={6}><Card size="small"><Statistic title="Serious/Crit" value={thresholdDistribution[2].value + thresholdDistribution[3].value} valueStyle={{ color: THRESHOLD_COLORS.critical }} /></Card></Col>
@@ -172,7 +196,11 @@ export default function TokenMonitor() {
       </Row>
 
       {alerts.length > 0 && (
-        <Card title="Alerts" style={{ marginBottom: 16 }}>
+        <Card
+          title={intl.formatMessage({ id: 'token.alertsTitle' })}
+          extra={<SectionScopeHint intl={intl} messageId="token.alertsDesc" />}
+          style={{ marginBottom: 16 }}
+        >
           {alerts.slice(-5).reverse().map((a, i) => (
             <Typography.Paragraph key={i} style={{ marginBottom: 8 }}>
               <Typography.Text strong>{a.message}</Typography.Text>
@@ -187,7 +215,10 @@ export default function TokenMonitor() {
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title="Threshold">
+          <Card
+            title={intl.formatMessage({ id: 'token.thresholdPieTitle' })}
+            extra={<SectionScopeHint intl={intl} messageId="token.thresholdPieDesc" />}
+          >
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie data={thresholdDistribution} cx="50%" cy="50%" outerRadius={80} dataKey="value" label>
@@ -201,14 +232,17 @@ export default function TokenMonitor() {
             </ResponsiveContainer>
           </Card>
         </Col>
-        {topConsumptionSessions.length > 0 && (
+        {topTokenSessions.length > 0 && (
           <Col xs={24} lg={12}>
-            <Card title={intl.formatMessage({ id: 'token.chartTopRate' })}>
+            <Card
+              title={intl.formatMessage({ id: 'token.chartTopRate' })}
+              extra={<SectionScopeHint intl={intl} messageId="token.chartTopRateDesc" />}
+            >
               <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 {intl.formatMessage({ id: 'token.chartTopRateDesc' })}
               </Typography.Text>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topConsumptionSessions} margin={{ top: 8, right: 12, left: 16, bottom: 8 }} barCategoryGap="18%">
+                <BarChart data={topTokenSessions} margin={{ top: 8, right: 12, left: 16, bottom: 8 }} barCategoryGap="18%">
                   <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
                   <XAxis
                     dataKey="name"
@@ -226,10 +260,13 @@ export default function TokenMonitor() {
                   />
                   <RechartsTooltip
                     labelFormatter={(_, p) => p?.[0]?.payload?.nameTip || ''}
-                    formatter={(value) => [formatCompactRate(value), 'tok/min']}
+                    formatter={(value) => [
+                      formatCompactRate(value),
+                      intl.formatMessage({ id: 'token.chartTopUnit' }),
+                    ]}
                     contentStyle={{ background: token.colorBgElevated }}
                   />
-                  <Bar dataKey="rate" fill={token.colorPrimary} name="rate" />
+                  <Bar dataKey="totalTokens" fill={token.colorPrimary} name="totalTokens" />
                 </BarChart>
               </ResponsiveContainer>
             </Card>
@@ -239,7 +276,10 @@ export default function TokenMonitor() {
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title={intl.formatMessage({ id: 'token.tableActive' })}>
+          <Card
+            title={intl.formatMessage({ id: 'token.tableActive' })}
+            extra={<SectionScopeHint intl={intl} messageId="token.tableActiveDesc" />}
+          >
             <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{intl.formatMessage({ id: 'token.tableActiveDesc' })}</Typography.Text>
             <Table
               rowKey={(r) => r.sessionKey}
@@ -250,7 +290,23 @@ export default function TokenMonitor() {
               columns={[
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
-                { title: 'Token', dataIndex: 'activeTokens', width: 90, render: (v) => v?.toLocaleString(), sorter: (a, b) => (a.activeTokens ?? 0) - (b.activeTokens ?? 0) },
+                {
+                  title: (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      Token
+                      <TokenMetricHint intl={intl} />
+                    </span>
+                  ),
+                  dataIndex: 'activeTokens',
+                  width: 110,
+                  render: (v) => (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {v != null ? v.toLocaleString() : '—'}
+                      <TokenMetricHint intl={intl} value={typeof v === 'number' ? v : undefined} />
+                    </span>
+                  ),
+                  sorter: (a, b) => (a.activeTokens ?? 0) - (b.activeTokens ?? 0),
+                },
                 { title: 'Cost', width: 90, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.model || ''}>{r.estimatedCost != null ? `$${r.estimatedCost.toFixed(4)}` : '-'}</Typography.Text> },
                 { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>详情</Link> : null },
               ]}
@@ -266,7 +322,10 @@ export default function TokenMonitor() {
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title={intl.formatMessage({ id: 'token.tableArchived' })}>
+          <Card
+            title={intl.formatMessage({ id: 'token.tableArchived' })}
+            extra={<SectionScopeHint intl={intl} messageId="token.tableArchivedDesc" />}
+          >
             <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{intl.formatMessage({ id: 'token.tableArchivedDesc' })}</Typography.Text>
             <Table
               rowKey={(r) => r.sessionKey}
@@ -277,7 +336,23 @@ export default function TokenMonitor() {
               columns={[
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
-                { title: 'Token', dataIndex: 'archivedTokens', width: 90, render: (v) => v?.toLocaleString(), sorter: (a, b) => (a.archivedTokens ?? 0) - (b.archivedTokens ?? 0) },
+                {
+                  title: (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      Token
+                      <TokenMetricHint intl={intl} />
+                    </span>
+                  ),
+                  dataIndex: 'archivedTokens',
+                  width: 110,
+                  render: (v) => (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {v != null ? v.toLocaleString() : '—'}
+                      <TokenMetricHint intl={intl} value={typeof v === 'number' ? v : undefined} />
+                    </span>
+                  ),
+                  sorter: (a, b) => (a.archivedTokens ?? 0) - (b.archivedTokens ?? 0),
+                },
                 { title: 'Cost', width: 80, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.model || ''}>{r.estimatedCost != null ? `$${r.estimatedCost.toFixed(4)}` : '-'}</Typography.Text> },
                 { title: '次', dataIndex: 'archivedCount', width: 60, render: (v) => v ?? 0 },
                 { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>详情</Link> : null },
@@ -296,7 +371,10 @@ export default function TokenMonitor() {
       </Row>
 
       {highUtil.length > 0 && (
-        <Card title="> 50% utilization">
+        <Card
+          title={intl.formatMessage({ id: 'token.highUtilTitle' })}
+          extra={<SectionScopeHint intl={intl} messageId="token.highUtilDesc" />}
+        >
           <Table
             rowKey={(r) => r.sessionId || r.sessionKey}
             size="small"
@@ -323,7 +401,21 @@ export default function TokenMonitor() {
                   <span style={{ color: THRESHOLD_COLORS[r.threshold] || undefined }}>{v}%</span>
                 ),
               },
-              { title: 'Used', dataIndex: 'totalTokens', render: (v) => v?.toLocaleString() },
+              {
+                title: (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    Used
+                    <TokenMetricHint intl={intl} />
+                  </span>
+                ),
+                dataIndex: 'totalTokens',
+                render: (v) => (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {v != null ? v.toLocaleString() : '—'}
+                    <TokenMetricHint intl={intl} value={typeof v === 'number' ? v : undefined} />
+                  </span>
+                ),
+              },
               { title: 'Cost', render: (_, r) => {
                   const cost = r.estimatedCost ?? r.usageCost?.total;
                   return cost != null ? `$${cost.toFixed(4)}` : '-';

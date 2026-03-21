@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, Steps, Form, Input, Button, Space, Row, Col, Typography, message, Tag, Alert } from 'antd';
 import { useIntl } from 'react-intl';
 import { setupApi, extractApiErrorMessage } from '../api';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 export default function SetupWizard({ onComplete }) {
   const intl = useIntl();
@@ -108,7 +109,11 @@ export default function SetupWizard({ onComplete }) {
         background: 'var(--ant-color-bg-layout)',
       }}
     >
-      <Card style={{ maxWidth: 640, width: '100%' }} title={<Typography.Title level={3} style={{ margin: 0 }}>🦞 {intl.formatMessage({ id: 'setup.wizard.title' })}</Typography.Title>}>
+      <Card
+        style={{ maxWidth: 640, width: '100%' }}
+        title={<Typography.Title level={3} style={{ margin: 0 }}>🦞 {intl.formatMessage({ id: 'setup.wizard.title' })}</Typography.Title>}
+        extra={<SectionScopeHint intl={intl} messageId="setup.wizardScopeDesc" />}
+      >
         <Typography.Paragraph type="secondary">{intl.formatMessage({ id: 'setup.wizard.subtitle' })}</Typography.Paragraph>
         <Steps
           current={step}

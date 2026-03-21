@@ -217,6 +217,15 @@ export interface OpenClawSessionDetail extends OpenClawSession {
   transcriptHeadJsonlLineCount?: number;
   /** 首尾模式：尾部分片内解析到的 JSONL 行数（消息/工具主要来自此段） */
   transcriptTailJsonlLineCount?: number;
+  /** 正在查看的 *.jsonl.reset.* 文件名中的时间戳段（非空表示归档 transcript） */
+  archiveResetTimestamp?: string;
+  /** 该会话线程下历史归档轮次（用于详情页切换） */
+  archiveEpochs?: Array<{
+    resetTimestamp: string;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+  }>;
 }
 
 type SessionJsonlScan = {
@@ -972,7 +981,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 从 .reset. 归档文件中提取 token 用量（/new 重置前的历史）
-   * 每个 .reset. 文件代表一次重置前的 epoch，取最后一条带 usage 的消息作为该 epoch 的 token 总量
+   * 每个 .reset. 文件代表 OpenClaw 的一次归档 epoch，全部纳入；用量取最后一条带 totalTokens 的消息（无则 0）
    */
   async getArchivedTokenUsageFromResetFiles(): Promise<
     Array<{ sessionId: string; resetTimestamp: string; inputTokens: number; outputTokens: number; totalTokens: number }>
@@ -1007,26 +1016,28 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
             let lastUsage: { input: number; output: number; total: number } | null = null;
 
             for (const line of lines) {
-              const entry = JSON.parse(line) as Record<string, unknown>;
-              const usage = (entry?.message as any)?.usage ?? (entry as any).usage;
-              if (usage && typeof usage.totalTokens === 'number') {
-                lastUsage = {
-                  input: typeof usage.input === 'number' ? usage.input : 0,
-                  output: typeof usage.output === 'number' ? usage.output : 0,
-                  total: usage.totalTokens,
-                };
+              try {
+                const entry = JSON.parse(line) as Record<string, unknown>;
+                const usage = (entry?.message as any)?.usage ?? (entry as any).usage;
+                if (usage && typeof usage.totalTokens === 'number') {
+                  lastUsage = {
+                    input: typeof usage.input === 'number' ? usage.input : 0,
+                    output: typeof usage.output === 'number' ? usage.output : 0,
+                    total: usage.totalTokens,
+                  };
+                }
+              } catch {
+                /* skip bad line */
               }
             }
 
-            if (lastUsage && lastUsage.total > 0) {
-              result.push({
-                sessionId,
-                resetTimestamp,
-                inputTokens: lastUsage.input,
-                outputTokens: lastUsage.output,
-                totalTokens: lastUsage.total,
-              });
-            }
+            result.push({
+              sessionId,
+              resetTimestamp,
+              inputTokens: lastUsage?.input ?? 0,
+              outputTokens: lastUsage?.output ?? 0,
+              totalTokens: lastUsage?.total ?? 0,
+            });
           } catch {
             /* skip unparseable */
           }
@@ -1037,6 +1048,26 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     }
 
     return result;
+  }
+
+  /**
+   * 列出某会话线程在磁盘上的归档轮次（与 getArchivedTokenUsageFromResetFiles 口径一致）
+   */
+  async listSessionArchiveEpochs(sessionId: string): Promise<
+    Array<{ resetTimestamp: string; totalTokens: number; inputTokens: number; outputTokens: number }>
+  > {
+    const bareId = sessionId.includes('/') ? sessionId.slice(sessionId.lastIndexOf('/') + 1) : sessionId;
+    if (!bareId) return [];
+    const all = await this.getArchivedTokenUsageFromResetFiles();
+    return all
+      .filter((a) => a.sessionId === bareId)
+      .map((a) => ({
+        resetTimestamp: a.resetTimestamp,
+        totalTokens: a.totalTokens,
+        inputTokens: a.inputTokens,
+        outputTokens: a.outputTokens,
+      }))
+      .sort((a, b) => b.resetTimestamp.localeCompare(a.resetTimestamp));
   }
 
   private readFileUtf8Slice(filePath: string, position: number, length: number): string {
@@ -1278,15 +1309,26 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * 头部（首条 user 等）+ 尾部（近期消息与 usage）字节窗口，并返回首尾各自解析到的 JSONL 行数；
    * 响应中始终包含 `transcriptFileSizeBytes` 与 `transcriptParseMode`。
    */
-  async getSessionDetail(sessionId: string): Promise<OpenClawSessionDetail | null> {
+  async getSessionDetail(
+    sessionId: string,
+    options?: { resetTimestamp?: string },
+  ): Promise<OpenClawSessionDetail | null> {
     if (!(await this.stateDir())) {
       this.logger.warn('State directory not configured');
       return null;
     }
 
     try {
-      // 查找会话文件
-      const sessionFile = await this.findSessionFile(sessionId);
+      const resetTs = options?.resetTimestamp?.trim();
+      let sessionFile: SessionFile | null = null;
+      if (resetTs) {
+        if (resetTs.length > 512 || resetTs.includes('..') || resetTs.includes('/') || resetTs.includes('\\')) {
+          return null;
+        }
+        sessionFile = await this.findSessionResetFile(sessionId, resetTs);
+      } else {
+        sessionFile = await this.findSessionFile(sessionId);
+      }
       if (!sessionFile) {
         return null;
       }
@@ -1487,12 +1529,14 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         systemSent = inferSystemSentFromTranscript(linesForInfer);
       }
 
+      const archiveEpochs = await this.listSessionArchiveEpochs(sessionId);
+
       return {
         sessionKey,
         sessionId: sessionFile.sessionId,
         userId,
         systemSent,
-        status: this.inferSessionStatus(firstUserData, stats.mtimeMs),
+        status: resetTs ? 'completed' : this.inferSessionStatus(firstUserData, stats.mtimeMs),
         createdAt: stats.birthtimeMs,
         lastActiveAt: stats.mtimeMs,
         totalTokens:
@@ -1523,6 +1567,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
               transcriptTailJsonlLineCount: transcriptTailJsonlLineCount ?? 0,
             }
           : {}),
+        ...(archiveEpochs.length ? { archiveEpochs } : {}),
+        ...(resetTs ? { archiveResetTimestamp: resetTs } : {}),
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);
@@ -1617,27 +1663,22 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     return out;
   }
 
+  private buildSessionFile(filePath: string, agent: string, fileStem: string): SessionFile {
+    const stats = fs.statSync(filePath);
+    return {
+      sessionId: `${agent}/${fileStem}`,
+      filePath,
+      createdAt: stats.birthtimeMs,
+      updatedAt: stats.mtimeMs,
+    };
+  }
+
   private async findSessionFile(sessionId: string): Promise<SessionFile | null> {
     const dir = await this.stateDir();
     const agentsDir = path.join(dir, 'agents');
     if (!fs.existsSync(agentsDir)) {
       return null;
     }
-
-    const toSessionFile = (
-      filePath: string,
-      agent: string,
-      /** 与 listSessions / 磁盘文件名（不含 .jsonl）一致的 id 段 */
-      fileStem: string,
-    ): SessionFile => {
-      const stats = fs.statSync(filePath);
-      return {
-        sessionId: `${agent}/${fileStem}`,
-        filePath,
-        createdAt: stats.birthtimeMs,
-        updatedAt: stats.mtimeMs,
-      };
-    };
 
     const agentDirs = fs.readdirSync(agentsDir);
 
@@ -1650,7 +1691,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       // 1) 与 list 一致：agents/<agent>/sessions/<id>.jsonl，id 通常为纯 UUID
       const direct = path.join(sessionsDir, `${sessionId}.jsonl`);
       if (fs.existsSync(direct)) {
-        return toSessionFile(direct, agent, sessionId);
+        return this.buildSessionFile(direct, agent, sessionId);
       }
     }
 
@@ -1664,7 +1705,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const hintedDir = path.join(agentsDir, agentHint, 'sessions');
       const hintedPath = path.join(hintedDir, `${bareId}.jsonl`);
       if (fs.existsSync(hintedPath)) {
-        return toSessionFile(hintedPath, agentHint, bareId);
+        return this.buildSessionFile(hintedPath, agentHint, bareId);
       }
 
       for (const agent of agentDirs) {
@@ -1672,11 +1713,38 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         if (!fs.existsSync(sessionsDir)) continue;
         const p = path.join(sessionsDir, `${bareId}.jsonl`);
         if (fs.existsSync(p)) {
-          return toSessionFile(p, agent, bareId);
+          return this.buildSessionFile(p, agent, bareId);
         }
       }
     }
 
+    return null;
+  }
+
+  /** 定位 *.jsonl.reset.<resetTimestamp> 归档文件 */
+  private async findSessionResetFile(sessionId: string, resetTimestamp: string): Promise<SessionFile | null> {
+    const dir = await this.stateDir();
+    if (!dir) return null;
+    const bareId = sessionId.includes('/') ? sessionId.slice(sessionId.lastIndexOf('/') + 1) : sessionId;
+    if (!bareId) return null;
+
+    const main = await this.findSessionFile(sessionId);
+    if (main) {
+      const agent = main.sessionId.split('/')[0];
+      const fp = path.join(dir, 'agents', agent, 'sessions', `${bareId}.jsonl.reset.${resetTimestamp}`);
+      if (fs.existsSync(fp)) {
+        return this.buildSessionFile(fp, agent, bareId);
+      }
+    }
+
+    const agentsDir = path.join(dir, 'agents');
+    if (!fs.existsSync(agentsDir)) return null;
+    for (const agent of fs.readdirSync(agentsDir)) {
+      const fp = path.join(agentsDir, agent, 'sessions', `${bareId}.jsonl.reset.${resetTimestamp}`);
+      if (fs.existsSync(fp)) {
+        return this.buildSessionFile(fp, agent, bareId);
+      }
+    }
     return null;
   }
 

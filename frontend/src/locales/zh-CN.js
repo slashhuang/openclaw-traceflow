@@ -27,6 +27,8 @@ export default {
   'header.github': 'GitHub',
   'setup.wizard.title': 'OpenClaw TraceFlow',
   'setup.wizard.subtitle': '首次启动设置向导',
+  'setup.wizardScopeDesc':
+    '向导仅将 Gateway 与访问模式写入 TraceFlow 配置（POST /api/setup/configure）；与仪表盘数据来源相同，不改变 OpenClaw 远端业务数据。',
   'setup.step1.title': '步骤 1：连接 OpenClaw Gateway',
   'setup.step1.desc': '输入 Gateway 地址并测试连接。',
   'setup.step2.title': '步骤 2：访问保护',
@@ -57,10 +59,20 @@ export default {
   'common.detail': '详情',
   'common.kill': '终止',
   'common.retry': '重试',
+  'common.statsScopeHint': '统计口径说明',
   'common.back': '返回列表',
   'common.all': '全部',
   'common.yes': '确定',
   'settings.title': '系统设置',
+  'settings.pageScopeDesc':
+    '本页为 TraceFlow 本地配置（GET/POST /api/setup/*）；仅影响本监控服务如何连接 Gateway 与访问控制，不改变 OpenClaw 业务数据。',
+  'settings.gatewayCardScopeDesc':
+    'Gateway URL / Token / Password 用于测试连接与保存；可选 State/Workspace 路径用于解析本地会话与 transcript。',
+  'settings.accessCardScopeDesc':
+    '访问模式仅保护「修改配置」等 API；浏览仪表盘/会话/日志在多数模式下不受 Token 限制（见上方说明）。',
+  'settings.quickCardScopeDesc':
+    '在本机执行 `openclaw gateway restart`（仅重启 TraceFlow 所在机器上由 CLI 管理的 Gateway 进程）。',
+  'settings.contactCardScopeDesc': '项目作者与仓库链接（非指标数据）。',
   'settings.gateway': 'Gateway 配置',
   'settings.access': '访问保护',
   'settings.access.scope': '这三种模式只影响“配置相关接口”（保存配置、测试连接、生成 Token），不会影响仪表盘、会话列表、日志等查看页面。',
@@ -82,18 +94,22 @@ export default {
   'confirm.restart': '确定重启 Gateway？可能中断当前会话。',
   'confirm.killSession': '确定终止该会话？',
   'dashboard.title': '监控仪表盘',
+  'dashboard.titleDesc':
+    '本页数据来自 TraceFlow 定期拉取的「仪表盘概览」接口：含 Gateway 健康、本地会话缓存、指标快照与日志片段。顶部小卡片与各区块标题旁的 ℹ 可查看对应统计口径。',
+  'dashboard.buildLabel': '前端构建：',
+  'dashboard.buildGit': 'Git ',
   'dashboard.systemStatus': '系统状态',
   'dashboard.systemStatusDesc': 'OpenClaw 服务整体状态',
   'dashboard.totalSessions': '当前会话数',
-  'dashboard.totalSessionsDesc': '当前系统中的会话数量（活跃 + 空闲 + 已完成），不含归档',
+  'dashboard.totalSessionsDesc': '当前系统中的会话数量（活跃 + 空闲 + 已结束），不含归档',
   'dashboard.active': '活跃',
   'dashboard.activeDesc': '当前有消息交互的会话（如 5 分钟内有活动）',
   'dashboard.idle': '空闲',
   'dashboard.idleDesc': '超过 5 分钟无消息的会话',
   'dashboard.archived': '归档',
   'dashboard.archivedDesc': '用户开始新对话时，上一轮对话会被归档保存；每次归档 = 用户开启了一轮新对话',
-  'dashboard.completed': '已完成',
-  'dashboard.completedDesc': '对话已结束的会话',
+  'dashboard.completed': '已结束',
+  'dashboard.completedDesc': '最后一条为 Agent 最终回复（agent:final），本轮对话已结束',
   'dashboard.latency': '响应延迟（近 1 小时）',
   'dashboard.latencyDesc': 'API 响应时间的 P50/P95/P99 分位数，Count 为采样数',
   'dashboard.latencyP50': 'P50',
@@ -108,21 +124,37 @@ export default {
   'dashboard.tokenSummaryActive': 'Token 汇总（进行中）',
   'dashboard.tokenSummaryArchived': 'Token 汇总（归档）',
   'dashboard.tokenActive': '进行中',
-  'dashboard.tokenActiveDesc': '活跃 + 空闲 会话，每会话取最新一条',
+  'dashboard.tokenActiveDesc':
+    '活跃 + 空闲 会话；时间窗内每会话取最新一条。数据来自本地 metrics（约每 30s 采集 OpenClaw 会话缓存中的 tokenUsage）。若 sessions.json 将 totalTokensFresh 标为 false，索引用量可能与当前轮未对齐，此处输入/输出/合计可能显示为 0 或偏低，不代表真实无消耗。',
   'dashboard.tokenArchived': '归档',
-  'dashboard.tokenArchivedDesc': '用户开始新对话后，上一轮对话消耗的 token 汇总',
+  'dashboard.tokenArchivedDesc':
+    '与左侧「进行中」是两套数：这里不包含当前正在聊的这一轮。\n\n只统计「新开对话」时被写入 *.jsonl.reset.* 的上一轮；每个 reset 文件取最后一条带 usage 的累计（与 OpenClaw 写在消息里的用量一致），再把「归档发生时间」落在当前时间窗内的各次累加。若很少新开对话、或 reset 里没有带 usage 的行，数字会接近 0。',
   'dashboard.tokenInput': '输入',
   'dashboard.tokenInputDesc': '发送给模型的 token（用户消息 + 上下文）',
   'dashboard.tokenOutput': '输出',
   'dashboard.tokenOutputDesc': '模型生成的 token',
   'dashboard.tokenTotal': '合计',
-  'dashboard.tokenTotalDesc': '输入 + 输出',
+  'dashboard.tokenTotalDesc':
+    '输入 + 输出。与上方同一 metrics 口径；totalTokensFresh:false 时「进行中」合计可能不可信，请以会话详情 transcript 为准。',
+  'metrics.tokenUsageSourceTitle': 'Token 指标：数据源与可信度',
+  'metrics.tokenUsageSourceNote':
+    '「进行中 / 归档」数字来自 TraceFlow 本地 data/metrics.db 中 token_usage 表。进行中：约每 30 秒按会话写入一条快照（来源为 OpenClaw 列表合并后的 tokenUsage）。归档：来自状态目录下 *.jsonl.reset.* 文件解析后的用量。\n\n当 OpenClaw 在索引中将 totalTokensFresh 标为 false 时，sessions.json 中的上下文累计可能尚未与当前对话轮对齐，采集到的数字可能为 0 或明显偏低——这不表示一定没有 token 消耗。需要核对时请打开会话详情查看 transcript 或等待索引/Gateway 刷新。',
+  'tokenMetricHint.popoverTitle': 'Token 数字说明',
+  'tokenMetricHint.zeroExtra':
+    '当前为 0 或暂无：常见原因包括索引与当前轮未对齐（totalTokensFresh:false）、尚未写入 metrics，或确实无消耗。请对照会话详情 transcript。',
+  'tokenMetricHint.nonZeroAccuracy':
+    '非零数字也可能来自采样或略滞后的索引，与 transcript、计费侧仍可能有偏差。',
+  'tokenMetricHint.genericContext':
+    '列表/汇总中的 token 来自 OpenClaw 合并与 TraceFlow 本地 metrics；悬停或点击图标可查看完整数据源说明。',
   'dashboard.sessionPie': '会话状态分布',
-  'dashboard.sessionPieDesc': '当前会话数、活跃、空闲、已完成、归档的占比',
+  'dashboard.sessionPieDesc': '当前会话数、活跃、空闲、已结束、归档的占比',
   'dashboard.skillsTop': 'Skills Top 5',
-  'dashboard.skillsTopDesc': '统计口径：当前会话中 read 到 skills/xxx/SKILL.md 的次数，按 skill 名聚合取前 5',
+  'dashboard.skillsTopDesc':
+    '统计口径：各会话当前转录（*.jsonl）里 read 到 skills/xxx/SKILL.md 的次数，按 skill 名聚合取前 5；不含归档轮次（*.jsonl.reset.*）',
+  'dashboard.skillsToolsScopeHint': '不含归档轮次；仅统计当前 *.jsonl 转录',
   'dashboard.toolsTop': '工具调用 Top 5',
-  'dashboard.toolsTopDesc': '统计口径：当前会话中的工具调用次数，按工具名聚合取前 5',
+  'dashboard.toolsTopDesc':
+    '统计口径：各会话当前转录（*.jsonl）中的工具调用次数，按工具名聚合取前 5；不含归档轮次（*.jsonl.reset.*）',
   'dashboard.tokenTop': '会话 Token Top 10',
   'dashboard.tokenTopActive': '进行中 Token Top 10',
   'dashboard.tokenTopActiveDesc': '近 24h 当前会话中 token 消耗最多的前 10',
@@ -147,7 +179,7 @@ export default {
   'dashboard.colArchivedCount': '次',
   'dashboard.colArchivedCountDesc': '该会话被归档的次数（用户开启新对话的次数）',
   'dashboard.colStatus': 'Status',
-  'dashboard.colStatusDesc': 'active 活跃、idle 空闲、completed 已完成',
+  'dashboard.colStatusDesc': 'active 活跃、idle 空闲、completed 已结束（本轮 agent:final）',
   'dashboard.colLast': 'Last',
   'dashboard.colLastDesc': '最后活动时间',
   'dashboard.gatewayContext': 'Context',
@@ -163,7 +195,8 @@ export default {
   'dashboard.healthCpu': 'CPU',
   'dashboard.healthCpuDesc': 'Gateway 进程 CPU 使用率',
   'dashboard.recentSessions': '最近会话',
-  'dashboard.recentSessionsDesc': '按最后活跃时间排序的最近 10 条会话（列与「会话」页一致）',
+  'dashboard.recentSessionsDesc':
+    '按最后活跃时间排序的最近 10 条会话（列与「会话」页一致）。将鼠标悬停在「状态」「归档」表头可查看二者含义区别。',
   'dashboard.viewAll': '查看全部',
   'dashboard.health': '系统健康',
   'dashboard.healthDesc': 'Gateway 连接状态、内存、CPU 使用情况',
@@ -189,18 +222,27 @@ export default {
   'dashboard.overviewFirstLoadFailedTitle': '仪表盘数据加载失败',
   'dashboard.overviewRetry': '刷新',
   'sessions.title': '会话列表',
+  'sessions.pageScopeDesc':
+    '数据来自 GET /api/sessions（筛选与分页与 URL 参数一致）。列含义与仪表盘「最近会话」相同；表头悬停可看状态、归档、Token/利用率等口径。',
   'sessions.sortHint': '点击表头排序',
   'sessions.empty': '暂无会话',
   'sessions.filter.active': '活跃',
   'sessions.filter.idle': '空闲',
-  'sessions.filter.completed': '已完成',
+  'sessions.filter.completed': '已结束',
   'sessions.filter.failed': '失败',
+  'sessions.filter.archived': '归档',
+  'sessions.status.active': '活跃',
+  'sessions.status.idle': '空闲',
+  'sessions.status.completed': '已结束',
+  'sessions.status.failed': '失败',
   'sessions.column.session': '会话',
   'sessions.chatKind.group': '群聊',
   'sessions.chatKind.channel': '频道',
   'sessions.chatKind.direct': '单聊',
   'sessions.chatKind.tooltip': '根据 sessionKey 中的 :group: / :channel: / 私聊路由推断，便于与「飞书/心跳」等通道标签区分。',
   'sessions.column.status': '状态',
+  'sessions.column.statusTooltip':
+    '根据 transcript 推断：活跃 / 空闲 / 已结束 / 失败。其中「已结束」表示最后一条为 Agent 最终回复（agent:final），本轮对话已结束。注意：这与右侧「归档」列不是同一概念——「归档」列统计的是该会话下用户开启新对话（写入 *.jsonl.reset.*）的次数。',
   'sessions.column.user': '参与者',
   'sessions.column.participantTooltip':
     '一行会话 = OpenClaw 里的一条对话线程；sessionKey 表示路由（单聊 / 群聊 / 频道等）。「主会话」对应 dm 策略为 main 时折叠的默认桶 agent:*:main，与心跳任务是否写入同一桶无必然关系。本列多为索引里的对接身份（如飞书 open_id）。与左侧会话列里的通道/形态标签配合理解。',
@@ -213,6 +255,27 @@ export default {
   'sessions.column.messages': '消息',
   'sessions.column.fileSize': '文件大小',
   'sessions.column.archived': '归档',
+  'sessions.column.archivedTooltip':
+    '该会话线程下，用户开启新对话导致上一轮写入 *.jsonl.reset.* 的次数（每次新开对话计一次）。注意：这与「状态」里的「已结束」不同——这里是新对话轮次产生的历史归档次数；「已结束」只表示当前 transcript 末尾是否为 agent:final。',
+  'sessions.archivedCellTooltip': '打开归档轮次列表（分页）',
+  'sessions.archivesTitle': '归档轮次',
+  'sessions.archivesPageScopeDesc':
+    'GET /api/sessions/:id/archive-epochs。每行对应一次 *.jsonl.reset.*；输入/输出/合计为该归档文件内解析到的 token 用量。',
+  'sessions.archivesIntro':
+    '每一行对应一次 *.jsonl.reset.*（新开对话前写入的上一轮）。点击「查看」在会话详情中打开该归档 transcript。',
+  'sessions.archivesEmpty': '暂无归档记录',
+  'sessions.archivesLoadError': '加载归档列表失败',
+  'sessions.archivesColumnTime': '归档时间',
+  'sessions.archivesColumnIn': '输入',
+  'sessions.archivesColumnOut': '输出',
+  'sessions.archivesColumnTotal': '累计 Token',
+  'sessions.archivesRowAction': '查看',
+  'sessions.archivesBackSessions': '会话列表',
+  'sessions.archivesBackSession': '会话概览',
+  'sessions.archivesTotalFmt': '共 {n} 条',
+  'sessions.archivedCountFmt': '{count} 次',
+  'sessions.statusVsArchivedHint':
+    '说明：「状态」= 本轮对话进度（「已结束」= agent:final）；「归档」列 = 该会话下新开对话次数（*.jsonl.reset.*），二者含义不同。',
   'sessions.column.tokens': 'Token',
   'sessions.column.util': '利用率',
   'sessions.column.tokensUtilHint':
@@ -223,6 +286,21 @@ export default {
     '无法从当前数据可靠计算「已用 / 上下文上限」；请待 Gateway 写入可靠总量或查看会话日志中的 usage。',
   'sessions.column.actions': '操作',
   'session.detail': '会话详情',
+  'session.detailPageScopeDesc':
+    'GET /api/sessions/:id；正文为当前所选 transcript（当前 *.jsonl 或带 resetTimestamp 的归档文件）的解析结果。',
+  'session.transcriptPanelTitle': '转录内容',
+  'session.transcriptPanelScopeDesc':
+    '本卡片内各 Tab（消息 / 工具 / 事件 / Skills）均来自同一份 transcript，时间倒序，最新在顶部。',
+  'session.tokenCardScopeDesc':
+    '用量来自会话详情 API 合并的 tokenUsage 与消息解析；若索引 totalTokensFresh:false 会有「上下文未确认」提示。条带表示 In/Out 构成比。',
+  'session.invokedSkillsCardScopeDesc':
+    '由当前 transcript 中 read 到 skills/…/SKILL.md 的次数聚合（与 Skills 页 Calls 反推口径一致）。',
+  'session.transcriptCurrent': '当前对话',
+  'session.archiveTranscriptLabel': 'Transcript 版本',
+  'session.archiveEpochOption': '{time} · {tokens} tok',
+  'session.viewingArchiveBanner':
+    '正在查看归档轮次（用户新开对话前写入 *.jsonl.reset.* 的内容）。此处 Token 等指标仅对应该归档文件，不等同于当前进行中的对话。',
+  'session.archivesListLink': '全部归档（列表）',
   'session.messages': '消息',
   'session.messageCount': '消息条数',
   'session.messageCountTooltip':
@@ -263,8 +341,29 @@ export default {
   'logs.clear': '清空',
   'logs.scrollBottom': '滚到底部',
   'logs.filterLevel': '级别',
+  'logs.pageScopeDesc':
+    '初始列表来自 GET /api/logs；之后通过 Socket.IO `logs:new` 增量追加。清空仅影响浏览器内存中的展示。',
+  'logs.cardScopeDesc': '展示为服务端推送与最近拉取的日志行；级别筛选为前端过滤。',
   'skills.title': 'Skills 分析',
   'skills.subtitle': 'Skill 与 Tool 关联、调用频率、僵尸与重复 Skills',
+  'skills.pageScopeDesc':
+    '数据来自 GET /api/skills/*（usage、system-prompt/analysis、usage-by-user、skill-tool-usage）。各区块 ℹ 为对应图表或表的统计口径。',
+  'skills.kpiSectionTitle': '指标概览',
+  'skills.kpiRowScopeDesc':
+    'Total/Enabled/Zombie/Dup 由当前 skills 列表聚合：Zombie=30 天未使用，Dup=duplicateWith 非空。',
+  'skills.insightChartScopeDesc':
+    '下拉维度来自各 skill 对象字段；仅展示 value>0 的项，最多 20 条，降序。',
+  'skills.top10ChartScopeDesc': '按 callCount 降序取前 10（callCount>0）。',
+  'skills.userDistChartScopeDesc':
+    '按 getUsageByUser 结果：每 skill 一行，堆叠为 Top5 用户 + 其他用户的 read 次数。',
+  'skills.skillListTableScopeDesc':
+    '全量 skills 数组；Calls 等为后端聚合字段。详见页顶「Calls 列」灰字说明。',
+  'skills.skillToolChartScopeDesc': '取最多 15 个 skill、最多 8 个工具列的堆叠分布（与 Tab 上方归因说明一致）。',
+  'skills.analysisChartsScopeDesc':
+    '与「Skills 占用分析」说明一致：基于 system-prompt 分析接口估算活跃/僵尸/重复占用 Token 与建议。',
+  'skills.analysisTokenPieTitle': 'Token 分布',
+  'skills.analysisSavingsTitle': '节省估算',
+  'skills.listTableTitle': 'Skills 列表',
   'skills.tabList': 'Skills 清单',
   'skills.tabAnalysis': 'Skills 占用分析',
   'skills.tabAnalysisHint':
@@ -294,15 +393,34 @@ export default {
   'skills.duplicateSkillList': '重复 skills',
   'token.title': 'Token 监控',
   'token.subtitle': '会话 Token 与阈值',
+  'token.pageScopeDesc':
+    '本页数据来自：会话 token 用量列表（GET /api/sessions/token-usage）、按会话 key 聚合的 metrics（近 24h）、阈值告警历史。与仪表盘 Token 汇总使用同一套本地 metrics 管道。各区块标题旁 ℹ 为对应统计口径。',
+  'token.kpiSectionTitle': '阈值档位会话数',
+  'token.kpiRowDesc':
+    '与下方饼图同源：当前页拉取的 token-usage 列表中，按每条会话记录的 threshold 字段计数（normal / warning / serious / critical / limit）。「Serious/Crit」为 serious 与 critical 之和。',
+  'token.thresholdPieTitle': '阈值分布',
+  'token.thresholdPieDesc':
+    '饼图数据与上方 KPI 一致：同一批会话在各 threshold 档位上的数量分布。',
+  'token.alertsTitle': '告警',
+  'token.alertsDesc':
+    '来自 GET /api/sessions/token-alerts/history；本区域展示最近若干条（时间新→旧）。',
+  'token.highUtilTitle': '利用率 > 50%',
+  'token.highUtilDesc':
+    '在同一份 token-usage 会话快照中筛选 utilization > 50；颜色按 threshold。Used 列为当前总 token（与列表同源）。',
   'token.autoRefresh': '自动刷新 (30s)',
   'token.sessionsCount': '会话数',
+  'token.sessionsCountDesc':
+    '当前请求为 GET /api/sessions/token-usage?page=1&pageSize=200，此数字为该页返回列表中的会话条数（≤200）。',
   'token.tableActive': '进行中会话（活跃 + 空闲）',
-  'token.tableActiveDesc': '近 24h 内每会话取最新一条，仅本次运行期间',
+  'token.tableActiveDesc':
+    '近 24h 内每会话取最新一条（metrics 口径，与仪表盘 Token 汇总一致）。totalTokensFresh:false 时可能偏低或为 0。',
   'token.tableArchived': '归档会话',
-  'token.tableArchivedDesc': '近 24h 内用户开启新对话后，上一轮对话的 token，按会话分组',
+  'token.tableArchivedDesc':
+    '近 24h 内 *.jsonl.reset.* 归档用量按会话聚合。数字旁图标可查看数据源说明。',
   'token.costHint': '费用估算：优先使用 API 返回的实际 usage.cost 数据；缺失时使用配置价格估算。',
-  'token.chartTopRate': '平均消耗 Top 10 (tok/分钟)',
-  'token.chartTopRateDesc': '总 token ÷ 会话时长，分母至少 1 分钟；横轴括号内为 sessionKey 后缀以便区分同名类型。',
+  'token.chartTopRate': 'Token 消耗 Top 10',
+  'token.chartTopRateDesc': '按当前快照中的总 token 排序；横轴括号内为 sessionKey 后缀以便区分同名类型。',
+  'token.chartTopUnit': 'tok',
   'session.tokenZeroTitle': 'tokens 显示为 0 — 说明与核对方式',
   'session.tokenZeroExpandLabel': '点击展开查看说明与核对步骤；展开后可再收起以节省版面',
   'session.tokenZeroPoint1Title': '1）数字从哪来',
@@ -323,6 +441,16 @@ export default {
   'session.tokenZeroIndexPathHint': '（完整路径 = 状态根 + 上述相对路径）',
   'session.tokenZeroPoint4Title': '4）结论',
   'session.tokenZeroPoint4Desc': '若你在此处看到的数字与 TraceFlow 展示不一致，可能是会话日志/索引尚未刷新。可尝试重新运行会话或重启服务后再次查看。',
+  'systemPrompt.pageScopeDesc':
+    'Probe 与分析来自 GET /api/skills/system-prompt/probe、analysis、usage；与 Gateway 当前会话/报告对齐。各区块 ℹ 说明数据来源。',
+  'systemPrompt.fullCollapseScopeDesc':
+    '折叠内为完整 Markdown：可能来自 transcript 中的 system、模型回传或重建；见展开后顶部 Alert。',
+  'systemPrompt.breakdownCardScopeDesc':
+    '分块 Token 来自 probe.breakdown；各块可展开查看对应文本或表格（workspace/skills/tools 等）。',
+  'systemPrompt.analysisBlockScopeDesc':
+    '与 Skills 页「占用分析」同源 analysis 接口；饼图为活跃/僵尸/重复 skill 相关 token 估算。',
+  'systemPrompt.zombieDuplicateCardScopeDesc':
+    '僵尸/重复列表来自当前 skills usage 列表过滤（30 天未使用 / duplicateWith 非空）。',
   'systemPrompt.fullTitle': '完整 System Prompt (Markdown)',
   'systemPrompt.fromTranscript': '以下为本次请求时真实发给大模型的 system 正文（来自会话 transcript）。',
   'systemPrompt.fromModelReveal': '以下为模型探测并回传的 system 正文（当 transcript 缺失时用于替代）。',
@@ -344,6 +472,13 @@ export default {
   'systemPrompt.toolsSchemaHintTitle': '为何此处无 schema 定义？',
   'systemPrompt.toolsSchemaHint': '工具 JSON Schema 通过 API 的 tools 参数发送（如 OpenAI function calling），不在 system prompt 文本中。大模型从 API 请求体获取完整 schema 来正确传参，本页仅解析 system prompt 文本，故无法展示 schema。下表为 Gateway report 的 per-tool 统计（schema 字符数、属性数）。',
   'pricing.title': '模型价格配置',
+  'pricing.pageScopeDesc':
+    '价格来自 GET /api/pricing 与本地配置文件；「在用」标签依赖会话列表与已配置模型并集。金额为每百万 token 美元单价，供费用列估算。',
+  'pricing.filtersCardScopeDesc': '搜索与「仅自定义」为前端过滤；不改变后端已加载的价格表。',
+  'pricing.tableCardScopeDesc':
+    '表格按当前 Tab（在用/国内/海外/全部）与筛选条件展示；分页为前端 Table 分页。',
+  'pricing.filtersCardTitle': '筛选',
+  'pricing.tableCardTitle': '模型价格',
   'pricing.subtitle': '配置所有支持模型的价格（USD / 百万 Token）',
   'pricing.lastUpdated': '最后更新',
   'pricing.addModel': '添加模型',
