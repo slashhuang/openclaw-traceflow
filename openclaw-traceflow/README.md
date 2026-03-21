@@ -131,7 +131,10 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 
 - **One row** is one **conversation thread** in OpenClaw (one `sessionId` / one transcript). In **group** chats, many people usually share the **same** session row.
 - **`sessionKey`** encodes **routing/shape** (provider, group/channel/DM, etc.); it is not the same thing as “who” appears in the participant column.
-- The **Participant** column prefers the **indexed or resolved identity** (e.g. Feishu `open_id`). Messages may include `Sender (untrusted metadata)` blocks; TraceFlow attaches **per-message `sender`** when parsed. If a real identity is present on the session, the list shows it **even** when the session is also tagged as a system type (heartbeat/cron/boot) in the **Session** column.
+- **`agent:<agentId>:main`** is OpenClaw’s **default “main” DM bucket** when direct chats use the `main` session scope; TraceFlow labels it **Main session** (中文 UI: **主会话**), not “heartbeat.” Scheduled heartbeat traffic may still land in the same transcript—**the key shape alone does not mean “heartbeat session.”**
+- **Participant (list):** TraceFlow scans each transcript JSONL for distinct sender identities (`Sender` / `Conversation info` metadata blocks, `senderLabel`, `message.sender`, etc.). If there are **multiple** distinct human senders, the column shows **`firstIdentity (+N)`** where **`N`** is the count of *additional* identities (not the total headcount).
+- **Participant (detail):** When multiple identities exist, the detail page shows the first plus **+N**; click **+N** for a popover with the full deduped list (same source as the list scan). Group rosters may be larger than what appears in the transcript—only **observed senders** are listed.
+- **Session detail · Messages:** single-column list. Each message is **one line** by default; **click the row** to expand the full body; use the **arrow** button to collapse (so selecting text in the expanded body does not collapse the row).
 - **`unknown`** usually means the index had no id or the first transcript lines could not infer one—see session detail help text.
 
 ---

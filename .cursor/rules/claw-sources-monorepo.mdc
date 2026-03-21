@@ -10,3 +10,4 @@ alwaysApply: true
 - Other subtree projects: **`claw-family/`**, **`futu-openD/`**. **`external-refs/`** is reference code only.
 - For **Gateway WebSocket** work in TraceFlow, read **`AGENTS.md`** at repo root: backend clients without device identity get **cleared scopes**; use **`health` RPC** for overview, not `status`/`skills.status` alone, to avoid **`missing scope: operator.read`**.
 - Upstream for TraceFlow: `git@github.com:slashhuang/openclaw-traceflow.git`.
+- **TraceFlow 双远端（main）**：在 **`main`** 分支上完成包含 **`openclaw-traceflow/`** 的提交后，须**依次**同步两处远端：`git push origin main`，再执行 `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main`。独立仓库与 monorepo 子目录才一致；仅 `git push` 到 `origin` 不会更新 `openclaw-traceflow` 远程。

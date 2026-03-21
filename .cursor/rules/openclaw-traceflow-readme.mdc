@@ -1,0 +1,11 @@
+---
+description: openclaw-traceflow README — preserve section order for open-source docs
+globs: openclaw-traceflow/README.md, openclaw-traceflow/README.zh-CN.md
+alwaysApply: false
+---
+
+# openclaw-traceflow README
+
+- **OpenClaw TraceFlow** 是开源项目；更新 **README.md**（英文）与 **README.zh-CN.md**（中文）时，**不得改变现有章节顺序与标题结构**（从 Tech stack / 技术栈 到 License / 许可证 的整体顺序保持一致）。
+- 在**同一个小节内**更新段落与列表即可；中英文需同步更新**对应内容**。
+- 新增说明优先放在**已有章节**（例如 Sessions / 会话与参与者）；除非用户明确要求，否则不要新增顶级 `##` 区块，避免破坏读者与双语对照习惯。
