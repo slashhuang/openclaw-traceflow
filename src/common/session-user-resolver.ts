@@ -3,11 +3,37 @@
  * 供 sessions、skills、metrics 等模块共用，避免 unknown 散落各处
  */
 
+/**
+ * 解析 OpenClaw canonical `agent:<agentId>:<rest>`（与 openclaw routing/session-key 语义一致）。
+ */
+function parseAgentSessionKeyParts(sessionKey: string): { agentId: string; rest: string } | null {
+  const raw = (sessionKey ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  const parts = raw.split(':').filter(Boolean);
+  if (parts.length < 3) return null;
+  if (parts[0] !== 'agent') return null;
+  const agentId = parts[1]?.trim() ?? '';
+  const rest = parts.slice(2).join(':');
+  if (!agentId || !rest) return null;
+  return { agentId, rest };
+}
+
+/**
+ * OpenClaw canonical 主会话桶：`buildAgentMainSessionKey` → `agent:<id>:main`（rest 仅为 `main`）。
+ * `dmScope === "main"` 时私聊折叠到此 key；heartbeat 可能写入同一桶，但 key 本身不是「heartbeat 专用」。
+ * 不能用 `endsWith(':main')`：通道路由里可能出现含 `:main` 片段的非 canonical key。
+ */
+function isCanonicalAgentMainSessionKey(fullKey: string): boolean {
+  const parsed = parseAgentSessionKeyParts(fullKey);
+  if (parsed && parsed.rest === 'main') return true;
+  return fullKey.trim().toLowerCase() === 'main';
+}
+
 /** 从 sessionKey/sessionId 推断任务类型 */
 export function inferSessionTypeLabel(sessionKey: string, sessionId: string): string {
   const key = sessionKey || sessionId || '';
   const full = key.includes('/') ? key.split('/').pop() || key : key;
-  if (full.endsWith(':main') || full === 'main') return 'heartbeat';
+  if (isCanonicalAgentMainSessionKey(full)) return '主会话';
   if (full.includes(':cron:')) return 'cron';
   if (full.startsWith('boot-') || full.includes(':boot')) return 'boot';
   if (full.includes(':wave:')) return 'Wave 用户';

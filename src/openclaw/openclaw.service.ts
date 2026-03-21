@@ -112,6 +112,21 @@ export interface OpenClawSession {
   messageCount?: number;
   /** 当前会话 transcript .jsonl 文件大小（字节） */
   transcriptFileSizeBytes?: number;
+  /**
+   * 从 transcript 扫描得到的去重参与者摘要（群聊等多人时），供列表「参与者」列展示。
+   * 例如 `ou_xxx (+2)` 表示首位 + 另 2 人；单人时不设，沿用 userId。
+   */
+  participantSummary?: string;
+
+  /**
+   * transcript 中按出现顺序去重后的真人参与者 id（与 participantSummary 同源）；列表 API 不返回，仅详情合并。
+   */
+  participantIds?: string[];
+
+  /**
+   * 内部：参与者扫描实现版本（storage 缓存失效用）；listSessions 会剥离，不对外暴露。
+   */
+  transcriptParticipantScanVersion?: number;
 
   /**
    * tokens 计数口径/数据来源说明。
@@ -174,6 +189,8 @@ export interface OpenClawSessionDetail extends OpenClawSession {
     durationMs: number;
     success: boolean;
     error?: string;
+    /** JSONL 行上的时间戳（毫秒），用于排序与展示调用时间 */
+    timestamp?: number;
   }>;
   /** 基于 read path 反推的 skill 调用（path 含 skills/xxx/SKILL.md） */
   invokedSkills?: InvokedSkill[];
@@ -902,8 +919,13 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     const sessions: OpenClawSession[] = [];
 
     for (const [_, data] of sessionsMap) {
-      // 移除 fileMeta 字段（内部使用，不暴露给前端）
-      const { fileMeta, ...session } = data;
+      // 移除 fileMeta / 内部扫描版本 / 完整参与者 id 列表（列表只需 participantSummary 短串）
+      const {
+        fileMeta,
+        transcriptParticipantScanVersion: _scanVer,
+        participantIds: _pids,
+        ...session
+      } = data;
       sessions.push(session);
     }
 
@@ -1113,12 +1135,16 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
             if (toolCallId && toolCallIdToIndex.has(toolCallId)) {
               const idx = toolCallIdToIndex.get(toolCallId)!;
+              const prev = toolCalls[idx];
               toolCalls[idx] = {
-                ...toolCalls[idx],
+                ...prev,
                 output,
                 durationMs,
                 success: !isError,
                 error: isError ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined,
+                timestamp:
+                  prev.timestamp ??
+                  (typeof entry.timestamp === 'number' ? entry.timestamp : undefined),
               };
             } else {
               toolCalls.push({
@@ -1128,6 +1154,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
                 durationMs,
                 success: !isError,
                 error: isError ? (typeof output === 'string' ? output : undefined) : undefined,
+                timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
               });
             }
           }
@@ -1148,6 +1175,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
                   durationMs: 0,
                   success: true,
                   error: undefined,
+                  timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
                 });
                 if (id) toolCallIdToIndex.set(id, idx);
               } else if (item.type === 'text') {
@@ -1196,6 +1224,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
               durationMs: entry.toolUse.durationMs || 0,
               success: entry.toolUse.success !== false,
               error: entry.toolUse.error,
+              timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
             });
           }
         }

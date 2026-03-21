@@ -30,7 +30,7 @@ import {
 } from 'recharts';
 import { useIntl } from 'react-intl';
 import { metricsApi } from '../api';
-import { inferSessionTypeLabel } from '../utils/session-user';
+import { inferSessionTypeLabel, formatSessionParticipantDisplay } from '../utils/session-user';
 
 const THRESHOLD_COLORS = {
   normal: '#52c41a',
@@ -47,9 +47,7 @@ function formatCompactRate(n) {
 
 function userLabelForTokenRow(usageRow, sessionList) {
   const ls = sessionList.find((s) => s.sessionKey === usageRow.sessionKey);
-  const typeLabel = ls?.typeLabel || inferSessionTypeLabel(usageRow.sessionKey, usageRow.sessionId);
-  const sys = ['heartbeat', 'cron', 'boot'].includes(typeLabel);
-  if (ls) return sys ? typeLabel : ls.user || 'unknown';
+  if (ls) return formatSessionParticipantDisplay(ls);
   const id = usageRow.sessionId || '';
   const tail = id.includes('/') ? id.split('/').pop() : id;
   return tail && tail.length >= 6 ? `${tail.slice(0, 8)}…` : usageRow.sessionKey?.slice(0, 14) || '—';
