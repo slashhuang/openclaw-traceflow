@@ -35,3 +35,9 @@ cp config/openclaw.runtime.example.json config/openclaw.runtime.json
 ### 敏感配置
 
 Gateway Token / Password、Access Token 等请优先用环境变量（如 `OPENCLAW_GATEWAY_TOKEN`），不要写入会被提交的 JSON。
+
+---
+
+## Product scope & performance / 产品口径与性能
+
+统计口径（各面板纳入/排除项）与性能取向见仓库 **[`../README.md`](../README.md)**、**[`../README.zh-CN.md`](../README.zh-CN.md)**（Overview / 概述，Performance & capacity / 性能与容量）及 **[`../ROADMAP.md`](../ROADMAP.md)**。

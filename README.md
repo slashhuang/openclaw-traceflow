@@ -27,6 +27,8 @@
 | Deployment | With Gateway | PM2, own port |
 | UI language | Mainly one language | English + Chinese |
 | Automation friendliness | Basic | JSON HTTP APIs + log WebSocket streaming |
+| **Statistical scope spelled out in-product (ℹ)** | Rare | **Yes** — major blocks explain what is included/excluded (e.g. live `*.jsonl` vs `*.jsonl.reset.*`, active vs archived tokens, `totalTokensFresh` caveats) |
+| **Operator-safe Gateway overview without `operator.read`** | N/A | **Yes** — path checks use connect snapshot; dashboard health/overview uses **`health`** RPC (scope-exempt) when backend WS has cleared scopes (see monorepo root **`AGENTS.md`**) |
 
 ---
 
@@ -82,6 +84,10 @@ Ensure the OpenClaw Gateway is reachable at **`OPENCLAW_GATEWAY_URL`** (default 
 ## Overview
 
 TraceFlow is a **separate web service** that talks to your running **OpenClaw Gateway** (default `http://localhost:18789`). It does not replace the Gateway or OpenClaw’s default management console; it complements them with **operator-focused dashboards** you can deploy on another host or port (default **`http://0.0.0.0:3001`**).
+
+**Data scope & honesty.** Many agent consoles show numbers without saying **where they come from** or **what they exclude**. TraceFlow treats that as a product risk: the UI documents **statistical scope** on major panels (ℹ tooltips)—for example, Dashboard **Skills / Tools Top 5** aggregate **live** transcripts (`*.jsonl`) only, not archived turns (`*.jsonl.reset.*`); **Token** views separate **active** vs **archived** usage; session/token copy calls out **`totalTokensFresh`** and index lag when relevant. The goal is **fewer silent mismatches** between what operators assume and what the pipeline actually measures.
+
+**Performance stance.** Observability should not mean “re-read everything on every click.” TraceFlow already ships **incremental** session directory scans, **fingerprint-based caching** for per-session tool/skill aggregation when transcripts haven’t changed, **head/tail** parsing for very large JSONL transcripts, a **single long-lived** Gateway WebSocket for RPC, and a **batched** dashboard overview endpoint. Remaining hot paths (e.g. worst-case **O(n)** scans when many sessions exist) are tracked honestly in **`ROADMAP.md`**.
 
 ---
 
@@ -143,7 +149,15 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 
 ## Performance & capacity
 
-TraceFlow targets **single-host, small-to-medium** session counts. With **very large** numbers of sessions, CPU and disk I/O can rise because metrics (e.g. tool/skill top lists) may scan session data—see **`ROADMAP.md`** for limits and planned improvements.
+TraceFlow targets **single-host, small-to-medium** session counts. In practice we optimize the **steady state**:
+
+- **Session list / storage:** `FileSystemSessionStorage` **incrementally** rescans changed transcript files and keeps a short-lived cache so `listSessions` stays mostly in-memory work.
+- **Dashboard tool/skill Top 5:** `MetricsService.refreshToolStatsSnapshot()` keeps a per-session **fingerprint** (`lastActiveAt` + transcript size + status). If unchanged, it **reuses** cached tool/skill counts instead of re-parsing JSONL—idle or completed sessions that don’t churn stop paying full parse cost every refresh.
+- **Session detail:** large transcripts use a **head/tail window** instead of loading the entire file (see server constants / session detail UI).
+- **Gateway:** one **reused** WebSocket client per configured URL+auth—avoid repeated handshakes for `health`, `status`, `logs.tail`, etc.
+- **Overview API:** `GET /api/dashboard/overview` bundles health, sessions, logs, and metrics in one round trip for the React dashboard.
+
+With **very large** session counts, worst-case work can still grow (notably full scans when many sessions are new or churning)—see **`ROADMAP.md`** for known bottlenecks and planned work.
 
 ---
 
