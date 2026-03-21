@@ -44,6 +44,23 @@ TraceFlow is a **separate web service** that talks to your running **OpenClaw Ga
 
 ---
 
+## UI snapshots
+
+### Dashboard / Sessions
+
+![Dashboard](./docs/traceFlowSnapshots/dashboard-1.png)
+![Session List](./docs/traceFlowSnapshots/sessionList.png)
+![Session Detail](./docs/traceFlowSnapshots/sessionDetail.png)
+
+### Skills / Prompt / Tokens / Pricing
+
+![Skills](./docs/traceFlowSnapshots/skills.png)
+![System Prompt](./docs/traceFlowSnapshots/systemPrompt.png)
+![Token Monitor](./docs/traceFlowSnapshots/tokenMonitor.png)
+![Pricing](./docs/traceFlowSnapshots/models.png)
+
+---
+
 ## Requirements
 
 | Requirement | Notes |
@@ -109,21 +126,6 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 | `/pricing` | Model pricing |
 | `/logs` | Live logs (Socket.IO) |
 | `/settings` | Gateway URL, paths, access |
-
-## UI snapshots
-
-### Dashboard / Sessions
-
-![Dashboard](./docs/traceFlowSnapshots/dashboard-1.png)
-![Session List](./docs/traceFlowSnapshots/sessionList.png)
-![Session Detail](./docs/traceFlowSnapshots/sessionDetail.png)
-
-### Skills / Prompt / Tokens / Pricing
-
-![Skills](./docs/traceFlowSnapshots/skills.png)
-![System Prompt](./docs/traceFlowSnapshots/systemPrompt.png)
-![Token Monitor](./docs/traceFlowSnapshots/tokenMonitor.png)
-![Pricing](./docs/traceFlowSnapshots/models.png)
 
 ---
 
