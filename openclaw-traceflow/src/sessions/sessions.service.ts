@@ -2,6 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
 import { inferSessionTypeLabel, resolveDisplayUser } from '../common/session-user-resolver';
 
+function mapTokenUsageForApi(u: OpenClawSession['tokenUsage'] | undefined): Session['tokenUsage'] | undefined {
+  if (!u) return undefined;
+  const limit = u.limit;
+  if (u.contextUtilizationReliable === false) {
+    return { ...u, utilization: undefined };
+  }
+  if (typeof limit === 'number' && limit > 0 && typeof u.total === 'number') {
+    return { ...u, utilization: Math.round((u.total / limit) * 100) };
+  }
+  return u as Session['tokenUsage'];
+}
+
 export interface Session {
   sessionKey: string;
   sessionId: string;
@@ -24,6 +36,8 @@ export interface Session {
     total: number;
     limit?: number;
     utilization?: number; // 0-100%
+    /** false：勿将 utilization 当作可信的上下文占用率 */
+    contextUtilizationReliable?: boolean;
   };
   usageCost?: {
     input: number;
@@ -101,12 +115,7 @@ export class SessionsService {
         contextTokens: s.contextTokens,
         model: s.model,
           usageCost: s.usageCost,
-        tokenUsage: s.tokenUsage && 'limit' in s.tokenUsage && s.tokenUsage.limit
-          ? {
-              ...s.tokenUsage,
-              utilization: Math.round((s.tokenUsage.total / s.tokenUsage.limit) * 100),
-            }
-          : (s.tokenUsage as Session['tokenUsage']),
+        tokenUsage: mapTokenUsageForApi(s.tokenUsage),
         messageCount: s.messageCount,
         transcriptFileSizeBytes: s.transcriptFileSizeBytes,
         };
@@ -188,12 +197,7 @@ export class SessionsService {
         contextTokens: detail.contextTokens,
         lastActive: detail.lastActiveAt,
         duration: Date.now() - detail.createdAt,
-        tokenUsage: detail.tokenUsage && 'limit' in detail.tokenUsage && detail.tokenUsage.limit
-          ? {
-              ...detail.tokenUsage,
-              utilization: Math.round((detail.tokenUsage.total / detail.tokenUsage.limit) * 100),
-            }
-          : detail.tokenUsage as any,
+        tokenUsage: mapTokenUsageForApi(detail.tokenUsage),
         usageCost: detail.usageCost,
         tokenUsageMeta: tokenUsageMetaMerged,
         messages: (detail.messages || []).map((m: any) => ({
