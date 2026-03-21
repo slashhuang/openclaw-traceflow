@@ -80,3 +80,4 @@ From `claw-family` directory:
 
 - Default behavior is production deployment.
 - For local development, use `openclaw-traceflow` project commands directly (`pnpm run start:dev`).
+- Canonical docs for ports, env vars, and APIs: monorepo `openclaw-traceflow/README.md` and `openclaw-traceflow/CLAUDE.md` (TraceFlow defaults: UI **3001**, Gateway **18789**, dashboard poll **~10s** when tab visible).
