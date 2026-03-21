@@ -2,7 +2,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import initSqlJs, { Database } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
-import { OpenClawService } from '../openclaw/openclaw.service';
+import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
 import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
 import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
 
@@ -151,6 +151,19 @@ export class MetricsService implements OnModuleInit {
   } = { tools: [], skills: [] };
   private toolStatsSnapshotAt = 0;
 
+  /**
+   * 按会话缓存 tool/skill 聚合：指纹 = lastActiveAt + transcript 大小 + status。
+   * 未变则跳过 getSessionDetail（避免 idle/已完成会话反复全量读 JSONL）。
+   */
+  private readonly sessionToolStatsCache = new Map<
+    string,
+    {
+      fingerprint: string;
+      toolCounts: Map<string, { count: number; success: number }>;
+      skillCounts: Map<string, number>;
+    }
+  >();
+
   constructor(private readonly openclawService: OpenClawService) {
     this.dbPath = path.join(process.cwd(), 'data', 'metrics.db');
   }
@@ -170,27 +183,73 @@ export class MetricsService implements OnModuleInit {
     return this.toolStatsSnapshot;
   }
 
+  private fingerprintForToolStatsSession(s: OpenClawSession): string {
+    return `${s.lastActiveAt}|${s.transcriptFileSizeBytes ?? 0}|${s.status}`;
+  }
+
+  private mergeSessionToolContribution(
+    toolStats: Map<string, { count: number; success: number }>,
+    skillStats: Map<string, number>,
+    toolCounts: Map<string, { count: number; success: number }>,
+    skillCounts: Map<string, number>,
+  ): void {
+    for (const [name, data] of toolCounts) {
+      const cur = toolStats.get(name) || { count: 0, success: 0 };
+      cur.count += data.count;
+      cur.success += data.success;
+      toolStats.set(name, cur);
+    }
+    for (const [skill, n] of skillCounts) {
+      skillStats.set(skill, (skillStats.get(skill) ?? 0) + n);
+    }
+  }
+
   async refreshToolStatsSnapshot(): Promise<{
     tools: Array<{ tool: string; count: number; successRate: number }>;
     skills: Array<{ skill: string; count: number }>;
   }> {
     const sessions = await this.openclawService.listSessions();
+    const currentIds = new Set(sessions.map((s) => s.sessionId));
+    for (const id of this.sessionToolStatsCache.keys()) {
+      if (!currentIds.has(id)) this.sessionToolStatsCache.delete(id);
+    }
+
     const toolStats = new Map<string, { count: number; success: number }>();
     const skillStats = new Map<string, number>();
+
     for (const session of sessions) {
+      const fingerprint = this.fingerprintForToolStatsSession(session);
+      const cached = this.sessionToolStatsCache.get(session.sessionId);
+      if (cached && cached.fingerprint === fingerprint) {
+        this.mergeSessionToolContribution(toolStats, skillStats, cached.toolCounts, cached.skillCounts);
+        continue;
+      }
+
       const detail = await this.openclawService.getSessionDetail(session.sessionId);
-      if (!detail?.toolCalls?.length) continue;
-      for (const tool of detail.toolCalls) {
-        const name = tool.name;
-        const current = toolStats.get(name) || { count: 0, success: 0 };
-        current.count += 1;
-        if (tool.success) current.success += 1;
-        toolStats.set(name, current);
+      const localTools = new Map<string, { count: number; success: number }>();
+      const localSkills = new Map<string, number>();
+
+      if (detail?.toolCalls?.length) {
+        for (const tool of detail.toolCalls) {
+          const name = tool.name;
+          const current = localTools.get(name) || { count: 0, success: 0 };
+          current.count += 1;
+          if (tool.success) current.success += 1;
+          localTools.set(name, current);
+        }
+        for (const { skillName, readCount } of inferInvokedSkillsFromToolCalls(detail.toolCalls)) {
+          localSkills.set(skillName, (localSkills.get(skillName) ?? 0) + readCount);
+        }
       }
-      for (const { skillName, readCount } of inferInvokedSkillsFromToolCalls(detail.toolCalls)) {
-        skillStats.set(skillName, (skillStats.get(skillName) ?? 0) + readCount);
-      }
+
+      this.sessionToolStatsCache.set(session.sessionId, {
+        fingerprint,
+        toolCounts: localTools,
+        skillCounts: localSkills,
+      });
+      this.mergeSessionToolContribution(toolStats, skillStats, localTools, localSkills);
     }
+
     const tools = Array.from(toolStats.entries())
       .map(([tool, data]) => ({
         tool,
