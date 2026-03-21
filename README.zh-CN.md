@@ -13,20 +13,6 @@
 
 ---
 
-## 技术栈
-
-- 后端：NestJS + TypeScript
-- 前端：React + Vite + Ant Design
-- 实时日志：Socket.IO
-
----
-
-## 概述
-
-TraceFlow 是运行在 **OpenClaw Gateway** 之外的**独立服务**（默认连接 `http://localhost:18789`）。它不替代 Gateway，也不替代 OpenClaw 自带的**默认管理后台**，而是为**运维与排障**提供专用仪表盘，可部署在**另一端口或另一台机器**（默认监听 **`http://0.0.0.0:3001`**）。
-
----
-
 ## 为什么选择 TraceFlow（对比 OpenClaw 默认管理后台）
 
 | 能力 | OpenClaw 默认管理后台 | TraceFlow |
@@ -82,6 +68,22 @@ pnpm run deploy:pm2
 将依次执行 **`pnpm install`**、构建前后端，并在 PM2 中启动或重载进程名 **`openclaw-traceflow`**。浏览器访问 **`http://localhost:3001`**（或你配置的 `HOST` / `PORT`）。
 
 请确保 Gateway 可被 **`OPENCLAW_GATEWAY_URL`** 访问（默认 `http://localhost:18789`）。若 Gateway 需要鉴权，在界面 **设置** 中填写 Token / Password。
+
+---
+
+## 技术栈
+
+- 后端：NestJS + TypeScript
+- 前端：React + Vite + Ant Design
+- 实时日志：Socket.IO
+
+---
+
+## 概述
+
+TraceFlow 是运行在 **OpenClaw Gateway** 之外的**独立服务**（默认连接 `http://localhost:18789`）。它不替代 Gateway，也不替代 OpenClaw 自带的**默认管理后台**，而是为**运维与排障**提供专用仪表盘，可部署在**另一端口或另一台机器**（默认监听 **`http://0.0.0.0:3001`**）。
+
+---
 
 ## 配置（先零配置）
 
