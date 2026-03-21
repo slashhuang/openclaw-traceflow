@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { Card, Select, Button, Space, Typography, Spin, theme, message } from 'antd';
 import { useIntl } from 'react-intl';
 import { logsApi } from '../api';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 export default function Logs() {
   const intl = useIntl();
@@ -73,7 +74,10 @@ export default function Logs() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'logs.title' })}</Typography.Title>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'logs.title' })}</Typography.Title>
+          <SectionScopeHint intl={intl} messageId="logs.pageScopeDesc" />
+        </div>
         <Space wrap>
           <Typography.Text type={socketConnected ? 'success' : 'secondary'}>
             {socketConnected ? intl.formatMessage({ id: 'logs.connected' }) : intl.formatMessage({ id: 'logs.disconnected' })}
@@ -109,7 +113,7 @@ export default function Logs() {
           </Button>
         </Space>
       </div>
-      <Card styles={{ body: { padding: 12 } }}>
+      <Card styles={{ body: { padding: 12 } }} extra={<SectionScopeHint intl={intl} messageId="logs.cardScopeDesc" />}>
         <div
           style={{
             maxHeight: '70vh',

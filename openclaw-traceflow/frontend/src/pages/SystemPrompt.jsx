@@ -24,6 +24,7 @@ import {
   Legend,
 } from 'recharts';
 import { useIntl } from 'react-intl';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 /** OpenClaw buildAgentSystemPrompt 组装顺序，用于摘要锚点 */
 const ASSEMBLY_ORDER = [
@@ -369,7 +370,10 @@ export default function SystemPromptPage() {
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-      <Typography.Title level={4}>{intl.formatMessage({ id: 'menu.systemPrompt' })}</Typography.Title>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'menu.systemPrompt' })}</Typography.Title>
+        <SectionScopeHint intl={intl} messageId="systemPrompt.pageScopeDesc" />
+      </div>
       <Typography.Paragraph type="secondary">
         Gateway · systemPromptReport · sessions.json.
       </Typography.Paragraph>
@@ -384,6 +388,7 @@ export default function SystemPromptPage() {
               label: (
                 <Space>
                   <Typography.Text strong>{intl.formatMessage({ id: 'systemPrompt.fullTitle' })}</Typography.Text>
+                  <SectionScopeHint intl={intl} messageId="systemPrompt.fullCollapseScopeDesc" />
                   {probe?.systemPromptMarkdown?.length > 0 && (
                     <Button
                       type="text"
@@ -497,7 +502,11 @@ export default function SystemPromptPage() {
         />
       )}
 
-      <Card title={intl.formatMessage({ id: 'systemPrompt.breakdownTitle' })} style={{ marginBottom: 16 }}>
+      <Card
+        title={intl.formatMessage({ id: 'systemPrompt.breakdownTitle' })}
+        extra={<SectionScopeHint intl={intl} messageId="systemPrompt.breakdownCardScopeDesc" />}
+        style={{ marginBottom: 16 }}
+      >
         {probeLoading ? (
           <Spin style={{ display: 'block', margin: '8px 0' }} />
         ) : !probe?.ok ? (
@@ -608,10 +617,16 @@ export default function SystemPromptPage() {
 
       {analysis && (
         <>
-          <Typography.Title level={5}>Skills dir · analysis</Typography.Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Typography.Title level={5} style={{ margin: 0 }}>Skills dir · analysis</Typography.Title>
+            <SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />
+          </div>
           <Row gutter={16} style={{ marginBottom: 24 }}>
             <Col xs={24} lg={12}>
-              <Card>
+              <Card
+                title={intl.formatMessage({ id: 'skills.analysisTokenPieTitle' })}
+                extra={<SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />}
+              >
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie data={tokenDistribution} cx="50%" cy="50%" outerRadius={100} dataKey="value" label>
@@ -626,7 +641,10 @@ export default function SystemPromptPage() {
               </Card>
             </Col>
             <Col xs={24} lg={12}>
-              <Card title="Savings">
+              <Card
+                title={intl.formatMessage({ id: 'skills.analysisSavingsTitle' })}
+                extra={<SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />}
+              >
                 <Typography.Paragraph>Current: {analysis.totalTokens.toLocaleString()}</Typography.Paragraph>
                 <Typography.Paragraph type="success">
                   After: {(analysis.totalTokens - analysis.savings).toLocaleString()} (−{analysis.savings}, {analysis.savingsPercent}%)
@@ -667,7 +685,11 @@ export default function SystemPromptPage() {
       )}
 
       {zombieSkills.length > 0 && (
-        <Card title="Zombie skills" style={{ marginBottom: 16 }}>
+        <Card
+          title="Zombie skills"
+          extra={<SectionScopeHint intl={intl} messageId="systemPrompt.zombieDuplicateCardScopeDesc" />}
+          style={{ marginBottom: 16 }}
+        >
           <Table
             size="small"
             dataSource={zombieSkills.slice(0, 20).map((s, i) => ({ ...s, key: i }))}
@@ -681,7 +703,11 @@ export default function SystemPromptPage() {
       )}
 
       {duplicateSkills.length > 0 && (
-        <Card title="Duplicate skills" style={{ marginBottom: 16 }}>
+        <Card
+          title="Duplicate skills"
+          extra={<SectionScopeHint intl={intl} messageId="systemPrompt.zombieDuplicateCardScopeDesc" />}
+          style={{ marginBottom: 16 }}
+        >
           {duplicateSkills.slice(0, 15).map((s, i) => (
             <Typography.Paragraph key={i}>
               <strong>{s.name}</strong> ↔ {s.duplicateWith?.join(', ')}
@@ -695,11 +721,14 @@ export default function SystemPromptPage() {
         <Card
           title={intl.formatMessage({ id: 'systemPrompt.skillsSnapshotTitle' })}
           extra={
-            skillsSnapshot.prompt && (
-              <Button type="text" size="small" icon={<CopyOutlined />} onClick={copySkillsPrompt}>
-                {copied ? intl.formatMessage({ id: 'systemPrompt.copied' }) : intl.formatMessage({ id: 'systemPrompt.copy' })}
-              </Button>
-            )
+            <Space size="small">
+              {skillsSnapshot.prompt && (
+                <Button type="text" size="small" icon={<CopyOutlined />} onClick={copySkillsPrompt}>
+                  {copied ? intl.formatMessage({ id: 'systemPrompt.copied' }) : intl.formatMessage({ id: 'systemPrompt.copy' })}
+                </Button>
+              )}
+              <SectionScopeHint intl={intl} messageId="systemPrompt.skillsSnapshotDesc" />
+            </Space>
           }
         >
           <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 16 }}>

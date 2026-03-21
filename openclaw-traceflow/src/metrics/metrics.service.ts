@@ -582,7 +582,8 @@ export class MetricsService implements OnModuleInit {
 
   /**
    * 获取 Token 汇总指标（进行中 / 归档 分开展示）
-   * 每个 session_id 只取最新一条记录（避免 30 秒采集导致的重复累加）
+   * 进行中（token-%）：每个 session_id 只取最新一条（避免约 30s 采集重复写入）
+   * 归档（archived-%）：每条 id 对应一次 .reset. epoch（id = archived-{sessionId}-{resetTimestamp}），时间窗内 SUM 全部；与 getTokenUsageBySessionKey 对归档的 SUM 口径一致
    */
   async getTokenSummary(timeRangeMs: number = 86400000): Promise<TokenSummaryMetrics> {
     const empty = {
@@ -609,16 +610,11 @@ export class MetricsService implements OnModuleInit {
       [startTime],
     );
 
-    // 归档（archived-%）：每个 session_id 取最新一条（同一归档多次采集会覆盖）
+    // 归档（archived-%）：每 epoch 一行（INSERT OR REPLACE 同 id），时间窗内直接 SUM
     const archivedResult = this.db.exec(
-      `WITH latest AS (
-         SELECT session_id, input_tokens, output_tokens, total_tokens,
-           ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp DESC) AS rn
-         FROM token_usage WHERE timestamp > ? AND id LIKE 'archived-%'
-       )
-       SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
+      `SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
               COALESCE(SUM(total_tokens), 0), COUNT(DISTINCT session_id)
-       FROM latest WHERE rn = 1`,
+       FROM token_usage WHERE timestamp > ? AND id LIKE 'archived-%'`,
       [startTime],
     );
 

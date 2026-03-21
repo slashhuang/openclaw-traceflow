@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   Card,
   Alert,
@@ -19,6 +19,7 @@ import {
   Tooltip,
   Input,
   Popover,
+  Select,
 } from 'antd';
 import {
   QuestionCircleOutlined,
@@ -31,6 +32,10 @@ import { useIntl } from 'react-intl';
 import { sessionsApi } from '../api';
 import { formatSessionParticipantDisplay } from '../utils/session-user';
 import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
+import TokenMetricHint from '../components/TokenMetricHint';
+import SectionScopeHint from '../components/SectionScopeHint';
+import { sessionStatusLabel } from '../i18n/sessionStatusLabel';
+import { formatArchiveEpochLabel } from '../utils/archive-epoch';
 
 /** 详情页「参与者」：多人时首位可点 +Tag 展开全部（与列表 participantSummary 同源） */
 function DetailParticipantField({ session, intl }) {
@@ -419,6 +424,8 @@ function SessionMessagesList({ messages, intl, token, listResetKey }) {
 export default function SessionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const archiveResetTs = searchParams.get('resetTimestamp') || '';
   const intl = useIntl();
   const { token } = theme.useToken();
   const [session, setSession] = useState(null);
@@ -461,7 +468,7 @@ export default function SessionDetail() {
 
   useEffect(() => {
     setMessageRoleFilter('all');
-  }, [id]);
+  }, [id, archiveResetTs]);
 
   const sortedTools = useMemo(() => {
     if (!session) return [];
@@ -518,34 +525,40 @@ export default function SessionDetail() {
     return [...filtered].reverse();
   }, [session, detailSearch]);
 
-  const fetchSession = async (showToast = false) => {
-    if (showToast) {
-      setRetrying(true);
-      message.loading({ content: '正在重新加载会话...', key: 'session-detail-retry', duration: 0 });
-    }
-    try {
-      const data = await sessionsApi.getDetail(id);
-      setSession(data);
-      setError(null);
+  const loadSession = useCallback(
+    async (showToast = false) => {
       if (showToast) {
-        message.success({ content: '会话已重新加载', key: 'session-detail-retry' });
+        setRetrying(true);
+        message.loading({ content: '正在重新加载会话...', key: 'session-detail-retry', duration: 0 });
       }
-    } catch (e) {
-      setError(e?.message || 'Error');
-      if (showToast) {
-        message.error({ content: e?.message || '加载会话失败', key: 'session-detail-retry' });
+      setLoading(true);
+      try {
+        const data = await sessionsApi.getDetail(id, {
+          resetTimestamp: archiveResetTs || undefined,
+        });
+        setSession(data);
+        setError(null);
+        if (showToast) {
+          message.success({ content: '会话已重新加载', key: 'session-detail-retry' });
+        }
+      } catch (e) {
+        setError(e?.message || 'Error');
+        if (showToast) {
+          message.error({ content: e?.message || '加载会话失败', key: 'session-detail-retry' });
+        }
+      } finally {
+        setLoading(false);
+        if (showToast) {
+          setRetrying(false);
+        }
       }
-    } finally {
-      setLoading(false);
-      if (showToast) {
-        setRetrying(false);
-      }
-    }
-  };
+    },
+    [id, archiveResetTs],
+  );
 
   useEffect(() => {
-    fetchSession();
-  }, [id]);
+    loadSession(false);
+  }, [loadSession]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash === '#toolCalls') {
@@ -596,7 +609,7 @@ export default function SessionDetail() {
         <Typography.Title type="danger" level={4}>{intl.formatMessage({ id: 'session.loadError' })}</Typography.Title>
         <Typography.Paragraph>{error}</Typography.Paragraph>
         <Space>
-          <Button type="primary" onClick={() => fetchSession(true)} loading={retrying}>{intl.formatMessage({ id: 'common.retry' })}</Button>
+          <Button type="primary" onClick={() => loadSession(true)} loading={retrying}>{intl.formatMessage({ id: 'common.retry' })}</Button>
           <Button onClick={() => navigate('/sessions')}>{intl.formatMessage({ id: 'common.back' })}</Button>
         </Space>
       </Card>
@@ -656,14 +669,73 @@ export default function SessionDetail() {
   return (
     <div>
       <Space style={{ marginBottom: 16 }} wrap>
-        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'session.detail' })}</Typography.Title>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'session.detail' })}</Typography.Title>
+          <SectionScopeHint intl={intl} messageId="session.detailPageScopeDesc" />
+        </div>
         {session.typeLabel && <Tag>{session.typeLabel}</Tag>}
         <Typography.Text type="secondary" copyable>{session.sessionId}</Typography.Text>
         <Link to="/sessions"><Button>{intl.formatMessage({ id: 'common.back' })}</Button></Link>
-        {session.status === 'active' && (
+        {session.status === 'active' && !session.archiveResetTimestamp && (
           <Button danger onClick={onKill}>{intl.formatMessage({ id: 'common.kill' })}</Button>
         )}
       </Space>
+
+      {(session.archiveEpochs?.length > 0 || session.archiveResetTimestamp) && (
+        <div style={{ marginBottom: 12 }}>
+          <Space wrap align="center">
+            <Typography.Text type="secondary">
+              {intl.formatMessage({ id: 'session.archiveTranscriptLabel' })}
+            </Typography.Text>
+            <Select
+              style={{ minWidth: 300 }}
+              value={archiveResetTs || ''}
+              options={[
+                { value: '', label: intl.formatMessage({ id: 'session.transcriptCurrent' }) },
+                ...(session.archiveEpochs || []).map((e) => ({
+                  value: e.resetTimestamp,
+                  label: intl.formatMessage(
+                    { id: 'session.archiveEpochOption' },
+                    {
+                      time: formatArchiveEpochLabel(e.resetTimestamp),
+                      tokens: typeof e.totalTokens === 'number' ? e.totalTokens.toLocaleString() : '0',
+                    },
+                  ),
+                })),
+                ...(archiveResetTs &&
+                !(session.archiveEpochs || []).some((e) => e.resetTimestamp === archiveResetTs)
+                  ? [
+                      {
+                        value: archiveResetTs,
+                        label: formatArchiveEpochLabel(archiveResetTs),
+                      },
+                    ]
+                  : []),
+              ]}
+              onChange={(v) => {
+                const next = new URLSearchParams(searchParams);
+                if (v) next.set('resetTimestamp', v);
+                else next.delete('resetTimestamp');
+                setSearchParams(next, { replace: true });
+              }}
+            />
+            {(session.archiveEpochs?.length ?? 0) > 0 && (
+              <Link to={`/sessions/${encodeURIComponent(id)}/archives`} style={{ fontSize: 13 }}>
+                {intl.formatMessage({ id: 'session.archivesListLink' })}
+              </Link>
+            )}
+          </Space>
+        </div>
+      )}
+
+      {session.archiveResetTimestamp && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={intl.formatMessage({ id: 'session.viewingArchiveBanner' })}
+        />
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <Space size="large" wrap>
@@ -715,16 +787,20 @@ export default function SessionDetail() {
         <Card
           size="small"
           title={
-            <Tooltip title={contextUnreliable ? intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' }) : undefined}>
-              <span>
-                Token{' '}
-                <Typography.Text type="secondary" style={{ fontWeight: 'normal', fontSize: 13 }}>
-                  ({total.toLocaleString()}/{limit.toLocaleString()})
-                  {contextUnreliable ? ' *' : ''}
-                </Typography.Text>
-              </span>
-            </Tooltip>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Tooltip title={contextUnreliable ? intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' }) : undefined}>
+                <span>
+                  Token{' '}
+                  <Typography.Text type="secondary" style={{ fontWeight: 'normal', fontSize: 13 }}>
+                    ({total.toLocaleString()}/{limit.toLocaleString()})
+                    {contextUnreliable ? ' *' : ''}
+                  </Typography.Text>
+                </span>
+              </Tooltip>
+              <TokenMetricHint intl={intl} value={total} />
+            </span>
           }
+          extra={<SectionScopeHint intl={intl} messageId="session.tokenCardScopeDesc" />}
           style={{ marginBottom: 16 }}
         >
           {contextUnreliable && (
@@ -905,7 +981,14 @@ export default function SessionDetail() {
         </Card>
       )}
 
-      <Card>
+      <Card
+        title={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {intl.formatMessage({ id: 'session.transcriptPanelTitle' })}
+            <SectionScopeHint intl={intl} messageId="session.transcriptPanelScopeDesc" />
+          </span>
+        }
+      >
         <Input.Search
           allowClear
           placeholder={intl.formatMessage({ id: 'session.detailSearchPlaceholder' })}
@@ -1063,7 +1146,15 @@ function RowCards({ session, formatDuration, formatFileSize, resolveSessionLogBy
         >
           {session.messages?.length ?? 0}
         </Descriptions.Item>
-        <Descriptions.Item label="Status">{session.status}</Descriptions.Item>
+        <Descriptions.Item
+          label={
+            <Tooltip title={intl.formatMessage({ id: 'sessions.column.statusTooltip' })}>
+              <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.status' })}</span>
+            </Tooltip>
+          }
+        >
+          {sessionStatusLabel(intl, session.status)}
+        </Descriptions.Item>
         <Descriptions.Item
           label={
             <Tooltip title={intl.formatMessage({ id: 'sessions.column.participantTooltip' })}>
@@ -1084,7 +1175,12 @@ function RowCards({ session, formatDuration, formatFileSize, resolveSessionLogBy
         )}
       </Descriptions>
       {invoked.length > 0 && (
-        <Card size="small" title={intl?.formatMessage({ id: 'session.invokedSkills' }) || 'Skills invoked'} style={{ marginBottom: 16 }}>
+        <Card
+          size="small"
+          title={intl?.formatMessage({ id: 'session.invokedSkills' }) || 'Skills invoked'}
+          extra={<SectionScopeHint intl={intl} messageId="session.invokedSkillsCardScopeDesc" />}
+          style={{ marginBottom: 16 }}
+        >
           <Space wrap>
             {invoked.map((s) => (
               <Tag key={s.skillName}>

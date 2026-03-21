@@ -31,6 +31,7 @@ import {
 } from 'recharts';
 import { useIntl } from 'react-intl';
 import { skillsApi } from '../api';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 const COLORS = ['#1677ff', '#52c41a', '#faad14', '#ff7a45', '#722ed1', '#13c2c2'];
 const TOOL_COLORS = ['#1677ff', '#52c41a', '#faad14', '#ff7a45', '#722ed1', '#13c2c2', '#eb2f96', '#a0d911'];
@@ -142,7 +143,10 @@ export default function Skills() {
 
   return (
     <div>
-      <Typography.Title level={4}>{intl.formatMessage({ id: 'skills.title' })}</Typography.Title>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'skills.title' })}</Typography.Title>
+        <SectionScopeHint intl={intl} messageId="skills.pageScopeDesc" />
+      </div>
       <Typography.Paragraph type="secondary">{intl.formatMessage({ id: 'skills.subtitle' })}</Typography.Paragraph>
       <Tabs
         activeKey={tab}
@@ -153,6 +157,12 @@ export default function Skills() {
             label: intl.formatMessage({ id: 'skills.tabList' }),
             children: (
               <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {intl.formatMessage({ id: 'skills.kpiSectionTitle' })}
+                  </Typography.Text>
+                  <SectionScopeHint intl={intl} messageId="skills.kpiRowScopeDesc" />
+                </div>
                 <Row gutter={16} style={{ marginBottom: 16 }}>
                   <Col xs={12} sm={6}><Card><Statistic title="Total" value={skills.length} /></Card></Col>
                   <Col xs={12} sm={6}><Card><Statistic title="Enabled" value={skills.filter((s) => s.enabled).length} valueStyle={{ color: token.colorSuccess }} /></Card></Col>
@@ -166,13 +176,16 @@ export default function Skills() {
                   <Card
                     title={intl.formatMessage({ id: 'skills.insightChartTitle' })}
                     extra={
-                      <Select
-                        size="small"
-                        value={insightDimension}
-                        onChange={setInsightDimension}
-                        options={DIMENSION_OPTIONS}
-                        style={{ width: 160 }}
-                      />
+                      <Space size="small">
+                        <Select
+                          size="small"
+                          value={insightDimension}
+                          onChange={setInsightDimension}
+                          options={DIMENSION_OPTIONS}
+                          style={{ width: 160 }}
+                        />
+                        <SectionScopeHint intl={intl} messageId="skills.insightChartScopeDesc" />
+                      </Space>
                     }
                     style={{ marginBottom: 16 }}
                   >
@@ -191,7 +204,10 @@ export default function Skills() {
                   <Row gutter={16} style={{ marginBottom: 16 }}>
                     {callFrequencyData.length > 0 && (
                       <Col xs={24} lg={12}>
-                        <Card title={intl.formatMessage({ id: 'skills.top10Title' })}>
+                        <Card
+                          title={intl.formatMessage({ id: 'skills.top10Title' })}
+                          extra={<SectionScopeHint intl={intl} messageId="skills.top10ChartScopeDesc" />}
+                        >
                           <ResponsiveContainer width="100%" height={280}>
                             <BarChart data={callFrequencyData}>
                               <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
@@ -206,7 +222,10 @@ export default function Skills() {
                     )}
                     {userBreakdownData.length > 0 && (
                       <Col xs={24} lg={12}>
-                        <Card title={intl.formatMessage({ id: 'skills.userDistributionTitle' })}>
+                        <Card
+                          title={intl.formatMessage({ id: 'skills.userDistributionTitle' })}
+                          extra={<SectionScopeHint intl={intl} messageId="skills.userDistChartScopeDesc" />}
+                        >
                           <ResponsiveContainer width="100%" height={280}>
                             <BarChart data={userBreakdownData} layout="vertical" margin={{ left: 60 }}>
                               <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
@@ -231,7 +250,10 @@ export default function Skills() {
                     )}
                   </Row>
                 )}
-                <Card>
+                <Card
+                  title={intl.formatMessage({ id: 'skills.listTableTitle' })}
+                  extra={<SectionScopeHint intl={intl} messageId="skills.skillListTableScopeDesc" />}
+                >
                   <Table
                     rowKey={(r) => r.name}
                     dataSource={skills}
@@ -360,7 +382,10 @@ export default function Skills() {
                   <>
                     <Row gutter={16} style={{ marginBottom: 16 }}>
                       <Col xs={24} lg={12}>
-                        <Card title={intl.formatMessage({ id: 'skills.skillToolChartTitle' }) || 'Skill × Tool 分布'}>
+                        <Card
+                          title={intl.formatMessage({ id: 'skills.skillToolChartTitle' }) || 'Skill × Tool 分布'}
+                          extra={<SectionScopeHint intl={intl} messageId="skills.skillToolChartScopeDesc" />}
+                        >
                           {(() => {
                             const allTools = [...new Set(skillToolUsage.flatMap((s) => s.tools.map((t) => t.toolName)))].slice(0, 8);
                             const chartData = skillToolUsage.slice(0, 15).map((s) => {
@@ -393,7 +418,10 @@ export default function Skills() {
                         </Card>
                       </Col>
                       <Col xs={24} lg={12}>
-                        <Card title={intl.formatMessage({ id: 'skills.skillToolTableTitle' }) || 'Skill 工具明细'}>
+                        <Card
+                          title={intl.formatMessage({ id: 'skills.skillToolTableTitle' }) || 'Skill 工具明细'}
+                          extra={<SectionScopeHint intl={intl} messageId="skills.skillToolTableNote" />}
+                        >
                           <Typography.Paragraph type="secondary" style={{ marginBottom: 12, fontSize: 12 }}>
                             {intl.formatMessage({ id: 'skills.skillToolTableNote' })}
                           </Typography.Paragraph>
@@ -457,7 +485,10 @@ export default function Skills() {
                 </Typography.Paragraph>
                 <Row gutter={[16, 16]}>
                   <Col xs={24} lg={12}>
-                    <Card title="Token split">
+                    <Card
+                      title={intl.formatMessage({ id: 'skills.analysisTokenPieTitle' })}
+                      extra={<SectionScopeHint intl={intl} messageId="skills.analysisChartsScopeDesc" />}
+                    >
                       <ResponsiveContainer width="100%" height={300}>
                         <PieChart>
                           <Pie data={tokenDistributionData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label>
@@ -471,7 +502,10 @@ export default function Skills() {
                     </Card>
                   </Col>
                   <Col xs={24} lg={12}>
-                    <Card title="Savings">
+                    <Card
+                      title={intl.formatMessage({ id: 'skills.analysisSavingsTitle' })}
+                      extra={<SectionScopeHint intl={intl} messageId="skills.analysisChartsScopeDesc" />}
+                    >
                       <Statistic title="Current" value={systemPrompt.totalTokens} />
                       <Statistic title="After" value={systemPrompt.totalTokens - systemPrompt.savings} valueStyle={{ color: token.colorSuccess }} />
                       <Typography.Paragraph>

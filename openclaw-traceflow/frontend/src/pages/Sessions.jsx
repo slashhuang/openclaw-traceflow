@@ -21,6 +21,9 @@ import {
   formatSessionParticipantDisplay,
 } from '../utils/session-user';
 import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
+import { sessionStatusLabel } from '../i18n/sessionStatusLabel';
+import TokenMetricHint from '../components/TokenMetricHint';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 function formatDuration(ms) {
   if (!ms) return '—';
@@ -169,6 +172,7 @@ export default function Sessions() {
     { value: 'idle', label: intl.formatMessage({ id: 'sessions.filter.idle' }) },
     { value: 'completed', label: intl.formatMessage({ id: 'sessions.filter.completed' }) },
     { value: 'failed', label: intl.formatMessage({ id: 'sessions.filter.failed' }) },
+    { value: 'archived', label: intl.formatMessage({ id: 'sessions.filter.archived' }) },
   ];
 
   const columns = [
@@ -256,23 +260,29 @@ export default function Sessions() {
     },
     {
       title: (
-        <SortableTitle
-          label={intl.formatMessage({ id: 'sessions.column.status' })}
-          active={sortKey === 'status'}
-          order={sortOrder}
-          onClick={() => {
-            if (sortKey !== 'status') {
-              setSortKey('status');
-              setSortOrder('asc');
-            } else {
-              setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
-            }
-          }}
-        />
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.statusTooltip' })}>
+          <span style={{ cursor: 'help' }}>
+            <SortableTitle
+              label={intl.formatMessage({ id: 'sessions.column.status' })}
+              active={sortKey === 'status'}
+              order={sortOrder}
+              onClick={() => {
+                if (sortKey !== 'status') {
+                  setSortKey('status');
+                  setSortOrder('asc');
+                } else {
+                  setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+                }
+              }}
+            />
+          </span>
+        </Tooltip>
       ),
       key: 'status',
       width: 120,
-      render: (_, r) => <Tag color={statusTagColor(r.status)}>{r.status}</Tag>,
+      render: (_, r) => (
+        <Tag color={statusTagColor(r.status)}>{sessionStatusLabel(intl, r.status)}</Tag>
+      ),
     },
     {
       title: (
@@ -403,17 +413,25 @@ export default function Sessions() {
       render: (_, r) => formatBytes(r.transcriptFileSizeBytes),
     },
     {
-      title: intl.formatMessage({ id: 'sessions.column.archived' }) || '归档',
+      title: (
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.archivedTooltip' })}>
+          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.archived' })}</span>
+        </Tooltip>
+      ),
       key: 'archived',
       width: 90,
       render: (_, r) => {
         const count = archiveCountMap[r.sessionKey] ?? 0;
-        if (count === 0) return '—';
+        const sid = r?.sessionId ?? r?.sessionKey ?? '';
+        if (count === 0 || !sid) return '—';
         return (
-          <Tooltip title="查看 token 消耗">
-            <Link to="/tokens" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Tooltip title={intl.formatMessage({ id: 'sessions.archivedCellTooltip' })}>
+            <Link
+              to={`/sessions/${encodeURIComponent(sid)}/archives`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            >
               <HistoryOutlined />
-              <span>{count} 次</span>
+              <span>{intl.formatMessage({ id: 'sessions.archivedCountFmt' }, { count })}</span>
             </Link>
           </Tooltip>
         );
@@ -440,23 +458,26 @@ export default function Sessions() {
     },
     {
       title: (
-        <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
-          <span style={{ cursor: 'help' }}>
-            <SortableTitle
-              label={`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
-              active={sortKey === 'utilization'}
-              order={sortOrder}
-              onClick={() => {
-                if (sortKey !== 'utilization') {
-                  setSortKey('utilization');
-                  setSortOrder('desc');
-                } else {
-                  setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
-                }
-              }}
-            />
-          </span>
-        </Tooltip>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', width: '100%' }}>
+          <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
+            <span style={{ cursor: 'help' }}>
+              <SortableTitle
+                label={`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
+                active={sortKey === 'utilization'}
+                order={sortOrder}
+                onClick={() => {
+                  if (sortKey !== 'utilization') {
+                    setSortKey('utilization');
+                    setSortOrder('desc');
+                  } else {
+                    setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+                  }
+                }}
+              />
+            </span>
+          </Tooltip>
+          <TokenMetricHint intl={intl} />
+        </div>
       ),
       key: 'tokenUtil',
       width: 160,
@@ -477,21 +498,24 @@ export default function Sessions() {
               width: '100%',
             }}
           >
-            <Tooltip
-              title={
-                unreliable
-                  ? intl.formatMessage({ id: 'sessions.tokensTotalUnreliableHint' })
-                  : undefined
-              }
-            >
-              <Typography.Text
-                style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
-                type={unreliable ? 'secondary' : undefined}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+              <Tooltip
+                title={
+                  unreliable
+                    ? intl.formatMessage({ id: 'sessions.tokensTotalUnreliableHint' })
+                    : undefined
+                }
               >
-                {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
-                {unreliable ? ' *' : ''}
-              </Typography.Text>
-            </Tooltip>
+                <Typography.Text
+                  style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
+                  type={unreliable ? 'secondary' : undefined}
+                >
+                  {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
+                  {unreliable ? ' *' : ''}
+                </Typography.Text>
+              </Tooltip>
+              <TokenMetricHint intl={intl} value={r.totalTokens} />
+            </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <Tooltip
                 title={
@@ -533,9 +557,12 @@ export default function Sessions() {
       bodyStyle={{ padding: 16 }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          {intl.formatMessage({ id: 'sessions.title' })}
-        </Typography.Title>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            {intl.formatMessage({ id: 'sessions.title' })}
+          </Typography.Title>
+          <SectionScopeHint intl={intl} messageId="sessions.pageScopeDesc" />
+        </div>
         <Segmented
           options={filterOptions.map((o) => ({ label: o.label, value: o.value }))}
           value={filter}
@@ -547,6 +574,9 @@ export default function Sessions() {
       </div>
       <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
         {intl.formatMessage({ id: 'sessions.sortHint' })}
+      </Typography.Text>
+      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+        {intl.formatMessage({ id: 'sessions.statusVsArchivedHint' })}
       </Typography.Text>
       <Table
         style={{ marginTop: 12 }}
