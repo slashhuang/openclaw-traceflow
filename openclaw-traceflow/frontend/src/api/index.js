@@ -24,7 +24,8 @@ export const statusApi = {
 
 export const sessionsApi = {
   list: (params) => api.get('/sessions', { params }).then(res => res.data),
-  getDetail: (id) => api.get(`/sessions/${id}`).then(res => res.data),
+  getDetail: (id) =>
+    api.get(`/sessions/${encodeURIComponent(id)}`, { timeout: 60000 }).then((res) => res.data),
   kill: (id) => api.post(`/sessions/${id}/kill`).then(res => res.data),
   getConfiguredModels: () => api.get('/sessions/config/models').then(res => res.data),
 };

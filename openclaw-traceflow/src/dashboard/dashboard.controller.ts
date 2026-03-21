@@ -4,6 +4,7 @@ import { OpenClawService } from '../openclaw/openclaw.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { LogsService } from '../logs/logs.service';
 import { MetricsService } from '../metrics/metrics.service';
+import type { StatusOverviewResult } from '../openclaw/gateway-rpc';
 
 @Controller('api/dashboard')
 export class DashboardController {
@@ -18,14 +19,41 @@ export class DashboardController {
   @Get('overview')
   async getOverview(@Query('timeRangeMs') timeRangeMs?: number) {
     const tokenRange = timeRangeMs ? parseInt(String(timeRangeMs), 10) : 86400000;
-    const [health, statusOverview, sessions, logs, latency, tools, tokenSummary, tokenUsage, tokenByKey, archiveCountMap] =
-      await Promise.all([
-        this.healthService.getHealthStatus().catch(() => null),
+
+    const bundle = await this.openclawService.getDashboardGatewayBundle(10).catch((): { ok: false; error: string } => ({
+      ok: false,
+      error: 'bundle failed',
+    }));
+
+    let statusOverview: StatusOverviewResult | null;
+    let logs: Awaited<ReturnType<LogsService['getRecentLogs']>>;
+    let connectionOverride: { connected: boolean; error?: string } | undefined;
+
+    if (bundle.ok) {
+      statusOverview = bundle.statusOverview;
+      logs = this.logsService.mapGatewayTailPayloadToEntries(bundle.logsTail);
+      connectionOverride = { connected: true };
+    } else {
+      const [statusO, recentLogs, chk] = await Promise.all([
         this.openclawService.getStatusOverview().catch(() => null),
-        this.sessionsService.listSessions().catch(() => []),
         this.logsService.getRecentLogs(10).catch(() => []),
+        this.openclawService.checkConnection().catch(() => ({ connected: false as boolean, error: undefined as string | undefined })),
+      ]);
+      statusOverview = statusO;
+      logs = recentLogs;
+      connectionOverride =
+        statusO != null ? { connected: true } : { connected: chk.connected, error: chk.error };
+    }
+
+    const [health, sessions, latency, tools, tokenSummary, tokenUsage, tokenByKey, archiveCountMap] =
+      await Promise.all([
+        this.healthService.getHealthStatus({ connectionOverride }).catch(() => null),
+        this.sessionsService.listSessions().catch(() => []),
         this.metricsService.getLatencyMetrics().catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
-        (async () => this.metricsService.getToolStatsSnapshot() ?? this.metricsService.refreshToolStatsSnapshot())().catch(() => []),
+        (async () => this.metricsService.getToolStatsSnapshot() ?? this.metricsService.refreshToolStatsSnapshot())().catch(() => ({
+          tools: [],
+          skills: [],
+        })),
         this.metricsService.getTokenSummary(tokenRange).catch(() => null),
         this.metricsService.getTokenUsageBySession(tokenRange).catch(() => []),
         this.metricsService.getTokenUsageBySessionKey(tokenRange).catch(() => []),

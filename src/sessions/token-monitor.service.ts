@@ -142,7 +142,9 @@ export class TokenMonitorService {
         return sum + (msg.tokenCount || 0);
       }, 0);
 
-      return Math.round(totalTokens / timeDiffMinutes);
+      // 分母至少 1 分钟，避免首末消息间隔极短时 tok/min 虚高
+      const effectiveMinutes = Math.max(timeDiffMinutes, 1);
+      return Math.round(totalTokens / effectiveMinutes);
     } catch (error) {
       this.logger.error('Failed to calculate consumption rate', error);
       return 0;

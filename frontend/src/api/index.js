@@ -24,7 +24,8 @@ export const statusApi = {
 
 export const sessionsApi = {
   list: () => api.get('/sessions').then(res => res.data),
-  getDetail: (id) => api.get(`/sessions/${id}`).then(res => res.data),
+  getDetail: (id) =>
+    api.get(`/sessions/${encodeURIComponent(id)}`, { timeout: 60000 }).then((res) => res.data),
   kill: (id) => api.post(`/sessions/${id}/kill`).then(res => res.data),
 };
 

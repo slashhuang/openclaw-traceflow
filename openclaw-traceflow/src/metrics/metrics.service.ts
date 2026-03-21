@@ -3,6 +3,7 @@ import initSqlJs, { Database } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
 import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
 
 // 加载价格配置（支持配置文件覆盖）
@@ -144,7 +145,10 @@ export class MetricsService implements OnModuleInit {
   private db: Database | null = null;
   private dbPath: string;
   private pendingSaveTimer: NodeJS.Timeout | null = null;
-  private toolStatsSnapshot: Array<{ tool: string; count: number; successRate: number }> = [];
+  private toolStatsSnapshot: {
+    tools: Array<{ tool: string; count: number; successRate: number }>;
+    skills: Array<{ skill: string; count: number }>;
+  } = { tools: [], skills: [] };
   private toolStatsSnapshotAt = 0;
 
   constructor(private readonly openclawService: OpenClawService) {
@@ -157,16 +161,22 @@ export class MetricsService implements OnModuleInit {
     await this.initDatabase();
   }
 
-  getToolStatsSnapshot(maxAgeMs = 45_000): Array<{ tool: string; count: number; successRate: number }> | null {
+  getToolStatsSnapshot(
+    maxAgeMs = 45_000,
+  ): { tools: Array<{ tool: string; count: number; successRate: number }>; skills: Array<{ skill: string; count: number }> } | null {
     if (!this.toolStatsSnapshotAt || Date.now() - this.toolStatsSnapshotAt > maxAgeMs) {
       return null;
     }
     return this.toolStatsSnapshot;
   }
 
-  async refreshToolStatsSnapshot(): Promise<Array<{ tool: string; count: number; successRate: number }>> {
+  async refreshToolStatsSnapshot(): Promise<{
+    tools: Array<{ tool: string; count: number; successRate: number }>;
+    skills: Array<{ skill: string; count: number }>;
+  }> {
     const sessions = await this.openclawService.listSessions();
     const toolStats = new Map<string, { count: number; success: number }>();
+    const skillStats = new Map<string, number>();
     for (const session of sessions) {
       const detail = await this.openclawService.getSessionDetail(session.sessionId);
       if (!detail?.toolCalls?.length) continue;
@@ -177,15 +187,23 @@ export class MetricsService implements OnModuleInit {
         if (tool.success) current.success += 1;
         toolStats.set(name, current);
       }
+      for (const { skillName, readCount } of inferInvokedSkillsFromToolCalls(detail.toolCalls)) {
+        skillStats.set(skillName, (skillStats.get(skillName) ?? 0) + readCount);
+      }
     }
-    const snapshot = Array.from(toolStats.entries())
+    const tools = Array.from(toolStats.entries())
       .map(([tool, data]) => ({
         tool,
         count: data.count,
         successRate: data.count > 0 ? (data.success / data.count) * 100 : 0,
       }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
+      .slice(0, 5);
+    const skills = Array.from(skillStats.entries())
+      .map(([skill, count]) => ({ skill, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const snapshot = { tools, skills };
     this.toolStatsSnapshot = snapshot;
     this.toolStatsSnapshotAt = Date.now();
     return snapshot;

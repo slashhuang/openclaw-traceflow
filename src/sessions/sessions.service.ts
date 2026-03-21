@@ -21,6 +21,10 @@ export interface Session {
     limit?: number;
     utilization?: number; // 0-100%
   };
+  /** JSONL 中带 message 的行数（与详情页一致） */
+  messageCount?: number;
+  /** transcript .jsonl 文件大小（字节） */
+  transcriptFileSizeBytes?: number;
 }
 
 export interface InvokedSkill {
@@ -50,6 +54,11 @@ export interface SessionDetail extends Session {
     timestamp: number;
     payload: any;
   }>;
+  transcriptFileSizeBytes: number;
+  transcriptParseMode: 'full' | 'head_tail';
+  transcriptJsonlLineCount?: number;
+  transcriptHeadJsonlLineCount?: number;
+  transcriptTailJsonlLineCount?: number;
 }
 
 @Injectable()
@@ -81,6 +90,8 @@ export class SessionsService {
               utilization: Math.round((s.tokenUsage.total / s.tokenUsage.limit) * 100),
             }
           : (s.tokenUsage as Session['tokenUsage']),
+        messageCount: s.messageCount,
+        transcriptFileSizeBytes: s.transcriptFileSizeBytes,
         };
       });
     } catch (error) {
@@ -130,6 +141,17 @@ export class SessionsService {
         })),
         invokedSkills: detail.invokedSkills || [],
         events: detail.events || [],
+        transcriptFileSizeBytes: detail.transcriptFileSizeBytes,
+        transcriptParseMode: detail.transcriptParseMode,
+        ...(detail.transcriptJsonlLineCount != null
+          ? { transcriptJsonlLineCount: detail.transcriptJsonlLineCount }
+          : {}),
+        ...(detail.transcriptHeadJsonlLineCount != null
+          ? { transcriptHeadJsonlLineCount: detail.transcriptHeadJsonlLineCount }
+          : {}),
+        ...(detail.transcriptTailJsonlLineCount != null
+          ? { transcriptTailJsonlLineCount: detail.transcriptTailJsonlLineCount }
+          : {}),
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);

@@ -7,6 +7,7 @@ import {
   TokenUsageBySessionKey,
 } from './metrics.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
 
 @Controller('api/metrics')
 export class MetricsController {
@@ -24,10 +25,12 @@ export class MetricsController {
 
   @Get('tools')
   async getToolStats(@Query('timeRangeMs') timeRangeMs?: number) {
-    // 从 OpenClaw sessions 数据中实时提取工具调用统计
+    const range = timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 3600000;
+    // 从 OpenClaw sessions 数据中实时提取工具调用统计 + read→SKILL.md 反推的 Skills
     try {
       const sessions = await this.openclawService.listSessions();
       const toolStats = new Map<string, { count: number; success: number }>();
+      const skillStats = new Map<string, number>();
 
       for (const session of sessions) {
         const detail = await this.openclawService.getSessionDetail(session.sessionId);
@@ -41,23 +44,31 @@ export class MetricsController {
             stats.count++;
             if (tool.success) stats.success++;
           }
+          for (const { skillName, readCount } of inferInvokedSkillsFromToolCalls(detail.toolCalls)) {
+            skillStats.set(skillName, (skillStats.get(skillName) ?? 0) + readCount);
+          }
         }
       }
 
-      // 转换为数组并按调用次数排序
-      const result = Array.from(toolStats.entries())
+      const tools = Array.from(toolStats.entries())
         .map(([tool, data]) => ({
           tool,
           count: data.count,
           successRate: data.count > 0 ? (data.success / data.count) * 100 : 0,
         }))
-        .sort((a, b) => b.count - a.count);
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
 
-      // 返回 Top 8
-      return result.slice(0, 8);
+      const skills = Array.from(skillStats.entries())
+        .map(([skill, count]) => ({ skill, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      return { tools, skills };
     } catch (error) {
       console.error('Failed to get tool stats from sessions:', error);
-      return this.metricsService.getToolStats(timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 3600000);
+      const tools = await this.metricsService.getToolStats(range);
+      return { tools: tools.slice(0, 5), skills: [] };
     }
   }
 

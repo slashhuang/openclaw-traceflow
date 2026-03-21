@@ -48,7 +48,7 @@ pnpm run start:dev
   - 统计卡片（系统状态、会话数、活跃/空闲）
   - 延迟指标（P50/P95/P99）
   - 会话状态分布饼图
-  - 工具调用 Top 8 柱状图
+  - Skills / 工具调用 Top 5 柱状图
   - 系统健康信息（Gateway、OpenClaw 连接、内存、CPU）
   - 最近会话表格
   - 实时日志预览
@@ -136,7 +136,7 @@ services:
 | `/api/sessions/:id/kill` | POST | 终止会话 |
 | `/api/logs` | GET | 最近日志 |
 | `/api/metrics/latency` | GET | 延迟指标 (P50/P95/P99，默认过去 1 小时) |
-| `/api/metrics/tools` | GET | 工具调用统计（按调用次数分组） |
+| `/api/metrics/tools` | GET | `{ tools, skills }` 工具调用 Top 5 与 Skills Top 5 |
 | `/api/metrics/concurrency` | GET | 并发指标 |
 | `/api/actions/restart` | POST | 重启 Gateway |
 | `/api/actions/kill-session/:id` | POST | 终止会话 |

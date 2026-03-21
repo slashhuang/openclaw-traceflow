@@ -114,7 +114,7 @@ pnpm run test:e2e
 | `/api/sessions/:id/kill` | POST | 终止会话 |
 | `/api/logs` | GET | 最近日志 |
 | `/api/metrics/latency` | GET | P50/P95/P99 延迟（默认过去 1 小时） |
-| `/api/metrics/tools` | GET | 工具调用统计（按调用次数分组） |
+| `/api/metrics/tools` | GET | `{ tools, skills }`：工具调用 Top 5 + Skills（read SKILL.md）Top 5 |
 | `/api/metrics/concurrency` | GET | 并发指标 |
 | `/api/actions/restart` | POST | 重启 Gateway |
 | `/api/actions/kill-session/:id` | POST | 终止会话 |
@@ -149,11 +149,11 @@ pnpm run test:e2e
 - **P99**: 99% 请求的响应时间
 - **count**: 总请求数（过去 1 小时）
 
-### 工具调用统计（`/api/metrics/tools`）
-- **计算逻辑**: 从 `hook_metrics` 表查询过去 1 小时数据
-- **分组**: 按 `tool_name` 分组统计调用次数
-- **成功率**: `success_count / count * 100`
-- **Top 8**: 前端截取前 8 个显示
+### 工具 / Skills 统计（`/api/metrics/tools`）
+- **计算逻辑**: 从当前会话详情聚合；失败时回退 `hook_metrics`（仅 tools，skills 为空）
+- **tools**: 按工具名聚合调用次数，含成功率
+- **skills**: `read` 到 `skills/xxx/SKILL.md` 的次数，按 skill 名聚合
+- **Top 5**: 各取前 5
 
 ## 配置
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Card,
+  Alert,
   Tabs,
   Button,
   Space,
@@ -26,6 +27,15 @@ function formatJsonForDisplay(val) {
   } catch {
     return String(val);
   }
+}
+
+function formatFileSize(bytes) {
+  if (bytes == null || bytes === '') return '—';
+  const n = typeof bytes === 'number' ? bytes : Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function SkillsPanel({ session, intl }) {
@@ -256,7 +266,37 @@ export default function SessionDetail() {
         )}
       </Space>
 
-      <RowCards session={session} formatDuration={formatDuration} intl={intl} />
+      <div style={{ marginBottom: 16 }}>
+        <Space size="large" wrap>
+          <Typography.Text>
+            <Typography.Text type="secondary">{intl.formatMessage({ id: 'session.transcriptLogSize' })}: </Typography.Text>
+            <Typography.Text strong>{formatFileSize(session.transcriptFileSizeBytes)}</Typography.Text>
+          </Typography.Text>
+          <Typography.Text>
+            <Typography.Text type="secondary">{intl.formatMessage({ id: 'session.messageCount' })}: </Typography.Text>
+            <Typography.Text strong>{session.messages?.length ?? 0}</Typography.Text>
+          </Typography.Text>
+        </Space>
+      </div>
+
+      {session.transcriptParseMode === 'head_tail' && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={intl.formatMessage({ id: 'session.transcriptHeadTailAlertTitle' })}
+          description={intl.formatMessage(
+            { id: 'session.transcriptHeadTailAlertDesc' },
+            {
+              size: formatFileSize(session.transcriptFileSizeBytes),
+              head: session.transcriptHeadJsonlLineCount ?? 0,
+              tail: session.transcriptTailJsonlLineCount ?? 0,
+            },
+          )}
+        />
+      )}
+
+      <RowCards session={session} formatDuration={formatDuration} formatFileSize={formatFileSize} intl={intl} />
 
       {usage && limit != null && (
         <Card
@@ -393,18 +433,41 @@ export default function SessionDetail() {
   );
 }
 
-function RowCards({ session, formatDuration, intl }) {
+function RowCards({ session, formatDuration, formatFileSize, intl }) {
   const invoked = session.invokedSkills || [];
+  const parseScopeLabel =
+    session.transcriptParseMode === 'head_tail'
+      ? intl.formatMessage(
+          { id: 'session.transcriptParseHeadTailDetail' },
+          {
+            head: session.transcriptHeadJsonlLineCount ?? 0,
+            tail: session.transcriptTailJsonlLineCount ?? 0,
+          },
+        )
+      : intl.formatMessage(
+          { id: 'session.transcriptParseFullDetail' },
+          { lines: session.transcriptJsonlLineCount ?? '—' },
+        );
   return (
     <>
       <Descriptions bordered size="small" column={{ xs: 1, sm: 2, md: 4 }} style={{ marginBottom: 16 }}>
+        <Descriptions.Item label={intl.formatMessage({ id: 'session.transcriptLogSize' })}>
+          {formatFileSize(session.transcriptFileSizeBytes)}
+        </Descriptions.Item>
+        <Descriptions.Item label={intl.formatMessage({ id: 'session.messageCount' })}>
+          {session.messages?.length ?? 0}
+        </Descriptions.Item>
         <Descriptions.Item label="Status">{session.status}</Descriptions.Item>
         <Descriptions.Item label="User">
           {(session.typeLabel === 'heartbeat' || session.typeLabel === 'cron' || session.typeLabel === 'boot') ? session.typeLabel : session.user || '—'}
         </Descriptions.Item>
-        <Descriptions.Item label="Messages">{session.messages?.length ?? 0}</Descriptions.Item>
         <Descriptions.Item label="Tools">{session.toolCalls?.length ?? 0}</Descriptions.Item>
         <Descriptions.Item label="Duration">{formatDuration(session.duration)}</Descriptions.Item>
+        {session.transcriptParseMode && (
+          <Descriptions.Item label={intl.formatMessage({ id: 'session.transcriptParseScope' })} span={2}>
+            {parseScopeLabel}
+          </Descriptions.Item>
+        )}
       </Descriptions>
       {invoked.length > 0 && (
         <Card size="small" title={intl?.formatMessage({ id: 'session.invokedSkills' }) || 'Skills invoked'} style={{ marginBottom: 16 }}>

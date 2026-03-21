@@ -11,11 +11,13 @@ import {
   SettingOutlined,
   ApiOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Dropdown, Space, Tag, theme } from 'antd';
+import { Alert, Button, Dropdown, Space, Tag, Tooltip, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import { useLocaleTheme } from '../providers/LocaleThemeProvider';
 import { healthApi } from '../api';
+
+const HEADER_HEALTH_POLL_INTERVAL_MS = 10000;
 
 export default function BasicLayout() {
   const location = useLocation();
@@ -71,27 +73,35 @@ export default function BasicLayout() {
       }
       actionsRender={() =>
         [
-          health?.status && (
-            <Tag key="st" color={health.status === 'ok' || health.status === 'healthy' ? 'success' : 'default'}>
-              {String(health.status)}
-            </Tag>
-          ),
-          health?.openclawConnected != null && (
-            <Tag
-              key="gw"
-              color={health.openclawConnected ? 'success' : 'error'}
-              style={{
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
+          (health?.status || health?.openclawConnected != null) && (
+            <Tooltip
+              key="health-poll"
+              title={intl.formatMessage({ id: 'header.healthPollHint' }, { seconds: HEADER_HEALTH_POLL_INTERVAL_MS / 1000 })}
             >
-              <ApiOutlined />
-              {health.openclawConnected
-                ? intl.formatMessage({ id: 'gateway.connected' })
-                : intl.formatMessage({ id: 'gateway.disconnected' })}
-            </Tag>
+              <Space size={4}>
+                {health?.status && (
+                  <Tag color={health.status === 'ok' || health.status === 'healthy' ? 'success' : 'default'}>
+                    {String(health.status)}
+                  </Tag>
+                )}
+                {health?.openclawConnected != null && (
+                  <Tag
+                    color={health.openclawConnected ? 'success' : 'error'}
+                    style={{
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <ApiOutlined />
+                    {health.openclawConnected
+                      ? intl.formatMessage({ id: 'gateway.connected' })
+                      : intl.formatMessage({ id: 'gateway.disconnected' })}
+                  </Tag>
+                )}
+              </Space>
+            </Tooltip>
           ),
           <Dropdown
             key="lang"

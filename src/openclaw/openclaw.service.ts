@@ -43,6 +43,10 @@ export interface OpenClawSession {
     limit?: number;
     utilization?: number;
   };
+  /** JSONL 中带 entry.message 的行数（与详情页 messages 口径一致） */
+  messageCount?: number;
+  /** 当前会话 transcript .jsonl 文件大小（字节） */
+  transcriptFileSizeBytes?: number;
 }
 
 export interface InvokedSkill {
@@ -83,6 +87,12 @@ export interface OpenClawSessionDetail extends OpenClawSession {
     timestamp: number;
     payload: any;
   }>;
+  /** 当前会话 .jsonl 文件大小（字节） */
+  transcriptFileSizeBytes: number;
+  /** 当前 monitor 实现为整文件解析 */
+  transcriptParseMode: 'full' | 'head_tail';
+  /** 全量解析时的非空 JSONL 行数 */
+  transcriptJsonlLineCount?: number;
 }
 
 export interface OpenClawHealth {
@@ -553,6 +563,16 @@ export class OpenClawService {
             }
           }
 
+          let messageCount = 0;
+          for (const line of allLines) {
+            try {
+              const entry = JSON.parse(line) as { message?: unknown };
+              if (entry?.message != null) messageCount++;
+            } catch {
+              /* ignore */
+            }
+          }
+
           // 从 sessions.json 读取 totalTokens/model/contextTokens（比 transcript 更准确）
           // storeKey（如 agent:main:main）用于类型推断，比 agent/sessionId 更准确
           const storeEntry = this.loadStoreEntryForSession(dir, agent, sessionId);
@@ -598,6 +618,8 @@ export class OpenClawService {
               contextTokens,
               model,
               tokenUsage,
+              messageCount,
+              transcriptFileSizeBytes: stats.size,
             });
           } catch (e) {
             // 跳过无法解析的文件
@@ -945,6 +967,9 @@ export class OpenClawService {
         toolCalls,
         invokedSkills,
         events,
+        transcriptFileSizeBytes: stats.size,
+        transcriptParseMode: 'full',
+        transcriptJsonlLineCount: lines.length,
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);
@@ -1046,22 +1071,52 @@ export class OpenClawService {
       return null;
     }
 
+    const toSessionFile = (
+      filePath: string,
+      agent: string,
+      fileStem: string,
+    ): SessionFile => {
+      const stats = fs.statSync(filePath);
+      return {
+        sessionId: `${agent}/${fileStem}`,
+        filePath,
+        createdAt: stats.birthtimeMs,
+        updatedAt: stats.mtimeMs,
+      };
+    };
+
     const agentDirs = fs.readdirSync(agentsDir);
+
     for (const agent of agentDirs) {
       const sessionsDir = path.join(agentsDir, agent, 'sessions');
       if (!fs.existsSync(sessionsDir)) {
         continue;
       }
 
-      const filePath = path.join(sessionsDir, `${sessionId}.jsonl`);
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
-        return {
-          sessionId: `${agent}/${sessionId}`,
-          filePath,
-          createdAt: stats.birthtimeMs,
-          updatedAt: stats.mtimeMs,
-        };
+      const direct = path.join(sessionsDir, `${sessionId}.jsonl`);
+      if (fs.existsSync(direct)) {
+        return toSessionFile(direct, agent, sessionId);
+      }
+    }
+
+    const slash = sessionId.indexOf('/');
+    if (slash !== -1) {
+      const agentHint = sessionId.slice(0, slash);
+      const bareId = sessionId.slice(slash + 1);
+      if (!bareId) return null;
+
+      const hintedPath = path.join(agentsDir, agentHint, 'sessions', `${bareId}.jsonl`);
+      if (fs.existsSync(hintedPath)) {
+        return toSessionFile(hintedPath, agentHint, bareId);
+      }
+
+      for (const agent of agentDirs) {
+        const sessionsDir = path.join(agentsDir, agent, 'sessions');
+        if (!fs.existsSync(sessionsDir)) continue;
+        const p = path.join(sessionsDir, `${bareId}.jsonl`);
+        if (fs.existsSync(p)) {
+          return toSessionFile(p, agent, bareId);
+        }
       }
     }
 

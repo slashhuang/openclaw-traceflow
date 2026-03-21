@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useIntl } from 'react-intl';
 import {
@@ -13,10 +13,16 @@ import {
   Tooltip,
   Alert,
   theme,
+  Space,
+  Tag,
 } from 'antd';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { HistoryOutlined } from '@ant-design/icons';
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { dashboardApi } from '../api';
-import { inferSessionTypeLabel } from '../utils/session-user';
+import { inferSessionTypeLabel, inferSessionChatKind } from '../utils/session-user';
+
+/** 仪表盘整页轮询（含系统健康）；仅在前台标签页触发 */
+const DASHBOARD_POLL_INTERVAL_MS = 10000;
 
 function formatTokenShort(n) {
   if (n == null || typeof n !== 'number') return '?';
@@ -36,23 +42,269 @@ function formatTimeAgo(ms, intl) {
   return intl.locale === 'zh-CN' ? `${Math.floor(h / 24)} 天前` : `${Math.floor(h / 24)}d ago`;
 }
 
-function tokenUsageRowDisplay(item, sessions) {
-  const session =
-    (item.sessionId && sessions.find((s) => s.sessionId === item.sessionId)) ||
-    sessions.find((s) => s.sessionKey === item.sessionKey);
-  const detailId = item.sessionId || session?.sessionId;
-  const typeLabel = session?.typeLabel || inferSessionTypeLabel(item.sessionKey, item.sessionId);
-  const sys = typeLabel === 'heartbeat' || typeLabel === 'cron' || typeLabel === 'boot';
-  const userLabel = session
-    ? sys
-      ? typeLabel
-      : session.user || 'unknown'
-    : detailId
-      ? String(detailId).slice(0, 8) + '…'
-      : (item.sessionKey || '').length > 28
-        ? `${(item.sessionKey || '').slice(0, 28)}…`
-        : item.sessionKey || '—';
-  return { typeLabel, userLabel, detailId, sessionKeyFull: item.sessionKey };
+function formatDuration(ms) {
+  if (!ms) return '—';
+  const sec = Math.floor(ms / 1000);
+  const m = Math.floor(sec / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m ${sec % 60}s`;
+  return `${sec}s`;
+}
+
+function formatBytes(n) {
+  if (n == null || typeof n !== 'number' || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function statusTagColor(status) {
+  switch (status) {
+    case 'active':
+      return 'green';
+    case 'idle':
+      return 'orange';
+    case 'completed':
+      return 'blue';
+    case 'failed':
+      return 'red';
+    default:
+      return 'default';
+  }
+}
+
+function formatTokensShort(n) {
+  if (n == null || typeof n !== 'number') return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
+function utilizationFor(s) {
+  const u = s.tokenUsage;
+  if (!u?.limit) return null;
+  const pct = Math.round(u.utilization ?? (u.limit ? (u.total / u.limit) * 100 : 0));
+  return Math.min(100, Math.max(0, pct));
+}
+
+function utilizationColor(pct) {
+  if (pct == null) return undefined;
+  if (pct >= 90) return 'exception';
+  if (pct >= 70) return 'warning';
+  return 'normal';
+}
+
+/** 与会话列表页列展示一致（无排序交互） */
+function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
+  const am = archiveCountMap && typeof archiveCountMap === 'object' ? archiveCountMap : {};
+  return [
+    {
+      title: intl.formatMessage({ id: 'sessions.column.session' }),
+      key: 'session',
+      width: 180,
+      onHeaderCell: () => ({ style: { maxWidth: 180 } }),
+      onCell: () => ({ style: { maxWidth: 180, overflow: 'hidden' } }),
+      render: (_, r) => {
+        const typeLabel = r.typeLabel || inferSessionTypeLabel(r.sessionKey, r.sessionId);
+        const sys = typeLabel === 'heartbeat' || typeLabel === 'cron' || typeLabel === 'boot';
+        const chatKind = sys ? null : inferSessionChatKind(r.sessionKey, r.sessionId);
+        const code = String(r.sessionKey || r.sessionId || '');
+        const chatKindLabel =
+          chatKind === 'group'
+            ? intl.formatMessage({ id: 'sessions.chatKind.group' })
+            : chatKind === 'channel'
+              ? intl.formatMessage({ id: 'sessions.chatKind.channel' })
+              : chatKind === 'direct'
+                ? intl.formatMessage({ id: 'sessions.chatKind.direct' })
+                : null;
+        const chatKindColor =
+          chatKind === 'group' || chatKind === 'channel' ? 'purple' : chatKind === 'direct' ? 'geekblue' : undefined;
+        return (
+          <Link
+            to={`/sessions/${encodeURIComponent(r.sessionId)}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              minWidth: 0,
+              width: '100%',
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+          >
+            <Space size={4} wrap style={{ flexShrink: 0, lineHeight: 1.2 }}>
+              <Tag
+                color={sys ? (typeLabel === 'heartbeat' ? 'green' : 'orange') : 'blue'}
+                style={{ whiteSpace: 'nowrap', margin: 0 }}
+              >
+                {typeLabel}
+              </Tag>
+              {chatKindLabel && (
+                <Tooltip title={intl.formatMessage({ id: 'sessions.chatKind.tooltip' })}>
+                  <Tag color={chatKindColor} style={{ margin: 0, fontSize: 12 }}>
+                    {chatKindLabel}
+                  </Tag>
+                </Tooltip>
+              )}
+            </Space>
+            <Tooltip title={code}>
+              <Typography.Text
+                code
+                ellipsis
+                style={{
+                  flex: '1 1 0',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  fontSize: 12,
+                  margin: 0,
+                }}
+              >
+                {code}
+              </Typography.Text>
+            </Tooltip>
+          </Link>
+        );
+      },
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.status' }),
+      key: 'status',
+      width: 120,
+      render: (_, r) => <Tag color={statusTagColor(r.status)}>{r.status}</Tag>,
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.user' }),
+      key: 'user',
+      width: 170,
+      render: (_, r) => {
+        const typeLabel = r.typeLabel || inferSessionTypeLabel(r.sessionKey, r.sessionId);
+        const sys = typeLabel === 'heartbeat' || typeLabel === 'cron' || typeLabel === 'boot';
+        const v = sys ? typeLabel : r.user || '—';
+        return (
+          <Link
+            to={`/sessions/${encodeURIComponent(r.sessionId)}`}
+            className="session-user-link"
+            title={r.sessionKey || r.sessionId}
+          >
+            <Typography.Text
+              style={{
+                display: 'inline-block',
+                maxWidth: 140,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                verticalAlign: 'middle',
+              }}
+            >
+              {v}
+            </Typography.Text>
+          </Link>
+        );
+      },
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.lastActive' }),
+      key: 'lastActive',
+      width: 190,
+      render: (_, r) => (r.lastActive ? new Date(r.lastActive).toLocaleString(intl.locale) : '—'),
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.duration' }),
+      key: 'duration',
+      width: 130,
+      render: (_, r) => formatDuration(r.duration),
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.messages' }),
+      key: 'messageCount',
+      width: 88,
+      align: 'right',
+      render: (_, r) => (r.messageCount != null ? r.messageCount : '—'),
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.fileSize' }),
+      key: 'transcriptFileSizeBytes',
+      width: 100,
+      align: 'right',
+      render: (_, r) => formatBytes(r.transcriptFileSizeBytes),
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.archived' }) || '归档',
+      key: 'archived',
+      width: 90,
+      render: (_, r) => {
+        const count = am[r.sessionKey] ?? 0;
+        if (count === 0) return '—';
+        return (
+          <Tooltip title="查看 token 消耗">
+            <Link to="/tokens" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <HistoryOutlined />
+              <span>{count} 次</span>
+            </Link>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.actions' }) || '操作',
+      key: 'actions',
+      width: 140,
+      render: (_, r) => {
+        const sid = r?.sessionId ?? r?.sessionKey ?? '';
+        if (!sid) return '—';
+        return (
+          <Space size="small">
+            <Link to={`/sessions/${encodeURIComponent(sid)}`}>
+              {intl.formatMessage({ id: 'common.detail' })}
+            </Link>
+            <Link to={`/sessions/${encodeURIComponent(sid)}#toolCalls`}>
+              {intl.formatMessage({ id: 'session.tools' })}
+            </Link>
+          </Space>
+        );
+      },
+    },
+    {
+      title: `${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`,
+      key: 'tokenUtil',
+      width: 160,
+      align: 'right',
+      onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+      onCell: () => ({ style: { minWidth: 160, verticalAlign: 'middle' } }),
+      render: (_, r) => {
+        const pct = utilizationFor(r);
+        return (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              alignItems: 'flex-end',
+              minWidth: 0,
+              width: '100%',
+            }}
+          >
+            <Typography.Text style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+              {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
+            </Typography.Text>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <Progress
+                percent={pct ?? 0}
+                size="small"
+                status={utilizationColor(pct)}
+                showInfo={false}
+                style={{ width: 76, flexShrink: 0 }}
+              />
+              <Typography.Text style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                {pct == null ? '—' : `${pct}%`}
+              </Typography.Text>
+            </div>
+          </div>
+        );
+      },
+    },
+  ];
 }
 
 function formatElevated(level) {
@@ -191,19 +443,20 @@ export default function Dashboard() {
   const [statusOverview, setStatusOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
+  const [archiveCountMap, setArchiveCountMap] = useState({});
   const [metrics, setMetrics] = useState({
     latency: null,
     tools: [],
+    skills: [],
     tokenSummary: null,
-    tokenUsage: [],
-    tokenByKey: [],
   });
   const [loading, setLoading] = useState(true);
-  const [inFlight, setInFlight] = useState(false);
+  /** 用 ref 防抖，勿放入 useCallback 依赖，否则每次请求结束都会换新 fetchData，useEffect 会反复挂载并瞬间连打 overview */
+  const fetchInFlightRef = useRef(false);
 
   const fetchData = useCallback(async () => {
-    if (inFlight) return;
-    setInFlight(true);
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     try {
       const data = await dashboardApi.getOverview().catch(() => null);
       const healthData = data?.health ?? null;
@@ -211,37 +464,48 @@ export default function Dashboard() {
       const sessionsData = Array.isArray(data?.sessions) ? data.sessions : [];
       const logsData = Array.isArray(data?.recentLogs) ? data.recentLogs : [];
       const latencyData = data?.metrics?.latency ?? { p50: 0, p95: 0, p99: 0, count: 0 };
-      const toolsData = Array.isArray(data?.metrics?.tools) ? data.metrics.tools : [];
+      const rawToolStats = data?.metrics?.tools;
+      const toolsData =
+        rawToolStats &&
+        typeof rawToolStats === 'object' &&
+        !Array.isArray(rawToolStats) &&
+        Array.isArray(rawToolStats.tools)
+          ? {
+              tools: rawToolStats.tools,
+              skills: Array.isArray(rawToolStats.skills) ? rawToolStats.skills : [],
+            }
+          : {
+              tools: Array.isArray(rawToolStats) ? rawToolStats : [],
+              skills: [],
+            };
       const tokenSummaryData = data?.metrics?.tokenSummary ?? {
         totalInput: 0, totalOutput: 0, totalTokens: 0,
         activeInput: 0, activeOutput: 0, activeTokens: 0,
         archivedInput: 0, archivedOutput: 0, archivedTokens: 0,
         nearLimitCount: 0, limitReachedCount: 0, sessionCount: 0,
       };
-      const tokenUsageData = Array.isArray(data?.metrics?.tokenUsage) ? data.metrics.tokenUsage : [];
-      const tokenByKeyData = Array.isArray(data?.metrics?.tokenByKey) ? data.metrics.tokenByKey : [];
-      const archiveCountMap = data?.metrics?.archiveCountMap ?? {};
+      const acMap = data?.metrics?.archiveCountMap && typeof data.metrics.archiveCountMap === 'object'
+        ? data.metrics.archiveCountMap
+        : {};
       setHealth(healthData);
       setStatusOverview(statusData);
       setSessions(sessionsData);
       setRecentLogs(logsData);
+      setArchiveCountMap(acMap);
       setMetrics({
         latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
-        tools: Array.isArray(toolsData) ? toolsData : [],
+        tools: toolsData.tools,
+        skills: toolsData.skills,
         tokenSummary: tokenSummaryData || {},
-        tokenUsage: Array.isArray(tokenUsageData) ? tokenUsageData : [],
-        tokenByKey: Array.isArray(tokenByKeyData) ? tokenByKeyData : [],
-        archiveCount: archiveCountMap && typeof archiveCountMap === 'object'
-          ? Object.values(archiveCountMap).reduce((s, n) => s + (Number(n) || 0), 0)
-          : 0,
+        archiveCount: Object.values(acMap).reduce((s, n) => s + (Number(n) || 0), 0),
       });
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
-      setInFlight(false);
+      fetchInFlightRef.current = false;
     }
-  }, [inFlight]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -254,14 +518,26 @@ export default function Dashboard() {
       if (document.visibilityState === 'visible') {
         fetchData();
       }
-    }, 10000);
+    }, DASHBOARD_POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearInterval(t);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchData]);
- 
+
+  const recentSessions10 = useMemo(
+    () =>
+      [...sessions]
+        .sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0))
+        .slice(0, 10),
+    [sessions],
+  );
+
+  const recentSessionColumns = useMemo(
+    () => buildDashboardRecentSessionColumns(intl, archiveCountMap),
+    [intl, archiveCountMap],
+  );
 
   if (loading) {
     return (
@@ -273,55 +549,16 @@ export default function Dashboard() {
 
   const activeSessions = sessions.filter((s) => s.status === 'active').length;
   const idleSessions = sessions.filter((s) => s.status === 'idle').length;
-  const completedSessions = sessions.filter((s) => s.status === 'completed').length;
   const totalSessions = sessions.length;
-  const archivedCount = metrics.archiveCount ?? 0;
-  const sessionDistribution = [
-    { name: intl.formatMessage({ id: 'dashboard.active' }), value: activeSessions, color: token.colorSuccess },
-    { name: intl.formatMessage({ id: 'dashboard.idle' }), value: idleSessions, color: token.colorWarning },
-    { name: intl.formatMessage({ id: 'dashboard.completed' }), value: completedSessions, color: token.colorPrimary },
-    { name: intl.formatMessage({ id: 'dashboard.archived' }), value: archivedCount, color: token.colorTextSecondary },
-  ].filter((i) => i.value > 0);
 
-  const toolChartData = (metrics.tools || []).slice(0, 8).map((t) => ({
+  const skillChartData = (metrics.skills || []).slice(0, 5).map((s) => ({
+    name: s.skill?.length > 15 ? `${s.skill.slice(0, 15)}…` : s.skill,
+    count: s.count,
+  }));
+  const toolChartData = (metrics.tools || []).slice(0, 5).map((t) => ({
     name: t.tool?.length > 15 ? `${t.tool.slice(0, 15)}…` : t.tool,
     count: t.count,
   }));
-
-  const colTitle = (id, descId) => (
-    <Tooltip title={intl.formatMessage({ id: descId })}>
-      <span style={{ cursor: 'help' }}>{intl.formatMessage({ id })}</span>
-    </Tooltip>
-  );
-  const tokenCols = [
-    { title: '#', width: 48, render: (_, __, i) => i + 1 },
-    { title: colTitle('dashboard.colType', 'dashboard.colTypeDesc'), dataIndex: 'sessionKey', width: 100, render: (_, row) => tokenUsageRowDisplay(row, sessions).typeLabel },
-    {
-      title: colTitle('dashboard.colUser', 'dashboard.colUserDesc'),
-      render: (_, row) => {
-        const { userLabel, detailId, sessionKeyFull } = tokenUsageRowDisplay(row, sessions);
-        return detailId ? (
-          <Link to={`/sessions/${encodeURIComponent(detailId)}`} title={sessionKeyFull}>
-            {userLabel}
-          </Link>
-        ) : (
-          userLabel
-        );
-      },
-    },
-    { title: colTitle('dashboard.colTotal', 'dashboard.colTotalDesc'), dataIndex: 'totalTokens', render: (v) => v?.toLocaleString() },
-    { title: colTitle('dashboard.colIn', 'dashboard.colInDesc'), dataIndex: 'inputTokens', render: (v) => v?.toLocaleString() },
-    { title: colTitle('dashboard.colOut', 'dashboard.colOutDesc'), dataIndex: 'outputTokens', render: (v) => v?.toLocaleString() },
-    {
-      title: colTitle('dashboard.colPct', 'dashboard.colPctDesc'),
-      render: (_, row) =>
-        row.avgUtilization != null ? (
-          <Progress percent={Math.round(row.avgUtilization)} size="small" status={row.avgUtilization > 80 ? 'exception' : 'normal'} />
-        ) : (
-          '—'
-        ),
-    },
-  ];
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -374,6 +611,11 @@ export default function Dashboard() {
               <Tooltip title={intl.formatMessage({ id: 'dashboard.healthDesc' })}>
                 <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.health' })}</span>
               </Tooltip>
+            }
+            extra={
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {intl.formatMessage({ id: 'dashboard.healthRefreshEvery' }, { seconds: DASHBOARD_POLL_INTERVAL_MS / 1000 })}
+              </Typography.Text>
             }
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
@@ -462,33 +704,31 @@ export default function Dashboard() {
       })()}
 
       <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={12}>
+        <Col xs={24} md={12}>
           <Card
             title={
-              <Tooltip title={intl.formatMessage({ id: 'dashboard.sessionPieDesc' })}>
-                <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.sessionPie' })}</span>
+              <Tooltip title={intl.formatMessage({ id: 'dashboard.skillsTopDesc' })}>
+                <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.skillsTop' })}</span>
               </Tooltip>
             }
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
           >
-            {sessionDistribution.length ? (
+            {skillChartData.length ? (
               <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={sessionDistribution} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label>
-                    {sessionDistribution.map((e, i) => (
-                      <Cell key={i} fill={e.color} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip />
-                </PieChart>
+                <BarChart data={skillChartData}>
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} />
+                  <YAxis tick={{ fill: token.colorTextSecondary }} />
+                  <RechartsTooltip contentStyle={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorder}` }} />
+                  <Bar dataKey="count" fill={token.colorSuccess} radius={[4, 4, 0, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             ) : (
               <Typography.Text type="secondary">—</Typography.Text>
             )}
           </Card>
         </Col>
-        <Col xs={24} lg={12}>
+        <Col xs={24} md={12}>
           <Card
             title={
               <Tooltip title={intl.formatMessage({ id: 'dashboard.toolsTopDesc' })}>
@@ -514,57 +754,6 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      {(metrics.tokenUsage?.length > 0 || (metrics.tokenByKey?.length > 0 && metrics.tokenByKey.some(r => (r.archivedTokens || 0) > 0))) && (
-        <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
-          {metrics.tokenUsage?.length > 0 && (
-            <Col xs={24} lg={12}>
-              <Card
-                title={
-                  <Tooltip title={intl.formatMessage({ id: 'dashboard.tokenTopActiveDesc' })}>
-                    <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenTopActive' })}</span>
-                  </Tooltip>
-                }
-                size="small"
-                bodyStyle={{ padding: '12px 16px' }}
-              >
-                <Table rowKey="sessionKey" size="small" pagination={false} dataSource={metrics.tokenUsage.slice(0, 10)} columns={tokenCols} scroll={{ x: true }} />
-              </Card>
-            </Col>
-          )}
-          {metrics.tokenByKey?.length > 0 && (() => {
-            const archivedTop = metrics.tokenByKey.filter(r => (r.archivedTokens || 0) > 0).slice(0, 10);
-            return archivedTop.length > 0 ? (
-              <Col xs={24} lg={12}>
-                <Card
-                  title={
-                    <Tooltip title={intl.formatMessage({ id: 'dashboard.tokenTopArchivedDesc' })}>
-                      <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenTopArchived' })}</span>
-                    </Tooltip>
-                  }
-                  size="small"
-                  bodyStyle={{ padding: '12px 16px' }}
-                >
-                  <Table
-                    rowKey="sessionKey"
-                    size="small"
-                    pagination={false}
-                    dataSource={archivedTop}
-                    columns={[
-                      { title: '#', width: 48, render: (_, __, i) => i + 1 },
-                      { title: colTitle('dashboard.colSession', 'dashboard.colSessionDesc'), dataIndex: 'sessionKey', ellipsis: true, render: (v) => <Typography.Text code style={{ fontSize: 12 }}>{v?.length > 30 ? `${v.slice(0, 15)}…${v.slice(-12)}` : v}</Typography.Text> },
-                      { title: colTitle('dashboard.colToken', 'dashboard.colTokenDesc'), dataIndex: 'archivedTokens', render: (v) => v?.toLocaleString() },
-                      { title: colTitle('dashboard.colArchivedCount', 'dashboard.colArchivedCountDesc'), dataIndex: 'archivedCount', width: 60, render: (v) => v ?? 0 },
-                      { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>{intl.formatMessage({ id: 'common.detail' })}</Link> : null },
-                    ]}
-                    scroll={{ x: true }}
-                  />
-                </Card>
-              </Col>
-            ) : null;
-          })()}
-        </Row>
-      )}
-
       <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
         <Col xs={24}>
           <Card
@@ -579,26 +768,13 @@ export default function Dashboard() {
           >
             <Table
               size="small"
+              tableLayout="fixed"
+              scroll={{ x: 'max-content' }}
               pagination={false}
-              dataSource={sessions.slice(0, 5)}
+              dataSource={recentSessions10}
               rowKey="sessionId"
-              columns={[
-                { title: colTitle('dashboard.colType', 'dashboard.colTypeDesc'), render: (_, r) => r.typeLabel || inferSessionTypeLabel(r.sessionKey, r.sessionId) },
-                {
-                  title: 'ID',
-                  render: (_, r) => <Link to={`/sessions/${r.sessionId}`}>{String(r.sessionId).slice(0, 10)}…</Link>,
-                },
-                {
-                  title: colTitle('dashboard.colUser', 'dashboard.colUserDesc'),
-                  render: (_, r) =>
-                    (r.typeLabel === 'heartbeat' || r.typeLabel === 'cron' || r.typeLabel === 'boot') ? r.typeLabel : r.user || '—',
-                },
-                { title: colTitle('dashboard.colStatus', 'dashboard.colStatusDesc'), dataIndex: 'status' },
-                {
-                  title: colTitle('dashboard.colLast', 'dashboard.colLastDesc'),
-                  render: (_, r) => new Date(r.lastActive).toLocaleString(intl.locale),
-                },
-              ]}
+              columns={recentSessionColumns}
+              locale={{ emptyText: intl.formatMessage({ id: 'sessions.empty' }) }}
             />
           </Card>
         </Col>
