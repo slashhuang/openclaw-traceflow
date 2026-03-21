@@ -60,7 +60,10 @@ export class HealthService {
     };
   }
 
-  async getHealthStatus(): Promise<HealthStatus> {
+  async getHealthStatus(options?: {
+    /** 已由其它请求（如仪表盘合并 WS）验证过 Gateway 时传入，避免再次 skills.status 建连 */
+    connectionOverride?: { connected: boolean; error?: string };
+  }): Promise<HealthStatus> {
     const localStats = await this.collectLocalRuntimeStats();
     const status: HealthStatus = {
       status: 'HEALTHY',
@@ -81,7 +84,12 @@ export class HealthService {
     };
 
     // 1. 检查 OpenClaw Gateway 连接（WebSocket 协议，含 token 鉴权）
-    const connectionResult = await this.openclawService.checkConnection();
+    const connectionResult = options?.connectionOverride
+      ? {
+          connected: options.connectionOverride.connected,
+          error: options.connectionOverride.error,
+        }
+      : await this.openclawService.checkConnection();
     status.openclawConnected = connectionResult.connected;
     status.gatewayError = connectionResult.error;
 

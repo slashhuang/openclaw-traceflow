@@ -40,6 +40,11 @@ const THRESHOLD_COLORS = {
   limit: '#cf1322',
 };
 
+function formatCompactRate(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return String(n);
+  return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+}
+
 function userLabelForTokenRow(usageRow, sessionList) {
   const ls = sessionList.find((s) => s.sessionKey === usageRow.sessionKey);
   const typeLabel = ls?.typeLabel || inferSessionTypeLabel(usageRow.sessionKey, usageRow.sessionId);
@@ -127,13 +132,17 @@ export default function TokenMonitor() {
   const topConsumptionSessions = [...sessions]
     .sort((a, b) => b.consumptionRate - a.consumptionRate)
     .slice(0, 10)
-    .map((s) => ({
-      name: userLabelForTokenRow(s, sessionList).length > 14
-        ? `${userLabelForTokenRow(s, sessionList).slice(0, 14)}…`
-        : userLabelForTokenRow(s, sessionList),
-      nameTip: s.sessionKey,
-      rate: s.consumptionRate,
-    }));
+    .map((s) => {
+      const label = userLabelForTokenRow(s, sessionList);
+      const displayShort = label.length > 14 ? `${label.slice(0, 14)}…` : label;
+      const tail = (s.sessionKey || s.sessionId || '').replace(/.*\//, '').slice(-6);
+      const name = tail ? `${displayShort} (${tail})` : displayShort;
+      return {
+        name,
+        nameTip: s.sessionKey,
+        rate: s.consumptionRate,
+      };
+    });
 
   const highUtil = sessions.filter((s) => s.utilization > 50);
 
@@ -196,14 +205,33 @@ export default function TokenMonitor() {
         </Col>
         {topConsumptionSessions.length > 0 && (
           <Col xs={24} lg={12}>
-            <Card title="Top rate (tok/min)">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={topConsumptionSessions}>
+            <Card title={intl.formatMessage({ id: 'token.chartTopRate' })}>
+              <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+                {intl.formatMessage({ id: 'token.chartTopRateDesc' })}
+              </Typography.Text>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topConsumptionSessions} margin={{ top: 8, right: 12, left: 16, bottom: 8 }} barCategoryGap="18%">
                   <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} height={60} angle={-20} textAnchor="end" />
-                  <YAxis tick={{ fill: token.colorTextSecondary }} />
-                  <RechartsTooltip labelFormatter={(_, p) => p?.[0]?.payload?.nameTip || ''} contentStyle={{ background: token.colorBgElevated }} />
-                  <Bar dataKey="rate" fill={token.colorPrimary} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 10, fill: token.colorTextSecondary }}
+                    height={72}
+                    interval={0}
+                    angle={-28}
+                    textAnchor="end"
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tick={{ fill: token.colorTextSecondary, fontSize: 11 }}
+                    tickFormatter={formatCompactRate}
+                    width={58}
+                  />
+                  <RechartsTooltip
+                    labelFormatter={(_, p) => p?.[0]?.payload?.nameTip || ''}
+                    formatter={(value) => [formatCompactRate(value), 'tok/min']}
+                    contentStyle={{ background: token.colorBgElevated }}
+                  />
+                  <Bar dataKey="rate" fill={token.colorPrimary} name="rate" />
                 </BarChart>
               </ResponsiveContainer>
             </Card>

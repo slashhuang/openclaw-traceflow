@@ -182,27 +182,20 @@ export class TokenMonitorService {
    */
   private async calculateConsumptionRate(sessionId: string): Promise<number> {
     try {
-      const sessionDetail = await this.openclaw.getSessionDetail(sessionId);
+      // 不依赖 getSessionDetail 全量/尾部分片消息，避免大 transcript 截断时首尾时间失真
+      const sessions = await this.openclaw.listSessions();
+      const session = sessions.find((s) => s.sessionId === sessionId);
+      if (!session) return 0;
 
-      if (!sessionDetail?.messages || sessionDetail.messages.length < 2) {
-        return 0;
-      }
+      const timeDiffMinutes = (session.lastActiveAt - session.createdAt) / (1000 * 60);
+      if (timeDiffMinutes <= 0) return 0;
 
-      // 获取第一条和最后一条消息的时间戳
-      const firstMessage = sessionDetail.messages[0];
-      const lastMessage = sessionDetail.messages[sessionDetail.messages.length - 1];
+      const totalTokens = session.tokenUsage?.total ?? session.totalTokens ?? 0;
+      if (totalTokens <= 0) return 0;
 
-      const timeDiffMinutes = (lastMessage.timestamp - firstMessage.timestamp) / (1000 * 60);
-
-      if (timeDiffMinutes <= 0) {
-        return 0;
-      }
-
-      const totalTokens = sessionDetail.messages.reduce((sum, msg) => {
-        return sum + (msg.tokenCount || 0);
-      }, 0);
-
-      return Math.round(totalTokens / timeDiffMinutes);
+      // 分母至少 1 分钟，避免「几秒内的会话」除数过小导致 tok/min 数量级失真
+      const effectiveMinutes = Math.max(timeDiffMinutes, 1);
+      return Math.round(totalTokens / effectiveMinutes);
     } catch (error) {
       this.logger.error('Failed to calculate consumption rate', error);
       return 0;

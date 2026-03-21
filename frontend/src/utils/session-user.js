@@ -23,3 +23,28 @@ export function inferSessionTypeLabel(sessionKey, sessionId) {
   if (full.includes(':cron')) return 'cron';
   return '用户';
 }
+
+/**
+ * 从 sessionKey 推断群聊 / 频道 / 单聊（与 OpenClaw classifySessionKey 语义对齐，仅前端展示）。
+ * 系统类会话（heartbeat / cron / boot / wave）不区分，返回 null。
+ * @returns {'group' | 'channel' | 'direct' | null}
+ */
+export function inferSessionChatKind(sessionKey, sessionId) {
+  const key = sessionKey || sessionId || '';
+  const full = key.includes('/') ? key.split('/').pop() || key : key;
+  if (full.endsWith(':main') || full === 'main') return null;
+  if (full.includes(':cron:')) return null;
+  if (full.startsWith('boot-') || full.includes(':boot')) return null;
+  if (full.includes(':wave:')) return null;
+  if (key.includes(':group:')) return 'group';
+  if (key.includes(':channel:')) return 'channel';
+  if (
+    key.includes(':feishu:') ||
+    key.includes(':slack:') ||
+    key.includes(':telegram:') ||
+    key.includes(':discord:')
+  ) {
+    return 'direct';
+  }
+  return null;
+}

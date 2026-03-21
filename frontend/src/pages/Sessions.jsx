@@ -15,7 +15,7 @@ import {
 import { useIntl } from 'react-intl';
 import { ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined } from '@ant-design/icons';
 import { sessionsApi, metricsApi } from '../api';
-import { inferSessionTypeLabel } from '../utils/session-user';
+import { inferSessionTypeLabel, inferSessionChatKind } from '../utils/session-user';
 
 function formatDuration(ms) {
   if (!ms) return '—';
@@ -32,6 +32,13 @@ function formatTokensShort(n) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
+}
+
+function formatBytes(n) {
+  if (n == null || typeof n !== 'number' || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function SortableTitle({ label, active, order, onClick }) {
@@ -97,6 +104,10 @@ export default function Sessions() {
           return s.duration ?? 0;
         case 'totalTokens':
           return s.totalTokens ?? 0;
+        case 'messageCount':
+          return s.messageCount ?? 0;
+        case 'transcriptFileSizeBytes':
+          return s.transcriptFileSizeBytes ?? 0;
         case 'utilization': {
           const u = s.tokenUsage;
           if (!u?.limit) return 0;
@@ -181,33 +192,67 @@ export default function Sessions() {
         />
       ),
       key: 'session',
-      width: 390,
+      width: 180,
+      onHeaderCell: () => ({ style: { maxWidth: 180 } }),
+      onCell: () => ({ style: { maxWidth: 180, overflow: 'hidden' } }),
       render: (_, r) => {
         const typeLabel = r.typeLabel || inferSessionTypeLabel(r.sessionKey, r.sessionId);
         const sys = typeLabel === 'heartbeat' || typeLabel === 'cron' || typeLabel === 'boot';
+        const chatKind = sys ? null : inferSessionChatKind(r.sessionKey, r.sessionId);
         const code = String(r.sessionKey || r.sessionId || '');
-        const short =
-          code.length > 46 ? `${code.slice(0, 26)}…${code.slice(-16)}` : code;
+        const chatKindLabel =
+          chatKind === 'group'
+            ? intl.formatMessage({ id: 'sessions.chatKind.group' })
+            : chatKind === 'channel'
+              ? intl.formatMessage({ id: 'sessions.chatKind.channel' })
+              : chatKind === 'direct'
+                ? intl.formatMessage({ id: 'sessions.chatKind.direct' })
+                : null;
+        const chatKindColor =
+          chatKind === 'group' || chatKind === 'channel' ? 'purple' : chatKind === 'direct' ? 'geekblue' : undefined;
         return (
-          <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>
-            <Tag
-              color={sys ? (typeLabel === 'heartbeat' ? 'green' : 'orange') : 'blue'}
-              style={{ whiteSpace: 'nowrap', margin: 0, flex: '0 0 auto' }}
-            >
-              {typeLabel}
-            </Tag>
-            <Typography.Text
-              code
-              style={{
-                maxWidth: 300,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-              title={code}
-            >
-              {short}
-            </Typography.Text>
+          <Link
+            to={`/sessions/${encodeURIComponent(r.sessionId)}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              minWidth: 0,
+              width: '100%',
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+          >
+            <Space size={4} wrap style={{ flexShrink: 0, lineHeight: 1.2 }}>
+              <Tag
+                color={sys ? (typeLabel === 'heartbeat' ? 'green' : 'orange') : 'blue'}
+                style={{ whiteSpace: 'nowrap', margin: 0 }}
+              >
+                {typeLabel}
+              </Tag>
+              {chatKindLabel && (
+                <Tooltip title={intl.formatMessage({ id: 'sessions.chatKind.tooltip' })}>
+                  <Tag color={chatKindColor} style={{ margin: 0, fontSize: 12 }}>
+                    {chatKindLabel}
+                  </Tag>
+                </Tooltip>
+              )}
+            </Space>
+            <Tooltip title={code}>
+              <Typography.Text
+                code
+                ellipsis
+                style={{
+                  flex: '1 1 0',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  fontSize: 12,
+                  margin: 0,
+                }}
+              >
+                {code}
+              </Typography.Text>
+            </Tooltip>
           </Link>
         );
       },
@@ -317,6 +362,48 @@ export default function Sessions() {
       width: 130,
     },
     {
+      title: (
+        <SortableTitle
+          label={intl.formatMessage({ id: 'sessions.column.messages' })}
+          active={sortKey === 'messageCount'}
+          order={sortOrder}
+          onClick={() => {
+            if (sortKey !== 'messageCount') {
+              setSortKey('messageCount');
+              setSortOrder('desc');
+            } else {
+              setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+            }
+          }}
+        />
+      ),
+      key: 'messageCount',
+      width: 88,
+      align: 'right',
+      render: (_, r) => (r.messageCount != null ? r.messageCount : '—'),
+    },
+    {
+      title: (
+        <SortableTitle
+          label={intl.formatMessage({ id: 'sessions.column.fileSize' })}
+          active={sortKey === 'transcriptFileSizeBytes'}
+          order={sortOrder}
+          onClick={() => {
+            if (sortKey !== 'transcriptFileSizeBytes') {
+              setSortKey('transcriptFileSizeBytes');
+              setSortOrder('desc');
+            } else {
+              setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+            }
+          }}
+        />
+      ),
+      key: 'transcriptFileSizeBytes',
+      width: 100,
+      align: 'right',
+      render: (_, r) => formatBytes(r.transcriptFileSizeBytes),
+    },
+    {
       title: intl.formatMessage({ id: 'sessions.column.archived' }) || '归档',
       key: 'archived',
       width: 90,
@@ -370,22 +457,34 @@ export default function Sessions() {
       ),
       key: 'tokenUtil',
       width: 160,
+      align: 'right',
+      onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+      onCell: () => ({ style: { minWidth: 160, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-            <Typography.Text style={{ textAlign: 'right' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              alignItems: 'flex-end',
+              minWidth: 0,
+              width: '100%',
+            }}
+          >
+            <Typography.Text style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
               {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
             </Typography.Text>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <Progress
                 percent={pct ?? 0}
                 size="small"
                 status={utilizationColor(pct)}
                 showInfo={false}
-                style={{ width: 76 }}
+                style={{ width: 76, flexShrink: 0 }}
               />
-              <Typography.Text style={{ minWidth: 34, textAlign: 'right' }}>
+              <Typography.Text style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}>
                 {pct == null ? '—' : `${pct}%`}
               </Typography.Text>
             </div>
@@ -422,6 +521,8 @@ export default function Sessions() {
       </Typography.Text>
       <Table
         style={{ marginTop: 12 }}
+        tableLayout="fixed"
+        scroll={{ x: 'max-content' }}
         rowKey="sessionId"
         dataSource={filteredSorted}
         columns={columns}

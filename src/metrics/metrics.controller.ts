@@ -25,6 +25,7 @@ export class MetricsController {
 
   @Get('tools')
   async getToolStats(@Query('timeRangeMs') timeRangeMs?: number) {
+    const range = timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 3600000;
     try {
       const snapshot = this.metricsService.getToolStatsSnapshot();
       if (snapshot) {
@@ -33,7 +34,8 @@ export class MetricsController {
       return await this.metricsService.refreshToolStatsSnapshot();
     } catch (error) {
       console.error('Failed to get tool stats from sessions:', error);
-      return this.metricsService.getToolStats(timeRangeMs ? parseInt(timeRangeMs.toString(), 10) : 3600000);
+      const tools = await this.metricsService.getToolStats(range);
+      return { tools: tools.slice(0, 5), skills: [] };
     }
   }
 

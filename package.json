@@ -1,7 +1,7 @@
 {
   "name": "openclaw-traceflow",
   "version": "0.1.0",
-  "description": "OpenClaw Agent Monitor UI - 开箱即用的监控仪表盘",
+  "description": "OpenClaw TraceFlow — observability dashboard (sessions, skills, tokens, latency, logs). NestJS + React. Bilingual UI. See README.md.",
   "author": "slashhuang",
   "license": "MIT",
   "private": false,

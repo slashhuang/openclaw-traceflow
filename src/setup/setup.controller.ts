@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
 import { SkillsService } from '../skills/skills.service';
 import { AuthGuard } from '../auth/auth.guard';
 
@@ -94,7 +95,8 @@ export class SetupController {
     };
 
     const mockConfigService = { getConfig: () => tempConfig };
-    const testService = new OpenClawService(mockConfigService as any);
+    const mockGatewayConnection = new GatewayConnectionService(mockConfigService as ConfigService);
+    const testService = new OpenClawService(mockConfigService as any, mockGatewayConnection);
     const result = await testService.checkConnection();
 
     if (result.connected) {
