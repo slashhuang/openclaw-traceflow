@@ -68,7 +68,8 @@ export default {
   'settings.access.tokenHelpDesc': 'When calling configuration APIs, include this header: Authorization: Bearer <your token>',
   'settings.quick': 'Quick actions',
   'settings.restart': 'Restart Gateway',
-  'settings.cleanup': 'Cleanup logs',
+  'settings.restartHint':
+    'Runs on this machine: `openclaw gateway restart` (set OPENCLAW_CLI to override the binary). Restarts only the local Gateway process managed by that CLI. If the Gateway URL above points to another host, this button does not restart it.',
   'settings.contact': 'Author & project links',
   'settings.testConn': 'Test connection',
   'settings.saveCfg': 'Save',
@@ -79,7 +80,6 @@ export default {
   'settings.stateDir': 'State dir (optional)',
   'settings.workspaceDir': 'Workspace dir (optional)',
   'confirm.restart': 'Restart Gateway? Active sessions may be interrupted.',
-  'confirm.cleanup': 'Delete logs older than 7 days?',
   'confirm.killSession': 'Kill this session?',
   'dashboard.title': 'Dashboard',
   'dashboard.systemStatus': 'Status',
@@ -227,11 +227,18 @@ export default {
   'skills.title': 'Skills',
   'skills.subtitle': 'Skill × Tool relationship, usage, zombie & duplicate skills',
   'skills.tabList': 'List',
-  'skills.tabAnalysis': 'SystemPrompt',
+  'skills.tabAnalysis': 'Skills token use',
+  'skills.tabAnalysisHint':
+    'Estimates tokens from Skills-related sections in the current system prompt (active vs zombie vs duplicate), plus savings tips. This is not the same as the full System Prompt page in the sidebar.',
   'skills.callTrackingHint': 'Calls column: inferred from read tool path (path containing skills/xxx/SKILL.md). See session detail for per-session invoked skills.',
   'skills.tabSkillTool': 'Skill × Tool',
-  'skills.skillToolHint': 'Skill invocation inferred from read(skills/xxx/SKILL.md); tool calls aggregated from same session.',
-  'skills.toolBreakdownHint': 'Tools column: exec=run commands (e.g. scripts), read=read files, write/edit=edit files. Numbers are call counts; Total = sum of tool calls in the same session when this skill was invoked.',
+  'skills.skillToolHint':
+    'Skill usage is inferred from read paths to skills/<name>/SKILL.md. Tool calls are attributed in transcript order: after each read of a skill’s SKILL.md, subsequent tools count toward that skill until the next read of any SKILL.md; tools before the first SKILL.md read are not attributed. Totals accumulate across sessions.',
+  'skills.toolBreakdownHint':
+    'Tools column: names are tool names (e.g. exec=commands, read=files, write/edit=files, message=messages). Numbers are calls attributed to that skill. Total = sum of those tools for the row (across sessions). This differs from the Calls column in the list tab (read-to-SKILL.md count only)—do not compare them directly.',
+  'skills.skillToolTableNote':
+    'This table is the attributed tool breakdown; differing from Calls is expected.',
+  'skills.toolColumnTooltip': 'Tool name and attributed call count; see the notes above for attribution rules.',
   'skills.skillToolChartTitle': 'Skill × Tool distribution',
   'skills.skillToolTableTitle': 'Skill tool breakdown',
   'skills.toolBreakdown': 'Tools',

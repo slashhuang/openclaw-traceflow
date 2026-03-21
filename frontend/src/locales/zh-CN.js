@@ -68,7 +68,8 @@ export default {
   'settings.access.tokenHelpDesc': '当你调用“配置相关接口”时，在请求头里带上：Authorization: Bearer 你设置的口令',
   'settings.quick': '快速操作',
   'settings.restart': '重启 Gateway',
-  'settings.cleanup': '清理日志',
+  'settings.restartHint':
+    '在运行本监控服务的机器上执行 OpenClaw CLI：`openclaw gateway restart`（可用环境变量 OPENCLAW_CLI 指定可执行文件）。仅重启该 CLI 所管理的本机 Gateway 进程；上方「Gateway 地址」若指向远程主机，此按钮不会重启远端。',
   'settings.contact': '联系作者与项目地址',
   'settings.testConn': '测试连接',
   'settings.saveCfg': '保存配置',
@@ -79,7 +80,6 @@ export default {
   'settings.stateDir': 'State 目录（可选）',
   'settings.workspaceDir': 'Workspace 目录（可选）',
   'confirm.restart': '确定重启 Gateway？可能中断当前会话。',
-  'confirm.cleanup': '确定清理 7 天前的日志？',
   'confirm.killSession': '确定终止该会话？',
   'dashboard.title': '监控仪表盘',
   'dashboard.systemStatus': '系统状态',
@@ -225,11 +225,18 @@ export default {
   'skills.title': 'Skills 分析',
   'skills.subtitle': 'Skill 与 Tool 关联、调用频率、僵尸与重复 Skills',
   'skills.tabList': 'Skills 清单',
-  'skills.tabAnalysis': 'SystemPrompt 分析',
+  'skills.tabAnalysis': 'Skills 占用分析',
+  'skills.tabAnalysisHint':
+    '依据当前 System 提示词里与 Skills 相关的段落估算 Token（活跃 / 僵尸 / 重复），并给出可节省空间与优化建议；与侧栏「System Prompt」页的完整正文展示不是同一入口。',
   'skills.callTrackingHint': 'Calls 列：基于 read 工具调用的 path 反推（path 含 skills/xxx/SKILL.md 即视为触发该 skill）。会话详情页可查看单会话触发的 skills。',
   'skills.tabSkillTool': 'Skill × Tool',
-  'skills.skillToolHint': 'Skill 调用由 read(skills/xxx/SKILL.md) 反推；同一会话内各工具的调用次数聚合。',
-  'skills.toolBreakdownHint': '工具列含义：exec=执行命令（如运行脚本）、read=读取文件、write/edit=编辑文件。数字为调用次数，Total 为该 skill 触发时同会话内工具调用总和。',
+  'skills.skillToolHint':
+    'Skill 是否被使用由 read 到 skills/<名称>/SKILL.md 的路径反推。工具次数按会话 transcript 顺序归因：每次读到某 skill 的 SKILL.md 之后，直到下一次读到任意 skill 的 SKILL.md 之前，期间工具调用计入当前 skill；此前尚未读到任何 SKILL.md 的调用不计入。跨会话累计。',
+  'skills.toolBreakdownHint':
+    '工具列：名称为工具名（如 exec=执行命令、read=读文件、write/edit=写文件、message=消息等）。数字为归入该 skill 的调用次数。「Total」为该行各工具次数之和（跨会话累计）；与左侧清单里「Calls」列（仅统计 read 到该 skill 的 SKILL.md 的次数）口径不同，勿直接对比。',
+  'skills.skillToolTableNote':
+    '本表为按上述规则归因后的工具汇总；与「Calls」列数字不一致是正常现象。',
+  'skills.toolColumnTooltip': '工具名及归入该 skill 的调用次数；归因规则见本 Tab 上方说明。',
   'skills.skillToolChartTitle': 'Skill × Tool 分布',
   'skills.skillToolTableTitle': 'Skill 工具明细',
   'skills.toolBreakdown': '工具',

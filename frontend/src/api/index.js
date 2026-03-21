@@ -65,7 +65,6 @@ export const dashboardApi = {
 
 export const actionsApi = {
   restart: () => api.post('/actions/restart').then(res => res.data),
-  cleanupLogs: () => api.post('/actions/cleanup-logs').then(res => res.data),
 };
 
 export const pricingApi = {

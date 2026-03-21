@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Space, Typography, message, Modal, Row, Col, Alert } from 'antd';
+import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert } from 'antd';
 import { useIntl } from 'react-intl';
 import { setupApi, actionsApi } from '../api';
 
@@ -180,49 +180,31 @@ export default function Settings() {
       </Form>
 
       <Card title={intl.formatMessage({ id: 'settings.quick' })} style={{ marginTop: 16 }}>
-        <Space>
-          <Button
-            danger
-            onClick={() => {
-              Modal.confirm({
-                title: intl.formatMessage({ id: 'confirm.restart' }),
-                onOk: async () => {
-                  const toastKey = 'settings-restart';
-                  message.loading({ content: '正在重启服务...', key: toastKey, duration: 0 });
-                  try {
-                    await actionsApi.restart();
-                    message.success({ content: '重启成功', key: toastKey });
-                  } catch (e) {
-                    message.error({ content: e?.message || '重启失败', key: toastKey });
-                    throw e;
-                  }
-                },
-              });
-            }}
-          >
-            {intl.formatMessage({ id: 'settings.restart' })}
-          </Button>
-          <Button
-            onClick={() => {
-              Modal.confirm({
-                title: intl.formatMessage({ id: 'confirm.cleanup' }),
-                onOk: async () => {
-                  const toastKey = 'settings-cleanup-logs';
-                  message.loading({ content: '正在清理日志...', key: toastKey, duration: 0 });
-                  try {
-                    await actionsApi.cleanupLogs();
-                    message.success({ content: '日志清理完成', key: toastKey });
-                  } catch (e) {
-                    message.error({ content: e?.message || '清理日志失败', key: toastKey });
-                    throw e;
-                  }
-                },
-              });
-            }}
-          >
-            {intl.formatMessage({ id: 'settings.cleanup' })}
-          </Button>
-        </Space>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          {intl.formatMessage({ id: 'settings.restartHint' })}
+        </Typography.Paragraph>
+        <Button
+          danger
+          onClick={() => {
+            Modal.confirm({
+              title: intl.formatMessage({ id: 'confirm.restart' }),
+              content: intl.formatMessage({ id: 'settings.restartHint' }),
+              onOk: async () => {
+                const toastKey = 'settings-restart';
+                message.loading({ content: '正在重启服务...', key: toastKey, duration: 0 });
+                try {
+                  await actionsApi.restart();
+                  message.success({ content: '重启成功', key: toastKey });
+                } catch (e) {
+                  message.error({ content: e?.message || '重启失败', key: toastKey });
+                  throw e;
+                }
+              },
+            });
+          }}
+        >
+          {intl.formatMessage({ id: 'settings.restart' })}
+        </Button>
       </Card>
 
       <Card title={intl.formatMessage({ id: 'settings.contact' })} style={{ marginTop: 16 }}>
