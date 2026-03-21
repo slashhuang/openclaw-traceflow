@@ -52,7 +52,6 @@ pnpm -v
 |------|------|
 | `pnpm run build:all` | 构建后端 + 前端 |
 | `pnpm run deploy:pm2` | 构建并以 PM2 启动（带重启保护） |
-| `pnpm run release` | 构建并打 npm 包 |
 
 **生产（PM2，推荐）**
 
