@@ -19,7 +19,11 @@ import {
 import { HistoryOutlined } from '@ant-design/icons';
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { dashboardApi } from '../api';
-import { inferSessionTypeLabel, inferSessionChatKind } from '../utils/session-user';
+import {
+  inferSessionTypeLabel,
+  inferSessionChatKind,
+  formatSessionParticipantDisplay,
+} from '../utils/session-user';
 
 /** 仪表盘整页轮询（含系统健康）；仅在前台标签页触发 */
 const DASHBOARD_POLL_INTERVAL_MS = 10000;
@@ -174,13 +178,15 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
       render: (_, r) => <Tag color={statusTagColor(r.status)}>{r.status}</Tag>,
     },
     {
-      title: intl.formatMessage({ id: 'sessions.column.user' }),
+      title: (
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.participantTooltip' })}>
+          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.user' })}</span>
+        </Tooltip>
+      ),
       key: 'user',
       width: 170,
       render: (_, r) => {
-        const typeLabel = r.typeLabel || inferSessionTypeLabel(r.sessionKey, r.sessionId);
-        const sys = typeLabel === 'heartbeat' || typeLabel === 'cron' || typeLabel === 'boot';
-        const v = sys ? typeLabel : r.user || '—';
+        const v = formatSessionParticipantDisplay(r);
         return (
           <Link
             to={`/sessions/${encodeURIComponent(r.sessionId)}`}
