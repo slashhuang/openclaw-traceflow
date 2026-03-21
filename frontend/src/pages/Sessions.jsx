@@ -20,6 +20,7 @@ import {
   inferSessionChatKind,
   formatSessionParticipantDisplay,
 } from '../utils/session-user';
+import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 
 function formatDuration(ms) {
   if (!ms) return '—';
@@ -113,9 +114,8 @@ export default function Sessions() {
         case 'transcriptFileSizeBytes':
           return s.transcriptFileSizeBytes ?? 0;
         case 'utilization': {
-          const u = s.tokenUsage;
-          if (!u?.limit) return 0;
-          return u.utilization ?? (u.limit ? (u.total / u.limit) * 100 : 0);
+          const pct = sessionTokenUtilizationPercent(s);
+          return pct ?? -1;
         }
         case 'status':
           return String(s.status || '').toLowerCase();
@@ -150,12 +150,7 @@ export default function Sessions() {
     }
   };
 
-  const utilizationFor = (s) => {
-    const u = s.tokenUsage;
-    if (!u?.limit) return null;
-    const pct = Math.round(u.utilization ?? (u.limit ? (u.total / u.limit) * 100 : 0));
-    return Math.min(100, Math.max(0, pct));
-  };
+  const utilizationFor = (s) => sessionTokenUtilizationPercent(s);
 
   const utilizationColor = (pct) => {
     if (pct == null) return undefined;
@@ -445,19 +440,23 @@ export default function Sessions() {
     },
     {
       title: (
-        <SortableTitle
-          label={`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
-          active={sortKey === 'utilization'}
-          order={sortOrder}
-          onClick={() => {
-            if (sortKey !== 'utilization') {
-              setSortKey('utilization');
-              setSortOrder('desc');
-            } else {
-              setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
-            }
-          }}
-        />
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
+          <span style={{ cursor: 'help' }}>
+            <SortableTitle
+              label={`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
+              active={sortKey === 'utilization'}
+              order={sortOrder}
+              onClick={() => {
+                if (sortKey !== 'utilization') {
+                  setSortKey('utilization');
+                  setSortOrder('desc');
+                } else {
+                  setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+                }
+              }}
+            />
+          </span>
+        </Tooltip>
       ),
       key: 'tokenUtil',
       width: 160,
@@ -466,6 +465,7 @@ export default function Sessions() {
       onCell: () => ({ style: { minWidth: 160, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
+        const unreliable = r.tokenUsage?.contextUtilizationReliable === false;
         return (
           <div
             style={{
@@ -477,20 +477,45 @@ export default function Sessions() {
               width: '100%',
             }}
           >
-            <Typography.Text style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-              {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
-            </Typography.Text>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <Progress
-                percent={pct ?? 0}
-                size="small"
-                status={utilizationColor(pct)}
-                showInfo={false}
-                style={{ width: 76, flexShrink: 0 }}
-              />
-              <Typography.Text style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                {pct == null ? '—' : `${pct}%`}
+            <Tooltip
+              title={
+                unreliable
+                  ? intl.formatMessage({ id: 'sessions.tokensTotalUnreliableHint' })
+                  : undefined
+              }
+            >
+              <Typography.Text
+                style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
+                type={unreliable ? 'secondary' : undefined}
+              >
+                {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
+                {unreliable ? ' *' : ''}
               </Typography.Text>
+            </Tooltip>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <Tooltip
+                title={
+                  unreliable
+                    ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' })
+                    : undefined
+                }
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Progress
+                    percent={pct ?? 0}
+                    size="small"
+                    status={utilizationColor(pct)}
+                    showInfo={false}
+                    style={{ width: 76, flexShrink: 0, opacity: unreliable ? 0.45 : 1 }}
+                  />
+                  <Typography.Text
+                    style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}
+                    type={unreliable ? 'secondary' : undefined}
+                  >
+                    {pct == null ? '—' : `${pct}%`}
+                  </Typography.Text>
+                </span>
+              </Tooltip>
             </div>
           </div>
         );

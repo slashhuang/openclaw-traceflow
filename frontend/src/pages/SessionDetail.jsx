@@ -30,6 +30,7 @@ import {
 import { useIntl } from 'react-intl';
 import { sessionsApi } from '../api';
 import { formatSessionParticipantDisplay } from '../utils/session-user';
+import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 
 /** 详情页「参与者」：多人时首位可点 +Tag 展开全部（与列表 participantSummary 同源） */
 function DetailParticipantField({ session, intl }) {
@@ -615,20 +616,22 @@ export default function SessionDetail() {
   const input = usage?.input ?? 0;
   const output = usage?.output ?? 0;
   const total = usage?.total ?? (input + output);
-  const utilPct = limit && total > 0 ? Math.min(100, Math.round((total / limit) * 100)) : null;
-  const usedPct = limit && total > 0 ? Math.min(100, (total / limit) * 100) : 0;
+  const contextUnreliable = usage?.contextUtilizationReliable === false;
+  const utilPct = sessionTokenUtilizationPercent(session);
+  const usedPct =
+    !contextUnreliable && limit && total > 0 ? Math.min(100, (total / limit) * 100) : 0;
   const tokenUsageMeta = session?.tokenUsageMeta;
   const showTokenZeroSourceWarning =
     total === 0 &&
     tokenUsageMeta?.source === 'transcript' &&
     tokenUsageMeta?.transcriptUsageObserved &&
     !tokenUsageMeta?.storeTokenFieldsPresent;
-  // 用 input/(input+output) 保证条带比例正确，避免 total 与 input+output 不一致时条带溢出
+  // 用 input/(input+output) 保证条带比例正确；不可靠时仅展示 In/Out 构成，不映射为占上限比例
   const sumInOut = input + output;
   const inputRatio = sumInOut > 0 ? input / sumInOut : 0;
   const outputRatio = sumInOut > 0 ? output / sumInOut : 0;
-  const inputBarPct = usedPct * inputRatio;
-  const outputBarPct = usedPct * outputRatio;
+  const inputBarPct = contextUnreliable ? inputRatio * 100 : usedPct * inputRatio;
+  const outputBarPct = contextUnreliable ? outputRatio * 100 : usedPct * outputRatio;
 
   const searchQ = detailSearch.trim();
   const tabFilteredN =
@@ -712,16 +715,28 @@ export default function SessionDetail() {
         <Card
           size="small"
           title={
-            <span>
-              Token{' '}
-              <Typography.Text type="secondary" style={{ fontWeight: 'normal', fontSize: 13 }}>
-                ({total.toLocaleString()}/{limit.toLocaleString()})
-              </Typography.Text>
-            </span>
+            <Tooltip title={contextUnreliable ? intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' }) : undefined}>
+              <span>
+                Token{' '}
+                <Typography.Text type="secondary" style={{ fontWeight: 'normal', fontSize: 13 }}>
+                  ({total.toLocaleString()}/{limit.toLocaleString()})
+                  {contextUnreliable ? ' *' : ''}
+                </Typography.Text>
+              </span>
+            </Tooltip>
           }
           style={{ marginBottom: 16 }}
         >
-          <div style={{ marginBottom: 8 }}>
+          {contextUnreliable && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message={intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' })}
+              description={intl.formatMessage({ id: 'session.tokenContextUnreliableDesc' })}
+            />
+          )}
+          <div style={{ marginBottom: 8, opacity: contextUnreliable ? 0.55 : 1 }}>
             <div
               style={{
                 display: 'flex',

@@ -139,7 +139,8 @@ export default {
   'dashboard.colOut': 'Out',
   'dashboard.colOutDesc': 'Output tokens (model generated)',
   'dashboard.colPct': '%',
-  'dashboard.colPctDesc': 'Context utilization (used / context limit)',
+  'dashboard.colPctDesc':
+    'Context utilization (used / context limit). When the index marks totalTokensFresh:false, TraceFlow hides a trustworthy utilization percentage.',
   'dashboard.colSession': 'Session',
   'dashboard.colSessionDesc': 'Session key',
   'dashboard.colToken': 'Token',
@@ -151,7 +152,8 @@ export default {
   'dashboard.colLast': 'Last',
   'dashboard.colLastDesc': 'Last activity time',
   'dashboard.gatewayContext': 'Context',
-  'dashboard.gatewayContextDesc': 'Used tokens / context limit, (utilization %)',
+  'dashboard.gatewayContextDesc':
+    'Gateway-reported used tokens / context limit (may differ from TraceFlow’s “utilization” column, which hides % when the index is unreliable).',
   'dashboard.gatewayCompactions': 'Compactions',
   'dashboard.gatewayCompactionsDesc': 'Context compaction count (when exceeding limit)',
   'dashboard.gatewayQueueDepth': 'Queue depth',
@@ -173,6 +175,21 @@ export default {
   'dashboard.fullLogs': 'Full logs',
   'dashboard.gatewayStatus': 'Gateway status',
   'dashboard.gatewayStatusDesc': 'OpenClaw Gateway connection, version, current session context',
+  'dashboard.gatewayStatusSourceMerged':
+    'Data sources: model, tokens, context, compactions — local sessions.json (aligned with health session key). Version & queue — Gateway health (WebSocket RPC).',
+  'dashboard.gatewayStatusSourceHealthNoRow':
+    'Data sources: stateDir is set but no matching row in sessions.json; model/context may be placeholders. Session key & time — health; version & queue — health RPC.',
+  'dashboard.gatewayStatusSourceHealthNoStateDir':
+    'Data sources: no local stateDir (common when only a remote Gateway is configured); model/context are health placeholders. Version & queue — health RPC. Set OPENCLAW_STATE_DIR or use a local Gateway to merge sessions.json.',
+  'dashboard.gatewayStatusSourceTooltip':
+    'TraceFlow uses Gateway health for the session key, time, and queue (no operator.read required). When the OpenClaw state directory is resolved, the same session key is used to read agents/…/sessions/sessions.json for model and token fields.',
+  'dashboard.overviewFetchFailed':
+    'Could not load dashboard overview (check TraceFlow backend, network, and /api proxy)',
+  'dashboard.overviewStaleTitle': 'Data may be out of date',
+  'dashboard.overviewStaleDetail':
+    'This refresh failed; still showing the last successful load. Reason: {detail} Try again later or use Refresh.',
+  'dashboard.overviewFirstLoadFailedTitle': 'Failed to load dashboard data',
+  'dashboard.overviewRetry': 'Refresh',
   'sessions.title': 'Sessions',
   'sessions.sortHint': 'Click header to sort',
   'sessions.empty': 'No sessions',
@@ -201,6 +218,12 @@ export default {
   'sessions.column.archived': 'Archived',
   'sessions.column.tokens': 'Tokens',
   'sessions.column.util': 'Utilization',
+  'sessions.column.tokensUtilHint':
+    'Tokens column shows the best-effort usage figure; utilization is “used / context limit”. If OpenClaw marks totalTokensFresh:false in sessions.json, the context total is not aligned with the latest run—TraceFlow hides a trustworthy utilization (shown as * or —).',
+  'sessions.tokensTotalUnreliableHint':
+    'This figure comes from transcript sums or partial fields; it is **not** OpenClaw’s confirmed “current context window” total when the index may be stale (totalTokensFresh:false).',
+  'sessions.utilUnreliableHint':
+    'Cannot compute a reliable “used / context limit” from current data; wait for the Gateway to persist a fresh total or inspect usage in the session log.',
   'sessions.column.actions': 'Actions',
   'session.detail': 'Session detail',
   'session.messages': 'Messages',
@@ -291,7 +314,11 @@ export default {
   'session.tokenZeroPoint1Desc': 'TraceFlow reads <strong>session logs</strong> (each session is a <code>.jsonl</code> file) under <code>agents</code> in the OpenClaw <strong>state directory</strong>. Each assistant reply includes <code>usage</code> (including input/output/totalTokens, etc.), and this page summarizes based on these fields. It is not related to <code>usage.cost</code>.',
   'session.tokenZeroPoint2Title': '2) Why is it 0',
   'session.tokenZeroPoint2Desc': 'In this session log, the <code>usage</code> values read are all 0, so we can only display 0.',
-  'session.tokenZeroPoint2FreshHint': 'Additionally, the index marks <code>totalTokensFresh: false</code>, indicating that the Gateway/runtime has not yet written a reliable total to the index, and this page has no alternative value to display.',
+  'session.tokenZeroPoint2FreshHint':
+    'Also, if the index has <code>totalTokensFresh: false</code>, OpenClaw is telling you the <code>totalTokens</code> field in sessions.json is **not** a reliable snapshot of the current context; this page will show “context utilization unconfirmed” and will not treat utilization as exact.',
+  'session.tokenContextUnreliableTitle': 'Context utilization unconfirmed',
+  'session.tokenContextUnreliableDesc':
+    'OpenClaw marked <code>totalTokensFresh</code> as <code>false</code>: do not read “used / limit” here as an accurate context-window fill level. The In/Out bar below shows **composition** (input vs output share), not percent of the limit.',
   'session.tokenZeroPoint3Title': '3) How to verify locally (consistent with what the service reads)',
   'session.tokenZeroStateRootLabel': 'State root directory (current parsing result of this service, generally corresponds to environment variable <code>OPENCLAW_STATE_DIR</code> or the state path in settings):',
   'session.tokenZeroStateRootFallback': 'The state root directory is obtained from this service\'s OpenClaw path parsing (environment variable <code>OPENCLAW_STATE_DIR</code> or CLI/configuration inference); if there is no absolute path below, please confirm in \"Settings\" that the Gateway/state directory is consistent with the machine running OpenClaw.',

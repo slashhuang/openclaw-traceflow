@@ -12,6 +12,7 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import type { OpenClawSession } from '../openclaw/openclaw.service';
 import { formatParticipantSummary, isPlaceholderParticipantId } from '../common/participant-summary';
+import { isIndexTotalTokensUsableForContext } from '../common/session-token-context';
 
 /** 参与者扫描逻辑升级时递增，使内存缓存命中后仍会重扫 transcript */
 const TRANSCRIPT_PARTICIPANT_SCAN_VERSION = 3;
@@ -324,27 +325,81 @@ export class FileSystemSessionStorage implements SessionStorage {
         userId = humanSenders[0];
       }
 
-      // 解析 token usage
+      // 解析 token usage（列表口径：首行 tokenUsage + sessions.json 元数据）
       const parsedFromTranscript = this.parseTokenUsage(sessionData?.tokenUsage);
-      const totalTokens = meta?.totalTokens;
+      const indexTotal = meta?.totalTokens;
+      const indexTotalUsable = isIndexTotalTokensUsableForContext(indexTotal, meta?.totalTokensFresh);
       const contextTokens = meta?.contextTokens;
       const model = meta?.model;
-      
+
       const limit = contextTokens ?? parsedFromTranscript?.limit;
       const input = meta?.inputTokens ?? parsedFromTranscript?.input ?? 0;
       const output = meta?.outputTokens ?? parsedFromTranscript?.output ?? 0;
-      
-      const tokenUsage = totalTokens != null && limit != null
-        ? {
-            input,
-            output,
-            total: totalTokens,
-            limit,
-            utilization: Math.round((totalTokens / limit) * 100),
-          }
-        : parsedFromTranscript
-          ? { ...parsedFromTranscript, input, output }
-          : { input, output, total: totalTokens ?? 0, limit };
+
+      const firstLineHasTotals =
+        !!parsedFromTranscript &&
+        ((parsedFromTranscript.input ?? 0) + (parsedFromTranscript.output ?? 0) > 0 ||
+          (typeof parsedFromTranscript.total === 'number' && parsedFromTranscript.total > 0));
+
+      let resolvedTotal: number | undefined;
+      let contextUtilizationReliable = false;
+
+      if (firstLineHasTotals) {
+        resolvedTotal =
+          parsedFromTranscript!.total ??
+          (parsedFromTranscript!.input ?? 0) + (parsedFromTranscript!.output ?? 0);
+        contextUtilizationReliable = typeof limit === 'number' && limit > 0;
+      } else if (indexTotalUsable && typeof indexTotal === 'number') {
+        resolvedTotal = indexTotal;
+        contextUtilizationReliable = typeof limit === 'number' && limit > 0;
+      } else {
+        const sumIo = input + output;
+        if (sumIo > 0) {
+          resolvedTotal = sumIo;
+          contextUtilizationReliable = false;
+        } else {
+          resolvedTotal = undefined;
+          contextUtilizationReliable = false;
+        }
+      }
+
+      const tokenUsage =
+        typeof limit === 'number' &&
+        limit > 0 &&
+        typeof resolvedTotal === 'number'
+          ? {
+              input,
+              output,
+              total: resolvedTotal,
+              limit,
+              utilization: contextUtilizationReliable
+                ? Math.round((resolvedTotal / limit) * 100)
+                : undefined,
+              contextUtilizationReliable,
+            }
+          : parsedFromTranscript
+            ? {
+                ...parsedFromTranscript,
+                input,
+                output,
+                total: resolvedTotal ?? parsedFromTranscript.total ?? input + output,
+                limit: limit ?? parsedFromTranscript.limit,
+                contextUtilizationReliable,
+              }
+            : {
+                input,
+                output,
+                total: resolvedTotal ?? 0,
+                limit,
+                contextUtilizationReliable,
+              };
+
+      const totalTokens =
+        indexTotalUsable && typeof indexTotal === 'number'
+          ? indexTotal
+          : typeof resolvedTotal === 'number'
+            ? resolvedTotal
+            : undefined;
 
       // 扫描 usage.cost
       let hasCostField = false;

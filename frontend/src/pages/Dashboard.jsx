@@ -15,15 +15,17 @@ import {
   theme,
   Space,
   Tag,
+  Button,
 } from 'antd';
 import { HistoryOutlined } from '@ant-design/icons';
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { dashboardApi } from '../api';
+import { dashboardApi, extractApiErrorMessage } from '../api';
 import {
   inferSessionTypeLabel,
   inferSessionChatKind,
   formatSessionParticipantDisplay,
 } from '../utils/session-user';
+import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 
 /** 仪表盘整页轮询（含系统健康）；仅在前台标签页触发 */
 const DASHBOARD_POLL_INTERVAL_MS = 10000;
@@ -86,10 +88,7 @@ function formatTokensShort(n) {
 }
 
 function utilizationFor(s) {
-  const u = s.tokenUsage;
-  if (!u?.limit) return null;
-  const pct = Math.round(u.utilization ?? (u.limit ? (u.total / u.limit) * 100 : 0));
-  return Math.min(100, Math.max(0, pct));
+  return sessionTokenUtilizationPercent(s);
 }
 
 function utilizationColor(pct) {
@@ -272,7 +271,13 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
       },
     },
     {
-      title: `${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`,
+      title: (
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
+          <span style={{ cursor: 'help' }}>
+            {`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
+          </span>
+        </Tooltip>
+      ),
       key: 'tokenUtil',
       width: 160,
       align: 'right',
@@ -280,6 +285,7 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
       onCell: () => ({ style: { minWidth: 160, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
+        const unreliable = r.tokenUsage?.contextUtilizationReliable === false;
         return (
           <div
             style={{
@@ -291,21 +297,44 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
               width: '100%',
             }}
           >
-            <Typography.Text style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-              {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
-            </Typography.Text>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <Progress
-                percent={pct ?? 0}
-                size="small"
-                status={utilizationColor(pct)}
-                showInfo={false}
-                style={{ width: 76, flexShrink: 0 }}
-              />
-              <Typography.Text style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                {pct == null ? '—' : `${pct}%`}
+            <Tooltip
+              title={
+                unreliable
+                  ? intl.formatMessage({ id: 'sessions.tokensTotalUnreliableHint' })
+                  : undefined
+              }
+            >
+              <Typography.Text
+                style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
+                type={unreliable ? 'secondary' : undefined}
+              >
+                {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
+                {unreliable ? ' *' : ''}
               </Typography.Text>
-            </div>
+            </Tooltip>
+            <Tooltip
+              title={
+                unreliable
+                  ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' })
+                  : undefined
+              }
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Progress
+                  percent={pct ?? 0}
+                  size="small"
+                  status={utilizationColor(pct)}
+                  showInfo={false}
+                  style={{ width: 76, flexShrink: 0, opacity: unreliable ? 0.45 : 1 }}
+                />
+                <Typography.Text
+                  style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}
+                  type={unreliable ? 'secondary' : undefined}
+                >
+                  {pct == null ? '—' : `${pct}%`}
+                </Typography.Text>
+              </span>
+            </Tooltip>
           </div>
         );
       },
@@ -401,6 +430,18 @@ function GatewayStatusCard({ overview, intl }) {
   const runtimeParts = [`Runtime: ${runtimeKind}`, `Think: ${think}`, mainSession?.fastMode ? 'Fast: on' : null, elevated].filter(Boolean);
   const queueDepth = queuedEvents.length;
 
+  const src = overview.traceflowGatewayStatusSource;
+  let gatewayStatusSourceMsgId = null;
+  if (src) {
+    if (src.metricsFrom === 'sessions.json') {
+      gatewayStatusSourceMsgId = 'dashboard.gatewayStatusSourceMerged';
+    } else if (src.stateDirConfigured) {
+      gatewayStatusSourceMsgId = 'dashboard.gatewayStatusSourceHealthNoRow';
+    } else {
+      gatewayStatusSourceMsgId = 'dashboard.gatewayStatusSourceHealthNoStateDir';
+    }
+  }
+
   return (
     <Card
       title={
@@ -438,6 +479,22 @@ function GatewayStatusCard({ overview, intl }) {
           <span style={{ cursor: 'help' }}>Queue depth: {queueDepth}</span>
         </Tooltip>
       </Typography.Paragraph>
+      {gatewayStatusSourceMsgId ? (
+        <Tooltip title={intl.formatMessage({ id: 'dashboard.gatewayStatusSourceTooltip' })}>
+          <Typography.Paragraph
+            style={{
+              marginTop: 0,
+              marginBottom: 0,
+              fontSize: 11,
+              lineHeight: 1.55,
+              color: token.colorTextTertiary,
+              cursor: 'help',
+            }}
+          >
+            {intl.formatMessage({ id: gatewayStatusSourceMsgId })}
+          </Typography.Paragraph>
+        </Tooltip>
+      ) : null}
     </Card>
   );
 }
@@ -457,6 +514,10 @@ export default function Dashboard() {
     tokenSummary: null,
   });
   const [loading, setLoading] = useState(true);
+  /** 是否已成功拉取过至少一次 overview，用于失败时保留上次数据而非整页清空 */
+  const hasSnapshotRef = useRef(false);
+  /** 本次刷新失败时的提示：有快照时为「仍显示上次数据」；无快照时为首次加载失败 */
+  const [overviewFetchHint, setOverviewFetchHint] = useState(null);
   /** 用 ref 防抖，勿放入 useCallback 依赖，否则每次请求结束都会换新 fetchData，useEffect 会反复挂载并瞬间连打 overview */
   const fetchInFlightRef = useRef(false);
 
@@ -464,9 +525,54 @@ export default function Dashboard() {
     if (fetchInFlightRef.current) return;
     fetchInFlightRef.current = true;
     try {
-      const data = await dashboardApi.getOverview().catch(() => null);
+      let overviewHttpErr = null;
+      const data = await dashboardApi.getOverview().catch((err) => {
+        overviewHttpErr = err;
+        return null;
+      });
+
+      const fallbackDetail = intl.formatMessage({ id: 'dashboard.overviewFetchFailed' });
+      const errDetail = extractApiErrorMessage(overviewHttpErr, fallbackDetail);
+
+      if (!data) {
+        if (hasSnapshotRef.current) {
+          setOverviewFetchHint({ type: 'stale', detail: errDetail });
+        } else {
+          setOverviewFetchHint({ type: 'firstLoad', detail: errDetail });
+          setHealth(null);
+          setStatusOverview({ error: errDetail });
+          setSessions([]);
+          setRecentLogs([]);
+          setArchiveCountMap({});
+          setMetrics({
+            latency: { p50: 0, p95: 0, p99: 0, count: 0 },
+            tools: [],
+            skills: [],
+            tokenSummary: {
+              totalInput: 0,
+              totalOutput: 0,
+              totalTokens: 0,
+              activeInput: 0,
+              activeOutput: 0,
+              activeTokens: 0,
+              archivedInput: 0,
+              archivedOutput: 0,
+              archivedTokens: 0,
+              nearLimitCount: 0,
+              limitReachedCount: 0,
+              sessionCount: 0,
+            },
+            archiveCount: 0,
+          });
+        }
+        return;
+      }
+
+      hasSnapshotRef.current = true;
+      setOverviewFetchHint(null);
+
       const healthData = data?.health ?? null;
-      const statusData = data?.statusOverview ?? { error: 'fail' };
+      const statusData = data?.statusOverview ?? { error: fallbackDetail };
       const sessionsData = Array.isArray(data?.sessions) ? data.sessions : [];
       const logsData = Array.isArray(data?.recentLogs) ? data.recentLogs : [];
       const latencyData = data?.metrics?.latency ?? { p50: 0, p95: 0, p99: 0, count: 0 };
@@ -485,14 +591,23 @@ export default function Dashboard() {
               skills: [],
             };
       const tokenSummaryData = data?.metrics?.tokenSummary ?? {
-        totalInput: 0, totalOutput: 0, totalTokens: 0,
-        activeInput: 0, activeOutput: 0, activeTokens: 0,
-        archivedInput: 0, archivedOutput: 0, archivedTokens: 0,
-        nearLimitCount: 0, limitReachedCount: 0, sessionCount: 0,
+        totalInput: 0,
+        totalOutput: 0,
+        totalTokens: 0,
+        activeInput: 0,
+        activeOutput: 0,
+        activeTokens: 0,
+        archivedInput: 0,
+        archivedOutput: 0,
+        archivedTokens: 0,
+        nearLimitCount: 0,
+        limitReachedCount: 0,
+        sessionCount: 0,
       };
-      const acMap = data?.metrics?.archiveCountMap && typeof data.metrics.archiveCountMap === 'object'
-        ? data.metrics.archiveCountMap
-        : {};
+      const acMap =
+        data?.metrics?.archiveCountMap && typeof data.metrics.archiveCountMap === 'object'
+          ? data.metrics.archiveCountMap
+          : {};
       setHealth(healthData);
       setStatusOverview(statusData);
       setSessions(sessionsData);
@@ -511,7 +626,7 @@ export default function Dashboard() {
       setLoading(false);
       fetchInFlightRef.current = false;
     }
-  }, []);
+  }, [intl]);
 
   useEffect(() => {
     fetchData();
@@ -569,6 +684,28 @@ export default function Dashboard() {
   return (
     <div style={{ paddingBottom: 24 }}>
       <Typography.Title level={4} style={{ marginBottom: 20 }}>{intl.formatMessage({ id: 'dashboard.title' })}</Typography.Title>
+      {overviewFetchHint && (
+        <Alert
+          style={{ marginBottom: 16 }}
+          type={overviewFetchHint.type === 'stale' ? 'warning' : 'error'}
+          showIcon
+          message={
+            overviewFetchHint.type === 'stale'
+              ? intl.formatMessage({ id: 'dashboard.overviewStaleTitle' })
+              : intl.formatMessage({ id: 'dashboard.overviewFirstLoadFailedTitle' })
+          }
+          description={
+            overviewFetchHint.type === 'stale'
+              ? intl.formatMessage({ id: 'dashboard.overviewStaleDetail' }, { detail: overviewFetchHint.detail })
+              : overviewFetchHint.detail
+          }
+          action={
+            <Button size="small" type="primary" ghost onClick={() => fetchData()}>
+              {intl.formatMessage({ id: 'dashboard.overviewRetry' })}
+            </Button>
+          }
+        />
+      )}
       <Row gutter={[8, 8]}>
         <Col xs={12} sm={8} md={6} lg={4} xl={4}>
           <Card size="small" bodyStyle={{ padding: '10px 12px' }}>

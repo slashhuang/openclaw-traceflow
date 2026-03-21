@@ -13,10 +13,21 @@ export type GatewayRpcResult<T> =
   | { ok: true; payload: T }
   | { ok: false; error: string };
 
+/** Dashboard Gateway Status：供 UI 标明数据来源（TraceFlow 扩展字段） */
+export type TraceflowGatewayStatusSource = {
+  /** 主会话模型/Token/上下文等 */
+  metricsFrom: 'sessions.json' | 'health-only';
+  /** 版本号与 queuedSystemEvents */
+  queueVersionFrom: 'health';
+  /** 是否解析到 stateDir（用于说明未读盘原因） */
+  stateDirConfigured: boolean;
+};
+
 export type StatusOverviewResult = {
   version?: string;
   status?: Record<string, unknown>;
   usage?: Record<string, unknown>;
+  traceflowGatewayStatusSource?: TraceflowGatewayStatusSource;
 };
 
 /**
