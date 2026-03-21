@@ -1,8 +1,10 @@
 /**
- * 通过 WebSocket 调用 Gateway RPC 方法（status、usage.status 等）
+ * 通过 WebSocket 调用 Gateway RPC 方法。
+ * 概览类调用使用 `health`（无 operator scope 要求），避免 backend 无设备身份时 `status` 报 missing scope。
  */
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
+import { buildStatusOverviewFromHealth } from './gateway-overview-health';
 import { gatewayHttpUrlToWs } from './gateway-ws-paths';
 
 const GATEWAY_PROTOCOL_VERSION = 3;
@@ -18,7 +20,8 @@ export type StatusOverviewResult = {
 };
 
 /**
- * 连接后依次调用 status 和 usage.status，返回合并结果（含 hello 中的 version）
+ * 连接后调用 `health`（豁免 operator scope），并映射为 StatusOverview 形状。
+ * 不再使用 `status` + `usage.status`，避免无设备身份 backend 连接报 missing scope: operator.read。
  */
 export async function fetchStatusOverview(params: {
   gatewayHttpUrl: string;
@@ -31,7 +34,7 @@ export async function fetchStatusOverview(params: {
   const token = params.token?.trim();
   const password = params.password?.trim();
 
-  const result: StatusOverviewResult = {};
+  let gatewayVersion: string | undefined;
 
   return new Promise((resolve) => {
     let settled = false;
@@ -53,28 +56,7 @@ export async function fetchStatusOverview(params: {
     );
 
     let connectReqId: string | null = null;
-    let pendingReqId: string | null = null;
-    let pendingMethod: string | null = null;
-    const methodQueue = ['status', 'usage.status'] as const;
-    let methodIndex = 0;
-
-    const sendNextMethod = () => {
-      if (methodIndex >= methodQueue.length) {
-        done({ ok: true, payload: result });
-        return;
-      }
-      const method = methodQueue[methodIndex++];
-      pendingMethod = method;
-      pendingReqId = randomUUID();
-      ws.send(
-        JSON.stringify({
-          type: 'req',
-          id: pendingReqId,
-          method,
-          params: {},
-        }),
-      );
-    };
+    let healthReqId: string | null = null;
 
     const ws = new WebSocket(wsUrl, { maxPayload: 25 * 1024 * 1024 });
 
@@ -139,13 +121,21 @@ export async function fetchStatusOverview(params: {
           }
           const payload = msg.payload as { server?: { version?: string } };
           if (payload?.server?.version) {
-            result.version = payload.server.version;
+            gatewayVersion = payload.server.version;
           }
-          sendNextMethod();
+          healthReqId = randomUUID();
+          ws.send(
+            JSON.stringify({
+              type: 'req',
+              id: healthReqId,
+              method: 'health',
+              params: {},
+            }),
+          );
           return;
         }
 
-        if (msg.type === 'res' && msg.id === pendingReqId) {
+        if (msg.type === 'res' && msg.id === healthReqId) {
           if (!msg.ok) {
             const err = msg.error as { message?: string } | undefined;
             done({
@@ -155,12 +145,9 @@ export async function fetchStatusOverview(params: {
             return;
           }
           const payload = msg.payload as Record<string, unknown>;
-          if (pendingMethod === 'status') {
-            result.status = payload;
-          } else if (pendingMethod === 'usage.status') {
-            result.usage = payload;
-          }
-          sendNextMethod();
+          const overview = buildStatusOverviewFromHealth(payload, gatewayVersion);
+          done({ ok: true, payload: overview });
+          return;
         }
       } catch (e) {
         done({ ok: false, error: e instanceof Error ? e.message : String(e) });

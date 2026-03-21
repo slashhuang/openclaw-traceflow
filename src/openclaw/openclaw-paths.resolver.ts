@@ -3,8 +3,9 @@
  *
  * 优先级（参考 control-ui 的 WebSocket 方案）：
  * 1. 显式 openclawStateDir
- * 2. 向正在运行的 Gateway 拉取 WebSocket：connect → hello-ok.snapshot（stateDir/configPath）
- *    + skills.status（workspaceDir）；仅当本机存在 ${stateDir}/agents 时采用
+ * 2. 向正在运行的 Gateway 拉取 WebSocket：connect → 成功响应中的 snapshot（stateDir/configPath）；
+ *    不在此调用 skills.status（backend 无设备身份时 Gateway 会清空 scopes，会报 missing scope: operator.read）。
+ *    workspaceDir 由后续 CLI/配置推断；可为空。
  * 3. OPENCLAW_STATE_DIR / OPENCLAW_CONFIG_PATH
  * 4. openclaw config file + 目录启发式
  *

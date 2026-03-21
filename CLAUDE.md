@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-This file guides Claude Code and other AI assistants working in **openclaw-traceflow** (not the repo root `openclaw-monitor` unless symlinked).
+This file guides Claude Code and other AI assistants working in **`openclaw-traceflow/`**（monorepo `claw-sources` 内以 git subtree 维护的一方子项目）。上游仓库：`git@github.com:slashhuang/openclaw-traceflow.git`。
+
+**Monorepo 总览**（根目录结构、子项目分工、Gateway `missing scope` 说明）：仓库根 **[`../AGENTS.md`](../AGENTS.md)**。
 
 ## 项目概述
 

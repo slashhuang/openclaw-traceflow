@@ -1,7 +1,9 @@
 /**
  * 从正在运行的 OpenClaw Gateway 通过 WebSocket 拉取真实运行时路径。
- * 参考 control-ui 方案：connect 握手后 hello-ok.snapshot 含 stateDir/configPath，
- * 再调用 skills.status 获取 workspaceDir。
+ * connect 成功后 payload.snapshot 含 stateDir、configPath。
+ * 不在此调用 skills.status：无设备身份的 backend 客户端在 Gateway 侧会清空 connect scopes，
+ * 随后 RPC 会报 missing scope: operator.read（与 token 是否宽泛无关）。
+ * workspaceDir 由本地解析器在需用时推断；此处可为 null。
  */
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
@@ -28,8 +30,7 @@ export type GatewayWsPathsResult =
  * 通过 WebSocket 连接 Gateway（与 control-ui 相同流程）：
  * 1. 等待 connect.challenge
  * 2. 发送 connect 请求（含 token/password 鉴权）
- * 3. hello-ok.payload.snapshot 含 stateDir、configPath
- * 4. 调用 skills.status 获取 workspaceDir
+ * 3. connect 成功响应中的 snapshot 含 stateDir、configPath（workspaceDir 见上文）
  */
 export function fetchRuntimePathsFromGateway(params: {
   gatewayHttpUrl: string;
@@ -64,9 +65,6 @@ export function fetchRuntimePathsFromGateway(params: {
     );
 
     let connectReqId: string | null = null;
-    let skillsStatusReqId: string | null = null;
-    let pendingStateDir = '';
-    let pendingConfigPath: string | null = null;
     const ws = new WebSocket(wsUrl, { maxPayload: 25 * 1024 * 1024 });
 
     ws.on('error', (err) => {
@@ -139,34 +137,13 @@ export function fetchRuntimePathsFromGateway(params: {
             done({ ok: false, error: 'snapshot missing stateDir' });
             return;
           }
-          pendingStateDir = stateDir;
-          pendingConfigPath = configPath;
-          skillsStatusReqId = randomUUID();
-          ws.send(
-            JSON.stringify({
-              type: 'req',
-              id: skillsStatusReqId,
-              method: 'skills.status',
-              params: {},
-            }),
-          );
-          return;
-        }
-
-        if (msg.type === 'res' && msg.id === skillsStatusReqId) {
-          let workspaceDir: string | null = null;
-          if (msg.ok) {
-            const payload = msg.payload as { workspaceDir?: string };
-            if (typeof payload?.workspaceDir === 'string' && payload.workspaceDir.trim()) {
-              workspaceDir = payload.workspaceDir.trim();
-            }
-          }
           done({
             ok: true,
-            stateDir: pendingStateDir,
-            configPath: pendingConfigPath,
-            workspaceDir,
+            stateDir,
+            configPath,
+            workspaceDir: null,
           });
+          return;
         }
       } catch (e) {
         done({ ok: false, error: e instanceof Error ? e.message : String(e) });
