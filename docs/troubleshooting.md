@@ -25,6 +25,22 @@
 
 ---
 
+## PM2 下 Gateway 反复重启、日志里重复「已生成」与完整启动
+
+### 现象
+
+`npm run prod` / `bootstrap.sh` 后，`pm2 logs claw-gateway` 里每隔十几秒重复出现：插件注册 → `listening` → hooks → **`已生成：...openclaw.generated.json`** → 又一次完整启动。PID 不断变化。
+
+### 原因
+
+OpenClaw 在配置热重载需要「完整网关重启」时，默认会 **fork 新进程** 并让当前进程 **exit(0)**。由 PM2 管理的正是该 Node 进程；进程退出后 PM2 会 **再次执行** `start-openclaw.sh`，于是再次运行 `ensure-openclaw-runtime.sh` 并打印「已生成」。与内部重启/配置监听叠加后，看起来像**死循环**。
+
+### 处理
+
+仓库已在 `ecosystem.config.cjs` 中为 `claw-gateway` 设置 **`OPENCLAW_NO_RESPAWN=1`**，改为进程内重启，父进程不退出，与 PM2 兼容。若你使用旧版 ecosystem 或手动 `pm2 start`，请为该应用补上该环境变量后 **`pm2 delete claw-gateway` 再 `npm run prod`**（或 `pm2 start ecosystem.config.cjs --only claw-gateway --env production`）。
+
+---
+
 ## Gateway 无法启动
 
 ### 现象
