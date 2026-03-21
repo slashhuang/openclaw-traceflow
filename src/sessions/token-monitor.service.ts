@@ -62,6 +62,8 @@ export interface SessionTokenUsage {
   totalTokens: number;
   limit?: number;
   utilization: number; // 0-100%
+  /** false：索引 totalTokensFresh:false 等，utilization 未反映可信的上下文占用 */
+  contextUtilizationReliable?: boolean;
   threshold: 'normal' | 'warning' | 'serious' | 'critical' | 'limit';
   consumptionRate: number; // tokens per minute
   estimatedTimeToLimit?: number; // minutes
@@ -140,17 +142,22 @@ export class TokenMonitorService {
           tokenUsage = detail.tokenUsage;
         }
       }
+      const contextReliable = tokenUsage.contextUtilizationReliable !== false;
       const limit = tokenUsage.limit || 100000; // 默认 100k
-      const utilization = limit > 0 ? Math.round(((tokenUsage.total || 0) / limit) * 100) : 0;
+      const utilization =
+        contextReliable && limit > 0 ? Math.round(((tokenUsage.total || 0) / limit) * 100) : 0;
 
-      const consumptionRate = await this.calculateConsumptionRate(session.sessionId);
+      const consumptionRate = contextReliable
+        ? await this.calculateConsumptionRate(session.sessionId)
+        : 0;
 
       // 估算到达限制的时间
       const remainingTokens = limit - (tokenUsage.total || 0);
-      const estimatedTimeToLimit = consumptionRate > 0 ? Math.round(remainingTokens / consumptionRate) : undefined;
+      const estimatedTimeToLimit =
+        contextReliable && consumptionRate > 0 ? Math.round(remainingTokens / consumptionRate) : undefined;
 
       // 确定阈值等级
-      const threshold = this.getThresholdLevel(utilization);
+      const threshold = contextReliable ? this.getThresholdLevel(utilization) : 'normal';
 
       // 计算费用
       const model = session.model || extractModelFromSessionKey(sessionKey);
@@ -164,6 +171,7 @@ export class TokenMonitorService {
         totalTokens: tokenUsage.total || 0,
         limit,
         utilization,
+        contextUtilizationReliable: contextReliable,
         threshold,
         consumptionRate,
         estimatedTimeToLimit,

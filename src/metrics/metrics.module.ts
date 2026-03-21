@@ -37,7 +37,10 @@ export class MetricsModule implements OnModuleInit {
               outputTokens: session.tokenUsage.output || 0,
               totalTokens: session.tokenUsage.total || 0,
               tokenLimit: session.tokenUsage.limit,
-              utilization: session.tokenUsage.utilization,
+              utilization:
+                session.tokenUsage.contextUtilizationReliable === false
+                  ? undefined
+                  : session.tokenUsage.utilization,
             });
           }
         }

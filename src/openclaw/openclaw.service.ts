@@ -5,6 +5,7 @@ import {
   type OpenClawResolvedPaths,
 } from './openclaw-paths.resolver';
 import { buildStatusOverviewFromHealth } from './gateway-overview-health';
+import { mergeGatewayOverviewFromSessionsStore } from './gateway-overview-sessions-store';
 import { type StatusOverviewResult } from './gateway-rpc';
 import { GatewayConnectionService } from './gateway-connection.service';
 import {
@@ -95,6 +96,10 @@ export interface OpenClawSession {
     total: number;
     limit?: number;
     utilization?: number;
+    /**
+     * false：sessions.json 中 totalTokensFresh === false，或列表/合并后无法对「当前上下文窗口」给出可信的 total/limit 占比；此时勿展示利用率进度条为准确值。
+     */
+    contextUtilizationReliable?: boolean;
   };
   /**
    * 计费信息（来自 transcript 的 usage.cost）
@@ -144,7 +149,7 @@ export interface OpenClawSession {
     transcriptUsageObserved?: boolean;
     /** sessions.json 中是否存在 totalTokens/inputTokens/outputTokens（存在即为非缺失 token 字段） */
     storeTokenFieldsPresent?: boolean;
-    /** sessions.json 里 totalTokensFresh（若该字段存在） */
+    /** sessions.json 里 totalTokensFresh：显式 false 表示索引内 totalTokens 不宜作为当前上下文占用依据 */
     totalTokensFresh?: boolean;
     /** 会话日志相对状态根目录的路径（agents/&lt;agent&gt;/sessions/&lt;id&gt;.jsonl） */
     transcriptPath?: string;
@@ -648,7 +653,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     }
     const seq = await this.gatewayConnection.runSequence([{ method: 'health', methodParams: {} }]);
     if (seq.ok) {
-      return buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
+      const overview = buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
+      const dir = await this.stateDir();
+      return mergeGatewayOverviewFromSessionsStore(overview, dir || null);
     }
     this.logger.debug(`Status overview failed: ${seq.error}`);
     return null;
@@ -674,7 +681,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       return { ok: false, error: seq.error };
     }
 
-    const statusOverview = buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
+    let statusOverview = buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
+    const dir = await this.stateDir();
+    statusOverview = mergeGatewayOverviewFromSessionsStore(statusOverview, dir || null);
 
     const tailParams = {
       limit,
@@ -1437,16 +1446,38 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         // transcript 有数据时优先用 transcript（多轮会话更准确），store 仅补 limit
         const fromTranscript = (base.input ?? 0) + (base.output ?? 0) > 0 || (base.total ?? 0) > 0;
         if (!fromTranscript) {
-          if (storeEntry.totalTokens != null) base.total = storeEntry.totalTokens;
+          const storeTotalOk =
+            typeof storeEntry.totalTokens === 'number' && storeEntry.totalTokensFresh !== false;
+          if (storeTotalOk && storeEntry.totalTokens != null) {
+            base.total = storeEntry.totalTokens;
+          }
           if (storeEntry.inputTokens != null) base.input = storeEntry.inputTokens;
           if (storeEntry.outputTokens != null) base.output = storeEntry.outputTokens;
         }
         if (storeEntry.contextTokens != null) base.limit = storeEntry.contextTokens;
-        if (base.total != null && (base.limit ?? tokenUsage?.limit)) {
-          base.utilization = Math.round((base.total / (base.limit ?? tokenUsage?.limit ?? 1)) * 100);
-        }
       }
-      const mergedTokenUsage = base;
+
+      const utilDen = base.limit ?? tokenUsage?.limit;
+      const storeTotalOkForUtil =
+        !!storeEntry &&
+        typeof storeEntry.totalTokens === 'number' &&
+        storeEntry.totalTokensFresh !== false;
+      const contextUtilizationReliable = !!(
+        typeof utilDen === 'number' &&
+        utilDen > 0 &&
+        typeof base.total === 'number' &&
+        (transcriptHasNonZero || storeTotalOkForUtil)
+      );
+      if (contextUtilizationReliable && typeof base.total === 'number' && typeof utilDen === 'number') {
+        base.utilization = Math.round((base.total / utilDen) * 100);
+      } else {
+        delete base.utilization;
+      }
+
+      const mergedTokenUsage = {
+        ...base,
+        contextUtilizationReliable,
+      };
       const sessionKey = storeEntry?.storeKey ?? sessionFile.sessionId;
       const invokedSkills = inferInvokedSkillsFromToolCalls(toolCalls);
       const userId = firstUserData?.user || 'unknown';
@@ -1464,7 +1495,14 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         status: this.inferSessionStatus(firstUserData, stats.mtimeMs),
         createdAt: stats.birthtimeMs,
         lastActiveAt: stats.mtimeMs,
-        totalTokens: storeEntry?.totalTokens,
+        totalTokens:
+          storeEntry &&
+          typeof storeEntry.totalTokens === 'number' &&
+          storeEntry.totalTokensFresh !== false
+            ? storeEntry.totalTokens
+            : typeof mergedTokenUsage.total === 'number'
+              ? mergedTokenUsage.total
+              : undefined,
         contextTokens: storeEntry?.contextTokens,
         model: storeEntry?.model,
         tokenUsage: mergedTokenUsage,

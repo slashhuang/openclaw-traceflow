@@ -139,7 +139,7 @@ export default {
   'dashboard.colOut': 'Out',
   'dashboard.colOutDesc': '输出 token（模型生成）',
   'dashboard.colPct': '%',
-  'dashboard.colPctDesc': '上下文利用率（已用 / 上下文上限）',
+  'dashboard.colPctDesc': '上下文利用率（已用 / 上下文上限）；索引标记 totalTokensFresh:false 时 TraceFlow 不展示可信利用率',
   'dashboard.colSession': 'Session',
   'dashboard.colSessionDesc': '会话 key',
   'dashboard.colToken': 'Token',
@@ -151,7 +151,7 @@ export default {
   'dashboard.colLast': 'Last',
   'dashboard.colLastDesc': '最后活动时间',
   'dashboard.gatewayContext': 'Context',
-  'dashboard.gatewayContextDesc': '已用 token / 上下文上限，括号内为利用率',
+  'dashboard.gatewayContextDesc': 'Gateway 报告的已用 token / 上下文上限（与 TraceFlow 会话列表的「利用率」口径可能不同；后者在索引不可靠时会隐藏百分比）',
   'dashboard.gatewayCompactions': 'Compactions',
   'dashboard.gatewayCompactionsDesc': '上下文压缩次数（超出上限时自动压缩历史）',
   'dashboard.gatewayQueueDepth': 'Queue depth',
@@ -173,6 +173,21 @@ export default {
   'dashboard.fullLogs': '完整日志',
   'dashboard.gatewayStatus': 'Gateway Status',
   'dashboard.gatewayStatusDesc': 'OpenClaw Gateway 连接状态、版本、当前会话上下文等',
+  'dashboard.gatewayStatusSourceMerged':
+    '数据来源：模型、Token、上下文、压缩次数等 — 本地 agents/…/sessions/sessions.json（与 health 中的会话 key 对齐）。版本与队列深度 — Gateway health（WebSocket RPC）。',
+  'dashboard.gatewayStatusSourceHealthNoRow':
+    '数据来源：已解析 stateDir，但 sessions.json 中无对应会话行；模型/上下文等可能为占位。会话 key 与时间 — health；版本与队列 — health RPC。',
+  'dashboard.gatewayStatusSourceHealthNoStateDir':
+    '数据来源：未解析到本地 stateDir（常见于只连远程 Gateway）；模型/上下文为 health 占位。版本与队列 — health RPC。可配置 OPENCLAW_STATE_DIR 或使用本机 Gateway 以合并 sessions.json。',
+  'dashboard.gatewayStatusSourceTooltip':
+    'TraceFlow 通过 Gateway health 获取会话 key、时间与队列（无需 operator.read）。当能解析 OpenClaw 状态目录时，会用同一 key 读取 agents/…/sessions/sessions.json 补全模型与 Token 等字段。',
+  'dashboard.overviewFetchFailed':
+    '无法加载仪表盘概览（请检查 TraceFlow 后端是否在运行、网络与 /api 代理）',
+  'dashboard.overviewStaleTitle': '数据可能已过期',
+  'dashboard.overviewStaleDetail':
+    '本次刷新未成功，仍显示上次成功加载的数据。原因：{detail} 请稍后重试或点击右侧刷新。',
+  'dashboard.overviewFirstLoadFailedTitle': '仪表盘数据加载失败',
+  'dashboard.overviewRetry': '刷新',
   'sessions.title': '会话列表',
   'sessions.sortHint': '点击表头排序',
   'sessions.empty': '暂无会话',
@@ -200,6 +215,12 @@ export default {
   'sessions.column.archived': '归档',
   'sessions.column.tokens': 'Token',
   'sessions.column.util': '利用率',
+  'sessions.column.tokensUtilHint':
+    'Token 列为当前展示的用量数字；利用率为「相对上下文上限」的占比。若 OpenClaw 在 sessions.json 中将 totalTokensFresh 标为 false，表示索引里的上下文总量尚未与当前轮次对齐，此时不显示可信利用率（标 * 或 —）。',
+  'sessions.tokensTotalUnreliableHint':
+    '此数字来自 transcript 累加或部分字段，**不**代表 OpenClaw 已确认的「当前上下文窗口总量」（索引可能 totalTokensFresh:false）。',
+  'sessions.utilUnreliableHint':
+    '无法从当前数据可靠计算「已用 / 上下文上限」；请待 Gateway 写入可靠总量或查看会话日志中的 usage。',
   'sessions.column.actions': '操作',
   'session.detail': '会话详情',
   'session.messages': '消息',
@@ -288,7 +309,11 @@ export default {
   'session.tokenZeroPoint1Desc': 'TraceFlow 读取的是 OpenClaw <strong>状态目录</strong>里、<code>agents</code> 下的<strong>会话日志</strong>（每个会话一个 <code>.jsonl</code> 文件）。助手每条回复里会带 <code>usage</code>（含 input/output/totalTokens 等），本页按这些字段汇总。与 <code>usage.cost</code>（费用）无关。',
   'session.tokenZeroPoint2Title': '2）为什么是 0',
   'session.tokenZeroPoint2Desc': '当前这份会话日志里，已读到的 <code>usage</code> 用量均为 0，所以这里只能显示 0。',
-  'session.tokenZeroPoint2FreshHint': '另外，索引里标记 <code>totalTokensFresh: false</code>，表示 Gateway/运行时尚未把可靠总量写入索引，本页也没有别的数字可替代展示。',
+  'session.tokenZeroPoint2FreshHint':
+    '另外，若索引里为 <code>totalTokensFresh: false</code>，表示 OpenClaw 认为 sessions.json 中的 <code>totalTokens</code> **不是**当前轮的可靠上下文快照；详情页会提示「上下文占用未确认」，且不会把利用率当作准确值。',
+  'session.tokenContextUnreliableTitle': '上下文占用未确认',
+  'session.tokenContextUnreliableDesc':
+    'OpenClaw 在索引中将 <code>totalTokensFresh</code> 标为 <code>false</code>：此时不宜把「已用量 / 上限」当作准确的上下文窗口占用。下方 In/Out 条带仅表示输入与输出的**构成比例**，不表示占满上限的百分比。',
   'session.tokenZeroPoint3Title': '3）本机怎么核对（与服务读的是否一致）',
   'session.tokenZeroStateRootLabel': '状态根目录（本服务当前解析结果，一般对应环境变量 <code>OPENCLAW_STATE_DIR</code> 或设置里的状态路径）：',
   'session.tokenZeroStateRootFallback': '状态根目录由本服务的 OpenClaw 路径解析得到（环境变量 <code>OPENCLAW_STATE_DIR</code> 或 CLI/配置推断）；若下方无绝对路径，请到「设置」里确认 Gateway/状态目录与运行 OpenClaw 的机器一致。',
