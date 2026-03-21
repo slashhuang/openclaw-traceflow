@@ -13,20 +13,6 @@
 
 ---
 
-## Tech stack
-
-- Backend: NestJS + TypeScript
-- Frontend: React + Vite + Ant Design
-- Realtime/log streaming: Socket.IO
-
----
-
-## Overview
-
-TraceFlow is a **separate web service** that talks to your running **OpenClaw Gateway** (default `http://localhost:18789`). It does not replace the Gateway or OpenClaw’s default management console; it complements them with **operator-focused dashboards** you can deploy on another host or port (default **`http://0.0.0.0:3001`**).
-
----
-
 ## Why TraceFlow (vs OpenClaw default management console)
 
 | Capability | OpenClaw default management console | TraceFlow |
@@ -82,6 +68,22 @@ pnpm run deploy:pm2
 This runs **`pnpm install`**, builds backend + frontend, then starts or reloads the process **`openclaw-traceflow`** under PM2. Open **`http://localhost:3001`** (or your `HOST`/`PORT`).
 
 Ensure the OpenClaw Gateway is reachable at **`OPENCLAW_GATEWAY_URL`** (default `http://localhost:18789`). Set token/password in **Settings** in the UI if your Gateway requires auth.
+
+---
+
+## Tech stack
+
+- Backend: NestJS + TypeScript
+- Frontend: React + Vite + Ant Design
+- Realtime/log streaming: Socket.IO
+
+---
+
+## Overview
+
+TraceFlow is a **separate web service** that talks to your running **OpenClaw Gateway** (default `http://localhost:18789`). It does not replace the Gateway or OpenClaw’s default management console; it complements them with **operator-focused dashboards** you can deploy on another host or port (default **`http://0.0.0.0:3001`**).
+
+---
 
 ## Configuration (zero-config first)
 
