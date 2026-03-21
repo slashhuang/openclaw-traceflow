@@ -187,7 +187,7 @@ Token 页费用估算依赖模型单价。内置默认价表；可通过 `config
 | `/api/skills/*` | GET | Skills 统计、system prompt 分析/探测 |
 | `/api/pricing/*` | GET/POST/DELETE | 价格配置 |
 | `/api/metrics/*` | GET | 延迟、tools/skills、token 汇总等 |
-| `/api/actions/*` | POST | 重启 Gateway、清理日志等 |
+| `/api/actions/*` | POST | 本机重启 Gateway 等 |
 | `/api/setup/status` | GET | 配置状态（受保护） |
 | `/api/setup/test-connection` | POST | 测试连接（受保护） |
 | `/api/setup/configure` | POST | 保存配置（受保护） |

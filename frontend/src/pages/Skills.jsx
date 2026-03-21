@@ -351,7 +351,7 @@ export default function Skills() {
             children: (
               <>
                 <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 12 }}>
-                  {intl.formatMessage({ id: 'skills.skillToolHint' }) || 'Skill 调用由 read(skills/xxx/SKILL.md) 反推；同一会话内各工具的调用次数聚合。'}
+                  {intl.formatMessage({ id: 'skills.skillToolHint' })}
                 </Typography.Paragraph>
                 <Typography.Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 12 }}>
                   {intl.formatMessage({ id: 'skills.toolBreakdownHint' })}
@@ -394,6 +394,9 @@ export default function Skills() {
                       </Col>
                       <Col xs={24} lg={12}>
                         <Card title={intl.formatMessage({ id: 'skills.skillToolTableTitle' }) || 'Skill 工具明细'}>
+                          <Typography.Paragraph type="secondary" style={{ marginBottom: 12, fontSize: 12 }}>
+                            {intl.formatMessage({ id: 'skills.skillToolTableNote' })}
+                          </Typography.Paragraph>
                           <Table
                             size="small"
                             dataSource={skillToolUsage}
@@ -412,7 +415,7 @@ export default function Skills() {
                               },
                               {
                                 title: (
-                                  <AntdTooltip title={intl.formatMessage({ id: 'skills.toolBreakdownHint' })}>
+                                  <AntdTooltip title={intl.formatMessage({ id: 'skills.toolColumnTooltip' })}>
                                     <span>{intl.formatMessage({ id: 'skills.toolBreakdown' }) || '工具'} <Typography.Text type="secondary" style={{ fontSize: 11 }}>?</Typography.Text></span>
                                   </AntdTooltip>
                                 ),
@@ -448,60 +451,65 @@ export default function Skills() {
             key: 'analysis',
             label: intl.formatMessage({ id: 'skills.tabAnalysis' }),
             children: systemPrompt ? (
-              <Row gutter={[16, 16]}>
-                <Col xs={24} lg={12}>
-                  <Card title="Token split">
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie data={tokenDistributionData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label>
-                          {tokenDistributionData.map((_, i) => (
-                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </Card>
-                </Col>
-                <Col xs={24} lg={12}>
-                  <Card title="Savings">
-                    <Statistic title="Current" value={systemPrompt.totalTokens} />
-                    <Statistic title="After" value={systemPrompt.totalTokens - systemPrompt.savings} valueStyle={{ color: token.colorSuccess }} />
-                    <Typography.Paragraph>
-                      Save {systemPrompt.savings} ({systemPrompt.savingsPercent}%)
-                    </Typography.Paragraph>
-                    <ul style={{ paddingLeft: 20, marginBottom: 12 }}>
-                      {(systemPrompt.recommendations || []).map((rec, i) => (
-                        <li key={i}><Typography.Text>{rec}</Typography.Text></li>
-                      ))}
-                    </ul>
-                    {(systemPrompt.zombieSkillNames?.length > 0) && (
-                      <div style={{ marginTop: 12 }}>
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {intl.formatMessage({ id: 'skills.zombieSkillList' })}：
-                        </Typography.Text>
-                        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {(systemPrompt.zombieSkillNames || []).map((name) => (
-                            <Tag key={name} color="red">{name}</Tag>
-                          ))}
+              <>
+                <Typography.Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 12 }}>
+                  {intl.formatMessage({ id: 'skills.tabAnalysisHint' })}
+                </Typography.Paragraph>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} lg={12}>
+                    <Card title="Token split">
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie data={tokenDistributionData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label>
+                            {tokenDistributionData.map((_, i) => (
+                              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Col>
+                  <Col xs={24} lg={12}>
+                    <Card title="Savings">
+                      <Statistic title="Current" value={systemPrompt.totalTokens} />
+                      <Statistic title="After" value={systemPrompt.totalTokens - systemPrompt.savings} valueStyle={{ color: token.colorSuccess }} />
+                      <Typography.Paragraph>
+                        Save {systemPrompt.savings} ({systemPrompt.savingsPercent}%)
+                      </Typography.Paragraph>
+                      <ul style={{ paddingLeft: 20, marginBottom: 12 }}>
+                        {(systemPrompt.recommendations || []).map((rec, i) => (
+                          <li key={i}><Typography.Text>{rec}</Typography.Text></li>
+                        ))}
+                      </ul>
+                      {(systemPrompt.zombieSkillNames?.length > 0) && (
+                        <div style={{ marginTop: 12 }}>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {intl.formatMessage({ id: 'skills.zombieSkillList' })}：
+                          </Typography.Text>
+                          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {(systemPrompt.zombieSkillNames || []).map((name) => (
+                              <Tag key={name} color="red">{name}</Tag>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {(systemPrompt.duplicateSkillNames?.length > 0) && (
-                      <div style={{ marginTop: 12 }}>
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {intl.formatMessage({ id: 'skills.duplicateSkillList' })}：
-                        </Typography.Text>
-                        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {(systemPrompt.duplicateSkillNames || []).map((name) => (
-                            <Tag key={name} color="orange">{name}</Tag>
-                          ))}
+                      )}
+                      {(systemPrompt.duplicateSkillNames?.length > 0) && (
+                        <div style={{ marginTop: 12 }}>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {intl.formatMessage({ id: 'skills.duplicateSkillList' })}：
+                          </Typography.Text>
+                          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {(systemPrompt.duplicateSkillNames || []).map((name) => (
+                              <Tag key={name} color="orange">{name}</Tag>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </Card>
-                </Col>
-              </Row>
+                      )}
+                    </Card>
+                  </Col>
+                </Row>
+              </>
             ) : (
               <Typography.Text type="secondary">—</Typography.Text>
             ),

@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService } from '../openclaw/openclaw.service';
-import { ConfigService } from '../config/config.service';
-import * as fs from 'fs';
-import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
@@ -10,10 +7,7 @@ import { promisify } from 'util';
 export class ActionsService {
   private readonly logger = new Logger(ActionsService.name);
 
-  constructor(
-    private openclawService: OpenClawService,
-    private configService: ConfigService,
-  ) {}
+  constructor(private openclawService: OpenClawService) {}
 
   async restartGateway(): Promise<{ success: boolean; message: string }> {
     try {
@@ -53,28 +47,6 @@ export class ActionsService {
       }
 
       return { success: false, message: '更新配置失败' };
-    } catch (error: any) {
-      return { success: false, message: error.message };
-    }
-  }
-
-  async cleanupLogs(): Promise<{ success: boolean; message: string }> {
-    try {
-      const config = this.configService.getConfig();
-      const logPath = config.openclawLogPath;
-
-      if (!logPath || !fs.existsSync(logPath)) {
-        return { success: true, message: '日志文件未配置或不存在，无需清理' };
-      }
-
-      const stats = fs.statSync(logPath);
-      // 删除 7 天前的日志
-      if (stats.mtimeMs < Date.now() - 7 * 24 * 60 * 60 * 1000) {
-        fs.truncateSync(logPath, 0);
-        return { success: true, message: '已清理旧日志' };
-      }
-
-      return { success: true, message: '日志文件较新，无需清理' };
     } catch (error: any) {
       return { success: false, message: error.message };
     }
