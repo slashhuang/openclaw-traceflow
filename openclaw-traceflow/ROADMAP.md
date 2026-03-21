@@ -21,8 +21,10 @@
 ### 已有缓解（无需重复造轮子）
 
 - 会话列表：`FileSystemSessionStorage` 增量扫描 + 短 TTL 缓存；`listSessions` 主要为内存合并与排序。
+- 工具/Skill 聚合：`refreshToolStatsSnapshot()` 对每个会话计算 **fingerprint**（`lastActiveAt` + transcript 大小 + `status`）；与上次一致则**跳过** `getSessionDetail` 的重复 JSONL 解析，降低稳态 CPU/磁盘（会话数仍多时最坏情况仍可能触发 P0 路径）。
 - 会话详情：`getSessionDetail` 对大 JSONL 使用 **head/tail 窗口**，避免全量读超大 transcript（见 `SESSION_JSONL_*` 常量）。
 - Gateway：长驻 WebSocket，避免每次 RPC 重新握手。
+- 仪表盘：`GET /api/dashboard/overview` 单次聚合多类数据，减少前端轮询往返（单次请求内仍可能叠加 P0/P1 成本）。
 
 ---
 
