@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert } from 'antd';
 import { useIntl } from 'react-intl';
-import { setupApi, actionsApi } from '../api';
+import { setupApi, actionsApi, extractApiErrorMessage } from '../api';
 
 export default function Settings() {
   const intl = useIntl();
@@ -11,6 +11,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [showPaths, setShowPaths] = useState(false);
   const [sys, setSys] = useState(null);
+  const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -25,7 +26,7 @@ export default function Settings() {
           accessToken: '',
         });
       } catch (e) {
-        message.error(e?.message || e?.response?.data || 'Error');
+        message.error(extractApiErrorMessage(e, 'Error'));
       } finally {
         setLoading(false);
       }
@@ -35,6 +36,7 @@ export default function Settings() {
   const onTest = async () => {
     const v = form.getFieldsValue();
     setTesting(true);
+    setTestResult(null);
     const toastKey = 'settings-test-connection';
     message.loading({ content: '正在测试连接...', key: toastKey, duration: 0 });
     try {
@@ -43,10 +45,16 @@ export default function Settings() {
         openclawGatewayToken: v.openclawGatewayToken || undefined,
         openclawGatewayPassword: v.openclawGatewayPassword || undefined,
       });
-      if (r.connected) message.success({ content: r.message || '连接成功', key: toastKey });
-      else message.error({ content: r.error || r.message || '连接失败', key: toastKey });
+      const resultMessage = r.error || r.message || (r.connected ? '连接成功' : '连接失败');
+      message.destroy(toastKey);
+      if (r.connected) message.success({ content: resultMessage });
+      else message.error({ content: resultMessage });
+      setTestResult({ ok: !!r.connected, message: resultMessage });
     } catch (e) {
-      message.error({ content: e?.message || e?.response?.data || '连接失败', key: toastKey });
+      const errorMessage = extractApiErrorMessage(e, '连接失败');
+      message.destroy(toastKey);
+      message.error({ content: errorMessage });
+      setTestResult({ ok: false, message: errorMessage });
     } finally {
       setTesting(false);
     }
@@ -74,7 +82,7 @@ export default function Settings() {
         message.error('保存失败：请先完善必填项');
         return;
       }
-      message.error({ content: e?.message || e?.response?.data || '保存失败', key: toastKey });
+      message.error({ content: extractApiErrorMessage(e, '保存失败'), key: toastKey });
     } finally {
       setSaving(false);
     }
@@ -109,6 +117,15 @@ export default function Settings() {
                 <Input.Password />
               </Form.Item>
               <Button onClick={onTest} loading={testing}>{intl.formatMessage({ id: 'settings.testConn' })}</Button>
+              {testResult && (
+                <Alert
+                  style={{ marginTop: 12 }}
+                  showIcon
+                  type={testResult.ok ? 'success' : 'error'}
+                  message={testResult.ok ? '连接测试成功' : '连接测试失败'}
+                  description={testResult.message}
+                />
+              )}
               <div style={{ marginTop: 16 }}>
                 <Button type="link" onClick={() => setShowPaths(!showPaths)} style={{ padding: 0 }}>
                   {showPaths ? intl.formatMessage({ id: 'settings.collapse' }) : intl.formatMessage({ id: 'settings.expand' })}{' '}
@@ -196,7 +213,7 @@ export default function Settings() {
                   await actionsApi.restart();
                   message.success({ content: '重启成功', key: toastKey });
                 } catch (e) {
-                  message.error({ content: e?.message || '重启失败', key: toastKey });
+                  message.error({ content: extractApiErrorMessage(e, '重启失败'), key: toastKey });
                   throw e;
                 }
               },
