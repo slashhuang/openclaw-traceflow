@@ -5,7 +5,7 @@ import type { GatewayRpcResult, GatewayRpcSequenceResult } from './gateway-rpc';
 import type { GatewayWsPathsResult } from './gateway-ws-paths';
 
 /**
- * 与 Control UI 一致：对 Gateway 维持单条长驻 WebSocket，配置变更时重建客户端。
+ * 与 OpenClaw 默认 Control UI 一致：对 Gateway 维持单条长驻 WebSocket，配置变更时重建客户端。
  */
 @Injectable()
 export class GatewayConnectionService implements OnModuleDestroy {

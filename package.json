@@ -1,7 +1,7 @@
 {
   "name": "openclaw-traceflow",
   "version": "0.1.0",
-  "description": "OpenClaw TraceFlow — observability dashboard (sessions, skills, tokens, latency, logs). NestJS + React. Bilingual UI. See README.md.",
+  "description": "OpenClaw TraceFlow — observability dashboard (sessions, skills, tokens, latency, logs). NestJS + React. Bilingual UI. See README.md and README.zh-CN.md.",
   "author": "slashhuang",
   "license": "MIT",
   "private": false,
@@ -34,7 +34,7 @@
     "docker:run": "docker run -d -p 3001:3001 --name openclaw-traceflow clawfamily/openclaw-traceflow:latest",
     "docker:push": "docker push clawfamily/openclaw-traceflow:latest",
     "deploy:docker": "pnpm run build:all && pnpm run docker:build && docker run -d -p 3001:3001 --restart always --name openclaw-traceflow clawfamily/openclaw-traceflow:latest",
-    "deploy:pm2": "pnpm run build:all && if pm2 describe openclaw-traceflow >/dev/null 2>&1; then pm2 reload openclaw-traceflow --update-env; else pm2 start dist/main.js --name openclaw-traceflow --restart-delay=3000 --max-restarts=10; fi",
+    "deploy:pm2": "bash ./scripts/deploy-pm2.sh",
     "deploy:k8s": "kubectl apply -f k8s/",
     "release": "pnpm run build:all && pnpm pack",
     "clean": "rm -rf dist frontend/dist public/app",

@@ -1,5 +1,5 @@
 /**
- * 与 Control UI / openclaw GatewayClient 一致：单条长驻 WebSocket，在 connect 握手后复用 request，
+ * 与 OpenClaw 默认 Control UI / openclaw GatewayClient 一致：单条长驻 WebSocket，在 connect 握手后复用 request，
  * 避免每次 RPC 都建连、断连。
  */
 import { randomUUID } from 'crypto';

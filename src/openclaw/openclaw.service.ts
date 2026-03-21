@@ -547,7 +547,56 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
     const token = cfg.openclawGatewayToken?.trim();
     const password = cfg.openclawGatewayPassword?.trim();
-    const result = await this.gatewayConnection.fetchRuntimePaths();
+    let result:
+      | {
+          ok: true;
+          stateDir: string;
+          configPath: string | null;
+          workspaceDir: string | null;
+        }
+      | { ok: false; error: string };
+    try {
+      result = await this.gatewayConnection.fetchRuntimePaths();
+    } catch (error: unknown) {
+      const errorMessage = (() => {
+        if (error && typeof error === 'object') {
+          const anyError = error as {
+            message?: unknown;
+            code?: unknown;
+            errors?: unknown;
+          };
+          if (typeof anyError.message === 'string' && anyError.message.trim()) {
+            return anyError.message.trim();
+          }
+          if (Array.isArray(anyError.errors) && anyError.errors.length > 0) {
+            const nested = anyError.errors.find(
+              (item) =>
+                !!item &&
+                typeof item === 'object' &&
+                typeof (item as { message?: unknown }).message === 'string' &&
+                ((item as { message: string }).message || '').trim().length > 0,
+            ) as { message?: string } | undefined;
+            if (nested?.message?.trim()) {
+              return nested.message.trim();
+            }
+          }
+          if (typeof anyError.code === 'string' && anyError.code.trim()) {
+            return anyError.code.trim();
+          }
+        }
+        if (error instanceof Error && error.message.trim()) {
+          return error.message.trim();
+        }
+        if (typeof error === 'string' && error.trim()) {
+          return error.trim();
+        }
+        return 'unknown error';
+      })();
+      return {
+        connected: false,
+        error: `Gateway 连接失败：${errorMessage}`,
+      };
+    }
 
     if (result.ok) {
       return { connected: true };
@@ -596,7 +645,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 在长驻 Gateway WebSocket 上串行拉取 status + usage + logs.tail（与 Control UI 同思路，不断连重连）
+   * 在长驻 Gateway WebSocket 上串行拉取 status + usage + logs.tail（与 OpenClaw 默认 Control UI 同思路，不断连重连）
    */
   async getDashboardGatewayBundle(limit: number): Promise<
     | { ok: true; statusOverview: StatusOverviewResult; logsTail: { cursor?: number; lines: string[] } }
