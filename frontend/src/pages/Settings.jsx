@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert } from 'antd';
 import { useIntl } from 'react-intl';
 import { setupApi, actionsApi, extractApiErrorMessage } from '../api';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 export default function Settings() {
   const intl = useIntl();
@@ -102,11 +103,17 @@ export default function Settings() {
 
   return (
     <div>
-      <Typography.Title level={4}>{intl.formatMessage({ id: 'settings.title' })}</Typography.Title>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'settings.title' })}</Typography.Title>
+        <SectionScopeHint intl={intl} messageId="settings.pageScopeDesc" />
+      </div>
       <Form form={form} layout="vertical">
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
-            <Card title={intl.formatMessage({ id: 'settings.gateway' })}>
+            <Card
+              title={intl.formatMessage({ id: 'settings.gateway' })}
+              extra={<SectionScopeHint intl={intl} messageId="settings.gatewayCardScopeDesc" />}
+            >
               <Form.Item name="openclawGatewayUrl" label={intl.formatMessage({ id: 'setup.gatewayUrl' })}>
                 <Input placeholder="http://localhost:18789" />
               </Form.Item>
@@ -145,7 +152,10 @@ export default function Settings() {
             </Card>
           </Col>
           <Col xs={24} lg={12}>
-            <Card title={intl.formatMessage({ id: 'settings.access' })}>
+            <Card
+              title={intl.formatMessage({ id: 'settings.access' })}
+              extra={<SectionScopeHint intl={intl} messageId="settings.accessCardScopeDesc" />}
+            >
               <Alert
                 type="info"
                 showIcon
@@ -196,7 +206,11 @@ export default function Settings() {
         </Row>
       </Form>
 
-      <Card title={intl.formatMessage({ id: 'settings.quick' })} style={{ marginTop: 16 }}>
+      <Card
+        title={intl.formatMessage({ id: 'settings.quick' })}
+        extra={<SectionScopeHint intl={intl} messageId="settings.quickCardScopeDesc" />}
+        style={{ marginTop: 16 }}
+      >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
           {intl.formatMessage({ id: 'settings.restartHint' })}
         </Typography.Paragraph>
@@ -224,7 +238,11 @@ export default function Settings() {
         </Button>
       </Card>
 
-      <Card title={intl.formatMessage({ id: 'settings.contact' })} style={{ marginTop: 16 }}>
+      <Card
+        title={intl.formatMessage({ id: 'settings.contact' })}
+        extra={<SectionScopeHint intl={intl} messageId="settings.contactCardScopeDesc" />}
+        style={{ marginTop: 16 }}
+      >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
           Author:{' '}
           <a href="https://github.com/slashhuang" target="_blank" rel="noreferrer" style={{ marginLeft: 6, fontWeight: 600 }}>

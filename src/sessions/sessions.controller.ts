@@ -31,9 +31,18 @@ export class SessionsController {
     return this.sessionsService.getConfiguredModels();
   }
 
+  /** 会话归档轮次（*.jsonl.reset.*），须在 @Get(':id') 之前注册 */
+  @Get(':id/archive-epochs')
+  async listArchiveEpochs(@Param('id') id: string) {
+    return this.sessionsService.listArchiveEpochs(id);
+  }
+
   @Get(':id')
-  async getSession(@Param('id') id: string): Promise<SessionDetail | null> {
-    return this.sessionsService.getSessionById(id);
+  async getSession(
+    @Param('id') id: string,
+    @Query('resetTimestamp') resetTimestamp?: string,
+  ): Promise<SessionDetail | null> {
+    return this.sessionsService.getSessionById(id, resetTimestamp);
   }
 
   @Get(':id/status')

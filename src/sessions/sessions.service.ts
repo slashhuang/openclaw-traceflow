@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
 import { inferSessionTypeLabel, resolveDisplayUser } from '../common/session-user-resolver';
+import { MetricsService } from '../metrics/metrics.service';
 
 function mapTokenUsageForApi(u: OpenClawSession['tokenUsage'] | undefined): Session['tokenUsage'] | undefined {
   if (!u) return undefined;
@@ -88,13 +89,24 @@ export interface SessionDetail extends Session {
   transcriptJsonlLineCount?: number;
   transcriptHeadJsonlLineCount?: number;
   transcriptTailJsonlLineCount?: number;
+  /** 正在查看的归档 transcript（*.jsonl.reset.* 时间戳段） */
+  archiveResetTimestamp?: string;
+  archiveEpochs?: Array<{
+    resetTimestamp: string;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+  }>;
 }
 
 @Injectable()
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
 
-  constructor(private openclawService: OpenClawService) {}
+  constructor(
+    private openclawService: OpenClawService,
+    private metricsService: MetricsService,
+  ) {}
 
   async listSessions(): Promise<Session[]> {
     try {
@@ -132,7 +144,15 @@ export class SessionsService {
     filter: string = 'all',
   ): Promise<{ items: Session[]; total: number; page: number; pageSize: number }> {
     const all = await this.listSessions();
-    const filtered = filter === 'all' ? all : all.filter((s) => s.status === filter);
+    let filtered: Session[];
+    if (filter === 'all') {
+      filtered = all;
+    } else if (filter === 'archived') {
+      const archiveMap = await this.metricsService.getArchivedCountBySessionKey();
+      filtered = all.filter((s) => (archiveMap[s.sessionKey] ?? 0) > 0);
+    } else {
+      filtered = all.filter((s) => s.status === filter);
+    }
     const start = (Math.max(page, 1) - 1) * pageSize;
     return {
       items: filtered.slice(start, start + pageSize),
@@ -142,9 +162,12 @@ export class SessionsService {
     };
   }
 
-  async getSessionById(id: string): Promise<SessionDetail | null> {
+  async getSessionById(id: string, resetTimestamp?: string): Promise<SessionDetail | null> {
     try {
-      const detail = await this.openclawService.getSessionDetail(id);
+      const detail = await this.openclawService.getSessionDetail(
+        id,
+        resetTimestamp?.trim() ? { resetTimestamp: resetTimestamp.trim() } : undefined,
+      );
 
       if (!detail) {
         return null;
@@ -155,7 +178,7 @@ export class SessionsService {
         detail.transcriptFileSizeBytes ??
         detail.tokenUsageMeta?.sessionLogFileSizeBytes ??
         fromCache;
-      if (transcriptBytes === undefined) {
+      if (transcriptBytes === undefined && !detail.archiveResetTimestamp) {
         transcriptBytes = await this.openclawService.getTranscriptFileStatBytes(id);
       }
       const tokenUsageMetaMerged =
@@ -228,6 +251,8 @@ export class SessionsService {
         ...(detail.transcriptTailJsonlLineCount != null
           ? { transcriptTailJsonlLineCount: detail.transcriptTailJsonlLineCount }
           : {}),
+        ...(detail.archiveEpochs?.length ? { archiveEpochs: detail.archiveEpochs } : {}),
+        ...(detail.archiveResetTimestamp ? { archiveResetTimestamp: detail.archiveResetTimestamp } : {}),
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);
@@ -249,5 +274,12 @@ export class SessionsService {
    */
   async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
     return this.openclawService.getConfiguredModels();
+  }
+
+  /** 某会话的归档轮次列表（供列表 Popover 与详情切换） */
+  async listArchiveEpochs(id: string): Promise<
+    Array<{ resetTimestamp: string; totalTokens: number; inputTokens: number; outputTokens: number }>
+  > {
+    return this.openclawService.listSessionArchiveEpochs(id);
   }
 }

@@ -20,12 +20,16 @@ import {
 import { HistoryOutlined } from '@ant-design/icons';
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { dashboardApi, extractApiErrorMessage } from '../api';
+import { sessionStatusLabel } from '../i18n/sessionStatusLabel';
 import {
   inferSessionTypeLabel,
   inferSessionChatKind,
   formatSessionParticipantDisplay,
 } from '../utils/session-user';
 import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
+import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
+import TokenMetricHint from '../components/TokenMetricHint';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 /** 仪表盘整页轮询（含系统健康）；仅在前台标签页触发 */
 const DASHBOARD_POLL_INTERVAL_MS = 10000;
@@ -96,6 +100,19 @@ function utilizationColor(pct) {
   if (pct >= 90) return 'exception';
   if (pct >= 70) return 'warning';
   return 'normal';
+}
+
+function formatBuildTimeDisplay(iso, intl) {
+  if (!iso || typeof iso !== 'string') return '';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return intl.locale === 'zh-CN'
+      ? d.toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'medium' })
+      : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
 }
 
 /** 与会话列表页列展示一致（无排序交互） */
@@ -171,10 +188,16 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
       },
     },
     {
-      title: intl.formatMessage({ id: 'sessions.column.status' }),
+      title: (
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.statusTooltip' })}>
+          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.status' })}</span>
+        </Tooltip>
+      ),
       key: 'status',
       width: 120,
-      render: (_, r) => <Tag color={statusTagColor(r.status)}>{r.status}</Tag>,
+      render: (_, r) => (
+        <Tag color={statusTagColor(r.status)}>{sessionStatusLabel(intl, r.status)}</Tag>
+      ),
     },
     {
       title: (
@@ -235,17 +258,25 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
       render: (_, r) => formatBytes(r.transcriptFileSizeBytes),
     },
     {
-      title: intl.formatMessage({ id: 'sessions.column.archived' }) || '归档',
+      title: (
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.archivedTooltip' })}>
+          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.archived' })}</span>
+        </Tooltip>
+      ),
       key: 'archived',
       width: 90,
       render: (_, r) => {
         const count = am[r.sessionKey] ?? 0;
-        if (count === 0) return '—';
+        const sid = r?.sessionId ?? r?.sessionKey ?? '';
+        if (count === 0 || !sid) return '—';
         return (
-          <Tooltip title="查看 token 消耗">
-            <Link to="/tokens" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Tooltip title={intl.formatMessage({ id: 'sessions.archivedCellTooltip' })}>
+            <Link
+              to={`/sessions/${encodeURIComponent(sid)}/archives`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            >
               <HistoryOutlined />
-              <span>{count} 次</span>
+              <span>{intl.formatMessage({ id: 'sessions.archivedCountFmt' }, { count })}</span>
             </Link>
           </Tooltip>
         );
@@ -272,11 +303,14 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
     },
     {
       title: (
-        <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
-          <span style={{ cursor: 'help' }}>
-            {`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
-          </span>
-        </Tooltip>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', width: '100%' }}>
+          <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
+            <span style={{ cursor: 'help' }}>
+              {`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
+            </span>
+          </Tooltip>
+          <TokenMetricHint intl={intl} />
+        </div>
       ),
       key: 'tokenUtil',
       width: 160,
@@ -297,21 +331,24 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
               width: '100%',
             }}
           >
-            <Tooltip
-              title={
-                unreliable
-                  ? intl.formatMessage({ id: 'sessions.tokensTotalUnreliableHint' })
-                  : undefined
-              }
-            >
-              <Typography.Text
-                style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
-                type={unreliable ? 'secondary' : undefined}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+              <Tooltip
+                title={
+                  unreliable
+                    ? intl.formatMessage({ id: 'sessions.tokensTotalUnreliableHint' })
+                    : undefined
+                }
               >
-                {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
-                {unreliable ? ' *' : ''}
-              </Typography.Text>
-            </Tooltip>
+                <Typography.Text
+                  style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
+                  type={unreliable ? 'secondary' : undefined}
+                >
+                  {r.totalTokens != null ? formatTokensShort(r.totalTokens) : '—'}
+                  {unreliable ? ' *' : ''}
+                </Typography.Text>
+              </Tooltip>
+              <TokenMetricHint intl={intl} value={r.totalTokens} />
+            </span>
             <Tooltip
               title={
                 unreliable
@@ -361,11 +398,8 @@ function GatewayStatusCard({ overview, intl }) {
   if (overview == null) {
     return (
       <Card
-        title={
-          <Tooltip title={intl.formatMessage({ id: 'dashboard.gatewayStatusDesc' })}>
-            <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.gatewayStatus' })}</span>
-          </Tooltip>
-        }
+        title={intl.formatMessage({ id: 'dashboard.gatewayStatus' })}
+        extra={<SectionScopeHint intl={intl} messageId="dashboard.gatewayStatusDesc" />}
         size="small"
         bodyStyle={{ padding: '12px 16px' }}
       >
@@ -377,11 +411,8 @@ function GatewayStatusCard({ overview, intl }) {
     const msg = typeof overview.error === 'string' ? overview.error : 'Error';
     return (
       <Card
-        title={
-          <Tooltip title={intl.formatMessage({ id: 'dashboard.gatewayStatusDesc' })}>
-            <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.gatewayStatus' })}</span>
-          </Tooltip>
-        }
+        title={intl.formatMessage({ id: 'dashboard.gatewayStatus' })}
+        extra={<SectionScopeHint intl={intl} messageId="dashboard.gatewayStatusDesc" />}
         size="small"
         bodyStyle={{ padding: '12px 16px' }}
       >
@@ -444,11 +475,8 @@ function GatewayStatusCard({ overview, intl }) {
 
   return (
     <Card
-      title={
-        <Tooltip title={intl.formatMessage({ id: 'dashboard.gatewayStatusDesc' })}>
-          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.gatewayStatus' })}</span>
-        </Tooltip>
-      }
+      title={intl.formatMessage({ id: 'dashboard.gatewayStatus' })}
+      extra={<SectionScopeHint intl={intl} messageId="dashboard.gatewayStatusDesc" />}
       size="small"
       bodyStyle={{ padding: '12px 16px' }}
     >
@@ -681,9 +709,45 @@ export default function Dashboard() {
     count: t.count,
   }));
 
+  const buildTimeText = formatBuildTimeDisplay(APP_BUILD_TIME_ISO, intl);
+  const gitShort = typeof APP_GIT_SHA === 'string' && APP_GIT_SHA.length >= 7 ? APP_GIT_SHA.slice(0, 7) : '';
+
   return (
     <div style={{ paddingBottom: 24 }}>
-      <Typography.Title level={4} style={{ marginBottom: 20 }}>{intl.formatMessage({ id: 'dashboard.title' })}</Typography.Title>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 20,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            {intl.formatMessage({ id: 'dashboard.title' })}
+          </Typography.Title>
+          <SectionScopeHint intl={intl} messageId="dashboard.titleDesc" />
+        </div>
+        {(buildTimeText || gitShort) && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }} title={APP_BUILD_TIME_ISO || undefined}>
+            {buildTimeText ? (
+              <>
+                {intl.formatMessage({ id: 'dashboard.buildLabel' })}
+                {buildTimeText}
+              </>
+            ) : null}
+            {gitShort ? (
+              <>
+                {buildTimeText ? ' · ' : ''}
+                {intl.formatMessage({ id: 'dashboard.buildGit' })}
+                {gitShort}
+              </>
+            ) : null}
+          </Typography.Text>
+        )}
+      </div>
       {overviewFetchHint && (
         <Alert
           style={{ marginBottom: 16 }}
@@ -709,38 +773,73 @@ export default function Dashboard() {
       <Row gutter={[8, 8]}>
         <Col xs={12} sm={8} md={6} lg={4} xl={4}>
           <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
-            <Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.systemStatusDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.systemStatus' })}</span></Tooltip>} value={health?.status || '—'} valueStyle={{ fontSize: 14 }} />
+            <Statistic
+              title={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {intl.formatMessage({ id: 'dashboard.systemStatus' })}
+                  <SectionScopeHint intl={intl} messageId="dashboard.systemStatusDesc" />
+                </span>
+              }
+              value={health?.status || '—'}
+              valueStyle={{ fontSize: 14 }}
+            />
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6} lg={4} xl={4}>
           <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
-            <Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.totalSessionsDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.totalSessions' })}</span></Tooltip>} value={totalSessions} valueStyle={{ fontSize: 14 }} />
+            <Statistic
+              title={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {intl.formatMessage({ id: 'dashboard.totalSessions' })}
+                  <SectionScopeHint intl={intl} messageId="dashboard.totalSessionsDesc" />
+                </span>
+              }
+              value={totalSessions}
+              valueStyle={{ fontSize: 14 }}
+            />
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6} lg={4} xl={4}>
-          <Tooltip title={intl.formatMessage({ id: 'dashboard.activeDesc' })} overlayInnerStyle={{ padding: '12px 16px' }}>
-            <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
-              <Statistic title={intl.formatMessage({ id: 'dashboard.active' })} value={activeSessions} valueStyle={{ color: token.colorSuccess, fontSize: 14 }} />
-            </Card>
-          </Tooltip>
+          <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
+            <Statistic
+              title={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {intl.formatMessage({ id: 'dashboard.active' })}
+                  <SectionScopeHint intl={intl} messageId="dashboard.activeDesc" />
+                </span>
+              }
+              value={activeSessions}
+              valueStyle={{ color: token.colorSuccess, fontSize: 14 }}
+            />
+          </Card>
         </Col>
         <Col xs={12} sm={8} md={6} lg={4} xl={4}>
-          <Tooltip title={intl.formatMessage({ id: 'dashboard.idleDesc' })} overlayInnerStyle={{ padding: '12px 16px' }}>
-            <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
-              <Statistic title={intl.formatMessage({ id: 'dashboard.idle' })} value={idleSessions} valueStyle={{ color: token.colorWarning, fontSize: 14 }} />
-            </Card>
-          </Tooltip>
+          <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
+            <Statistic
+              title={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {intl.formatMessage({ id: 'dashboard.idle' })}
+                  <SectionScopeHint intl={intl} messageId="dashboard.idleDesc" />
+                </span>
+              }
+              value={idleSessions}
+              valueStyle={{ color: token.colorWarning, fontSize: 14 }}
+            />
+          </Card>
         </Col>
         <Col xs={12} sm={8} md={6} lg={4} xl={4}>
-          <Tooltip title={intl.formatMessage({ id: 'dashboard.archivedDesc' })} overlayInnerStyle={{ padding: '12px 16px' }}>
-            <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
-              <Statistic
-                title={intl.formatMessage({ id: 'dashboard.archived' })}
-                value={metrics.archiveCount ?? 0}
-                valueStyle={{ color: token.colorTextSecondary, fontSize: 14 }}
-              />
-            </Card>
-          </Tooltip>
+          <Card size="small" bodyStyle={{ padding: '10px 12px' }}>
+            <Statistic
+              title={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {intl.formatMessage({ id: 'dashboard.archived' })}
+                  <SectionScopeHint intl={intl} messageId="dashboard.archivedDesc" />
+                </span>
+              }
+              value={metrics.archiveCount ?? 0}
+              valueStyle={{ color: token.colorTextSecondary, fontSize: 14 }}
+            />
+          </Card>
         </Col>
       </Row>
 
@@ -750,15 +849,14 @@ export default function Dashboard() {
         </Col>
         <Col xs={24} lg={8}>
           <Card
-            title={
-              <Tooltip title={intl.formatMessage({ id: 'dashboard.healthDesc' })}>
-                <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.health' })}</span>
-              </Tooltip>
-            }
+            title={intl.formatMessage({ id: 'dashboard.health' })}
             extra={
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {intl.formatMessage({ id: 'dashboard.healthRefreshEvery' }, { seconds: DASHBOARD_POLL_INTERVAL_MS / 1000 })}
-              </Typography.Text>
+              <Space size="small">
+                <SectionScopeHint intl={intl} messageId="dashboard.healthDesc" />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {intl.formatMessage({ id: 'dashboard.healthRefreshEvery' }, { seconds: DASHBOARD_POLL_INTERVAL_MS / 1000 })}
+                </Typography.Text>
+              </Space>
             }
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
@@ -784,20 +882,60 @@ export default function Dashboard() {
 
       {metrics.latency?.count > 0 && (
         <Card
-          title={
-            <Tooltip title={intl.formatMessage({ id: 'dashboard.latencyDesc' })}>
-              <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.latency' })}</span>
-            </Tooltip>
-          }
+          title={intl.formatMessage({ id: 'dashboard.latency' })}
+          extra={<SectionScopeHint intl={intl} messageId="dashboard.latencyDesc" />}
           size="small"
           style={{ marginTop: 16 }}
           bodyStyle={{ padding: '12px 16px' }}
         >
           <Row gutter={12}>
-            <Col span={6}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.latencyP50Desc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.latencyP50' })}</span></Tooltip>} suffix="ms" value={metrics.latency.p50} /></Col>
-            <Col span={6}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.latencyP95Desc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.latencyP95' })}</span></Tooltip>} suffix="ms" value={metrics.latency.p95} /></Col>
-            <Col span={6}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.latencyP99Desc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.latencyP99' })}</span></Tooltip>} suffix="ms" value={metrics.latency.p99} /></Col>
-            <Col span={6}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.latencyCountDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.latencyCount' })}</span></Tooltip>} value={metrics.latency.count} /></Col>
+            <Col span={6}>
+              <Statistic
+                title={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {intl.formatMessage({ id: 'dashboard.latencyP50' })}
+                    <SectionScopeHint intl={intl} messageId="dashboard.latencyP50Desc" />
+                  </span>
+                }
+                suffix="ms"
+                value={metrics.latency.p50}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {intl.formatMessage({ id: 'dashboard.latencyP95' })}
+                    <SectionScopeHint intl={intl} messageId="dashboard.latencyP95Desc" />
+                  </span>
+                }
+                suffix="ms"
+                value={metrics.latency.p95}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {intl.formatMessage({ id: 'dashboard.latencyP99' })}
+                    <SectionScopeHint intl={intl} messageId="dashboard.latencyP99Desc" />
+                  </span>
+                }
+                suffix="ms"
+                value={metrics.latency.p99}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {intl.formatMessage({ id: 'dashboard.latencyCount' })}
+                    <SectionScopeHint intl={intl} messageId="dashboard.latencyCountDesc" />
+                  </span>
+                }
+                value={metrics.latency.count}
+              />
+            </Col>
           </Row>
         </Card>
       )}
@@ -809,35 +947,113 @@ export default function Dashboard() {
             <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
               <Col xs={24} md={12}>
                 <Card
-                  title={
-                    <Tooltip title={intl.formatMessage({ id: 'dashboard.tokenActiveDesc' })}>
-                      <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenSummaryActive' })}</span>
-                    </Tooltip>
-                  }
+                  title={intl.formatMessage({ id: 'dashboard.tokenSummaryActive' })}
+                  extra={<SectionScopeHint intl={intl} messageId="dashboard.tokenActiveDesc" />}
                   size="small"
                   bodyStyle={{ padding: '12px 16px' }}
                 >
                   <Row gutter={[8, 0]}>
-                    <Col span={8}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.tokenInputDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenInput' })}</span></Tooltip>} value={ts.activeInput ?? 0} valueStyle={{ fontSize: 14 }} /></Col>
-                    <Col span={8}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.tokenOutputDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenOutput' })}</span></Tooltip>} value={ts.activeOutput ?? 0} valueStyle={{ fontSize: 14 }} /></Col>
-                    <Col span={8}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.tokenTotalDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenTotal' })}</span></Tooltip>} value={ts.activeTokens ?? 0} valueStyle={{ fontSize: 14 }} /></Col>
+                    <Col span={8}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'dashboard.tokenInput' })}
+                            <SectionScopeHint intl={intl} messageId="dashboard.tokenInputDesc" />
+                          </span>
+                        }
+                        value={ts.activeInput ?? 0}
+                        valueStyle={{ fontSize: 14 }}
+                      />
+                    </Col>
+                    <Col span={8}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'dashboard.tokenOutput' })}
+                            <SectionScopeHint intl={intl} messageId="dashboard.tokenOutputDesc" />
+                          </span>
+                        }
+                        value={ts.activeOutput ?? 0}
+                        valueStyle={{ fontSize: 14 }}
+                      />
+                    </Col>
+                    <Col span={8}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'dashboard.tokenTotal' })}
+                            <SectionScopeHint intl={intl} messageId="dashboard.tokenTotalDesc" />
+                          </span>
+                        }
+                        value={ts.activeTokens ?? 0}
+                        valueStyle={{ fontSize: 14 }}
+                      />
+                    </Col>
                   </Row>
                 </Card>
               </Col>
               <Col xs={24} md={12}>
                 <Card
-                  title={
-                    <Tooltip title={intl.formatMessage({ id: 'dashboard.tokenArchivedDesc' })}>
-                      <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenSummaryArchived' })}</span>
-                    </Tooltip>
-                  }
+                  title={intl.formatMessage({ id: 'dashboard.tokenSummaryArchived' })}
+                  extra={<SectionScopeHint intl={intl} messageId="dashboard.tokenArchivedDesc" />}
                   size="small"
                   bodyStyle={{ padding: '12px 16px' }}
                 >
                   <Row gutter={[8, 0]}>
-                    <Col span={8}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.tokenInputDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenInput' })}</span></Tooltip>} value={ts.archivedInput ?? 0} valueStyle={{ fontSize: 14 }} /></Col>
-                    <Col span={8}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.tokenOutputDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenOutput' })}</span></Tooltip>} value={ts.archivedOutput ?? 0} valueStyle={{ fontSize: 14 }} /></Col>
-                    <Col span={8}><Statistic title={<Tooltip title={intl.formatMessage({ id: 'dashboard.tokenTotalDesc' })}><span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.tokenTotal' })}</span></Tooltip>} value={ts.archivedTokens ?? 0} valueStyle={{ fontSize: 14 }} /></Col>
+                    <Col span={8}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'dashboard.tokenInput' })}
+                            <SectionScopeHint intl={intl} messageId="dashboard.tokenInputDesc" />
+                          </span>
+                        }
+                        value={ts.archivedInput ?? 0}
+                        valueStyle={{ fontSize: 14 }}
+                        formatter={(val) => (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {val}
+                            <TokenMetricHint intl={intl} value={ts.archivedInput ?? 0} />
+                          </span>
+                        )}
+                      />
+                    </Col>
+                    <Col span={8}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'dashboard.tokenOutput' })}
+                            <SectionScopeHint intl={intl} messageId="dashboard.tokenOutputDesc" />
+                          </span>
+                        }
+                        value={ts.archivedOutput ?? 0}
+                        valueStyle={{ fontSize: 14 }}
+                        formatter={(val) => (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {val}
+                            <TokenMetricHint intl={intl} value={ts.archivedOutput ?? 0} />
+                          </span>
+                        )}
+                      />
+                    </Col>
+                    <Col span={8}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'dashboard.tokenTotal' })}
+                            <SectionScopeHint intl={intl} messageId="dashboard.tokenTotalDesc" />
+                          </span>
+                        }
+                        value={ts.archivedTokens ?? 0}
+                        valueStyle={{ fontSize: 14 }}
+                        formatter={(val) => (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {val}
+                            <TokenMetricHint intl={intl} value={ts.archivedTokens ?? 0} />
+                          </span>
+                        )}
+                      />
+                    </Col>
                   </Row>
                 </Card>
               </Col>
@@ -847,12 +1063,45 @@ export default function Dashboard() {
       })()}
 
       <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
+        <Col xs={24}>
+          <Card
+            title={intl.formatMessage({ id: 'dashboard.recentSessions' })}
+            size="small"
+            extra={
+              <Space size="small">
+                <SectionScopeHint intl={intl} messageId="dashboard.recentSessionsDesc" />
+                <Link to="/sessions">{intl.formatMessage({ id: 'dashboard.viewAll' })}</Link>
+              </Space>
+            }
+            bodyStyle={{ padding: '12px 16px' }}
+          >
+            <Table
+              size="small"
+              tableLayout="fixed"
+              scroll={{ x: 'max-content' }}
+              pagination={false}
+              dataSource={recentSessions10}
+              rowKey="sessionId"
+              columns={recentSessionColumns}
+              locale={{ emptyText: intl.formatMessage({ id: 'sessions.empty' }) }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
         <Col xs={24} md={12}>
           <Card
             title={
-              <Tooltip title={intl.formatMessage({ id: 'dashboard.skillsTopDesc' })}>
-                <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.skillsTop' })}</span>
-              </Tooltip>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, width: '100%' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div>{intl.formatMessage({ id: 'dashboard.skillsTop' })}</div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', lineHeight: 1.4, marginTop: 2 }}>
+                    {intl.formatMessage({ id: 'dashboard.skillsToolsScopeHint' })}
+                  </Typography.Text>
+                </div>
+                <SectionScopeHint intl={intl} messageId="dashboard.skillsTopDesc" />
+              </div>
             }
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
@@ -874,9 +1123,15 @@ export default function Dashboard() {
         <Col xs={24} md={12}>
           <Card
             title={
-              <Tooltip title={intl.formatMessage({ id: 'dashboard.toolsTopDesc' })}>
-                <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.toolsTop' })}</span>
-              </Tooltip>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, width: '100%' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div>{intl.formatMessage({ id: 'dashboard.toolsTop' })}</div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', lineHeight: 1.4, marginTop: 2 }}>
+                    {intl.formatMessage({ id: 'dashboard.skillsToolsScopeHint' })}
+                  </Typography.Text>
+                </div>
+                <SectionScopeHint intl={intl} messageId="dashboard.toolsTopDesc" />
+              </div>
             }
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
@@ -897,41 +1152,16 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
-        <Col xs={24}>
-          <Card
-            title={
-              <Tooltip title={intl.formatMessage({ id: 'dashboard.recentSessionsDesc' })}>
-                <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.recentSessions' })}</span>
-              </Tooltip>
-            }
-            size="small"
-            extra={<Link to="/sessions">{intl.formatMessage({ id: 'dashboard.viewAll' })}</Link>}
-            bodyStyle={{ padding: '12px 16px' }}
-          >
-            <Table
-              size="small"
-              tableLayout="fixed"
-              scroll={{ x: 'max-content' }}
-              pagination={false}
-              dataSource={recentSessions10}
-              rowKey="sessionId"
-              columns={recentSessionColumns}
-              locale={{ emptyText: intl.formatMessage({ id: 'sessions.empty' }) }}
-            />
-          </Card>
-        </Col>
-      </Row>
-
       <Card
-        title={
-          <Tooltip title={intl.formatMessage({ id: 'dashboard.recentLogsDesc' })}>
-            <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'dashboard.recentLogs' })}</span>
-          </Tooltip>
-        }
+        title={intl.formatMessage({ id: 'dashboard.recentLogs' })}
         size="small"
         style={{ marginTop: 16 }}
-        extra={<Link to="/logs">{intl.formatMessage({ id: 'dashboard.fullLogs' })}</Link>}
+        extra={
+          <Space size="small">
+            <SectionScopeHint intl={intl} messageId="dashboard.recentLogsDesc" />
+            <Link to="/logs">{intl.formatMessage({ id: 'dashboard.fullLogs' })}</Link>
+          </Space>
+        }
         bodyStyle={{ padding: '12px 16px' }}
       >
         <div style={{ maxHeight: 280, overflow: 'auto', fontFamily: 'monospace', fontSize: 12 }}>

@@ -19,6 +19,7 @@ import {
 import { EditOutlined, DeleteOutlined, ReloadOutlined, PlusOutlined, FireOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import { pricingApi, sessionsApi } from '../api';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 const { Title, Text } = Typography;
 
@@ -427,9 +428,12 @@ export default function Pricing() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <Title level={4} style={{ margin: 0 }}>
-            {intl.formatMessage({ id: 'pricing.title' })}
-          </Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Title level={4} style={{ margin: 0 }}>
+              {intl.formatMessage({ id: 'pricing.title' })}
+            </Title>
+            <SectionScopeHint intl={intl} messageId="pricing.pageScopeDesc" />
+          </div>
           <Text type="secondary">
             {intl.formatMessage({ id: 'pricing.subtitle' })}
           </Text>
@@ -458,7 +462,11 @@ export default function Pricing() {
         </Space>
       </div>
 
-      <Card style={{ marginBottom: 16 }}>
+      <Card
+        style={{ marginBottom: 16 }}
+        title={intl.formatMessage({ id: 'pricing.filtersCardTitle' })}
+        extra={<SectionScopeHint intl={intl} messageId="pricing.filtersCardScopeDesc" />}
+      >
         <Space style={{ marginBottom: 12 }} wrap>
           <Input
             placeholder={intl.formatMessage({ id: 'pricing.searchPlaceholder' })}
@@ -477,7 +485,10 @@ export default function Pricing() {
         </Space>
       </Card>
 
-      <Card>
+      <Card
+        title={intl.formatMessage({ id: 'pricing.tableCardTitle' })}
+        extra={<SectionScopeHint intl={intl} messageId="pricing.tableCardScopeDesc" />}
+      >
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
