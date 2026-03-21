@@ -30,14 +30,7 @@ require_bin pm2
 
 cd "$TRACEFLOW_DIR"
 
-if [[ ! -d node_modules ]]; then
-  log "node_modules missing, running pnpm install..."
-  pnpm install
-else
-  log "node_modules exists, skip pnpm install."
-fi
-
-log "Running production deployment via PM2..."
+log "Running deploy:pm2 (pnpm install + build + PM2)..."
 pnpm run deploy:pm2
 
 log "Checking PM2 process status..."
