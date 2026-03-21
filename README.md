@@ -23,7 +23,7 @@
 
 ## Overview
 
-TraceFlow is a **separate web service** that talks to your running **OpenClaw Gateway** (default `http://localhost:18789`). It does not replace the Gateway or OpenClaw’s default Control UI; it complements them with **operator-focused dashboards** you can deploy on another host or port (default **`http://0.0.0.0:3001`**).
+TraceFlow is a **separate web service** that talks to your running **OpenClaw Gateway** (default `http://localhost:18789`). It does not replace the Gateway or OpenClaw’s default management console; it complements them with **operator-focused dashboards** you can deploy on another host or port (default **`http://0.0.0.0:3001`**).
 
 ---
 
@@ -114,16 +114,16 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 
 ### Dashboard / Sessions
 
-![Dashboard](docs/traceFlowSnapshots/dashboard-1.png)
-![Session List](docs/traceFlowSnapshots/sessionList.png)
-![Session Detail](docs/traceFlowSnapshots/sessionDetail.png)
+![Dashboard](./docs/traceFlowSnapshots/dashboard-1.png)
+![Session List](./docs/traceFlowSnapshots/sessionList.png)
+![Session Detail](./docs/traceFlowSnapshots/sessionDetail.png)
 
 ### Skills / Prompt / Tokens / Pricing
 
-![Skills](docs/traceFlowSnapshots/skills.png)
-![System Prompt](docs/traceFlowSnapshots/systemPrompt.png)
-![Token Monitor](docs/traceFlowSnapshots/tokenMonitor.png)
-![Pricing](docs/traceFlowSnapshots/models.png)
+![Skills](./docs/traceFlowSnapshots/skills.png)
+![System Prompt](./docs/traceFlowSnapshots/systemPrompt.png)
+![Token Monitor](./docs/traceFlowSnapshots/tokenMonitor.png)
+![Pricing](./docs/traceFlowSnapshots/models.png)
 
 ---
 
@@ -199,5 +199,6 @@ MIT © [slashhuang](https://github.com/slashhuang)
 
 ### Author links
 
-- X: https://x.com/brucelee_1991  
-- 小红书 / 知乎: see [README.zh-CN.md](README.zh-CN.md)
+- [X](https://x.com/brucelee_1991)  
+- [小红书](https://www.xiaohongshu.com/user/profile/5845481182ec395656dfb393)  
+- [知乎](https://www.zhihu.com/people/huang-da-xian-14-14)
