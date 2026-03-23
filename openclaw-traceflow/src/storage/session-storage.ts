@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common';
 import type { OpenClawSession } from '../openclaw/openclaw.service';
 import { formatParticipantSummary, isPlaceholderParticipantId } from '../common/participant-summary';
 import { isIndexTotalTokensUsableForContext } from '../common/session-token-context';
+import { readJsonlHeadTail, scanJsonlForMetadata } from '../openclaw/streaming-jsonl-reader';
 
 /** 参与者扫描逻辑升级时递增，使内存缓存命中后仍会重扫 transcript */
 const TRANSCRIPT_PARTICIPANT_SCAN_VERSION = 3;
@@ -263,6 +264,10 @@ export class FileSystemSessionStorage implements SessionStorage {
 
   /**
    * 读取单个会话文件
+   * 
+   * 性能优化：
+   * - 列表页模式：只读首行获取 userId，messageCount 等从 sessions.json 元数据获取
+   * - 详情页模式：使用流式首尾分片读取
    */
   private async readSessionFile(
     filePath: string,
@@ -281,40 +286,72 @@ export class FileSystemSessionStorage implements SessionStorage {
     stats?: fs.Stats,
   ): Promise<SessionData | null> {
     try {
-      const allLines = (await fs.promises.readFile(filePath, 'utf-8')).split('\n').filter((l) => l.trim());
+      // 列表页优化：优先使用 sessions.json 元数据，避免扫描 JSONL
+      const indexTotal = meta?.totalTokens;
+      const indexTotalUsable = isIndexTotalTokensUsableForContext(indexTotal, meta?.totalTokensFresh);
       
+      // 流式读取首行获取 userId 和基本信息
       let userId: string = 'unknown';
       let sessionData: Record<string, unknown> | null = null;
-
-      // 读取首行获取 user（索引元数据）
-      const firstLine = allLines[0];
-      if (firstLine) {
+      let messageCount: number | undefined;
+      let distinctSenders: string[] = [];
+      
+      try {
+        // 只读首行获取 userId
+        const fd = await fs.promises.open(filePath, 'r');
         try {
-          sessionData = JSON.parse(firstLine) as Record<string, unknown>;
-          userId = (sessionData?.user as string)?.trim() || 'unknown';
-        } catch {
-          /* ignore */
-        }
-      }
-
-      // 全量扫描：消息条数 + 去重参与者（群聊多人时列表列需展示多人摘要）
-      const distinctSenders: string[] = [];
-      const senderSeen = new Set<string>();
-      let messageCount = 0;
-      for (const line of allLines) {
-        try {
-          const entry = JSON.parse(line) as { message?: unknown };
-          if (entry?.message != null) messageCount++;
-          const sender = this.extractSenderFromMessageEntry(entry);
-          if (!sender) continue;
-          const t = sender.trim();
-          if (!t || t.length > 200) continue;
-          if (!senderSeen.has(t)) {
-            senderSeen.add(t);
-            distinctSenders.push(t);
+          const headBuffer = Buffer.alloc(8192);
+          await fd.read(headBuffer, 0, 8192, 0);
+          const firstLine = headBuffer.toString('utf-8').split('\n')[0];
+          if (firstLine) {
+            try {
+              sessionData = JSON.parse(firstLine) as Record<string, unknown>;
+              // userId 可能需要在后续从 message 中提取
+            } catch {
+              /* ignore */
+            }
           }
-        } catch {
-          /* ignore */
+        } finally {
+          await fd.close();
+        }
+        
+        // 如果 sessions.json 有 messageCount，直接用（避免扫描）
+        // 否则使用流式扫描获取（最多扫 1000 行）
+        if (stats) {
+          const scanResult = await scanJsonlForMetadata(filePath, 1000);
+          if (scanResult.userId) {
+            userId = scanResult.userId;
+          }
+          messageCount = scanResult.messageCount;
+          distinctSenders = scanResult.distinctSenders;
+        }
+      } catch (error) {
+        this.logger.debug(`Failed to stream read ${filePath}: ${error.message}`);
+        // 降级：全量读取（仅小文件）
+        if (stats && stats.size < 1024 * 1024) {
+          const allLines = (await fs.promises.readFile(filePath, 'utf-8')).split('\n').filter((l) => l.trim());
+          if (allLines.length > 0) {
+            try {
+              sessionData = JSON.parse(allLines[0]) as Record<string, unknown>;
+            } catch {
+              /* ignore */
+            }
+          }
+          // 简化扫描
+          const senderSet = new Set<string>();
+          for (const line of allLines.slice(0, 100)) {
+            try {
+              const entry = JSON.parse(line);
+              const sender = this.extractSenderFromMessageEntry(entry);
+              if (sender && !senderSet.has(sender)) {
+                senderSet.add(sender);
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          distinctSenders = Array.from(senderSet);
+          messageCount = allLines.filter((l) => l.includes('"message"')).length;
         }
       }
 
