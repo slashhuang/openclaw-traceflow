@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
-import { callGatewayRpc } from '../openclaw/gateway-rpc';
+import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
 
 export interface LogEntry {
   timestamp: string;
@@ -23,11 +23,16 @@ export class LogsService {
   private gatewaySuppressNextEmit = false;
   private gatewaySubscribers: Set<(entry: LogEntry) => void> = new Set();
   private gatewayPollOptions: { limit: number; pollIntervalMs: number; maxBytes: number } | null = null;
+  private gatewayCurrentPollMs = 1500;
+  private gatewayFailureCount = 0;
   private gatewayDedupeOrder: string[] = [];
   private gatewayDedupeSet: Set<string> = new Set();
   private readonly gatewayDedupeMax = 1000;
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private gatewayConnection: GatewayConnectionService,
+  ) {}
 
   /**
    * 启动日志追踪（tail -f）- 弱依赖，失败不阻塞
@@ -121,10 +126,10 @@ export class LogsService {
           : 1_000_000;
 
       this.gatewayPollOptions = { limit, pollIntervalMs, maxBytes };
+      this.gatewayCurrentPollMs = pollIntervalMs;
+      this.gatewayFailureCount = 0;
       this.gatewaySuppressNextEmit = this.gatewayCursor == null;
-      this.gatewayTimer = setInterval(() => {
-        void this.pollGatewayTailOnce();
-      }, pollIntervalMs);
+      this.scheduleGatewayPoll();
 
       // Kick once immediately
       void this.pollGatewayTailOnce();
@@ -142,6 +147,15 @@ export class LogsService {
     };
   }
 
+  private scheduleGatewayPoll() {
+    if (this.gatewayTimer) {
+      clearInterval(this.gatewayTimer);
+    }
+    this.gatewayTimer = setInterval(() => {
+      void this.pollGatewayTailOnce();
+    }, this.gatewayCurrentPollMs);
+  }
+
   /**
    * 获取最近日志 - 优先调用 OpenClaw Gateway `logs.tail`。
    * 若 Gateway 不可用/参数缺失，才退回到本地 `OPENCLAW_LOG_PATH` 文件读取。
@@ -152,24 +166,21 @@ export class LogsService {
     // 1) Prefer Gateway tail, because it works without OPENCLAW_LOG_PATH
     const gatewayHttpUrl = config.openclawGatewayUrl?.trim();
     if (gatewayHttpUrl) {
-      const res = await callGatewayRpc<{
+      const res = await this.gatewayConnection.request<{
         file?: string;
         cursor?: number;
         size?: number;
         lines?: string[];
         truncated?: boolean;
         reset?: boolean;
-      }>({
-        gatewayHttpUrl,
-        token: config.openclawGatewayToken,
-        password: config.openclawGatewayPassword,
-        method: 'logs.tail',
-        methodParams: {
+      }>(
+        'logs.tail',
+        {
           limit,
           maxBytes: Math.max(250_000, limit * 4_000),
         },
-        timeoutMs: 8000,
-      });
+        8000,
+      );
 
       if (res.ok && res.payload) {
         if (typeof res.payload.cursor === 'number') {
@@ -213,6 +224,20 @@ export class LogsService {
     }
   }
 
+  /**
+   * 与 getRecentLogs 的 Gateway 分支一致：更新 cursor、去重并解析（供仪表盘单次 WS 合并拉取复用）
+   */
+  mapGatewayTailPayloadToEntries(payload: { cursor?: number; lines: string[] }): LogEntry[] {
+    if (typeof payload.cursor === 'number') {
+      this.gatewayCursor = payload.cursor;
+    }
+    const rawLines = payload.lines.filter((l) => typeof l === 'string' && l.trim().length > 0);
+    for (const line of rawLines) {
+      this.rememberGatewayLine(line);
+    }
+    return rawLines.map((l) => this.parseLogLine(l));
+  }
+
   private async pollGatewayTailOnce(): Promise<void> {
     if (this.gatewayPollInFlight) return;
     if (!this.gatewayPollOptions) return;
@@ -226,27 +251,32 @@ export class LogsService {
       const { limit, maxBytes } = this.gatewayPollOptions;
       const cursorToUse = this.gatewayCursor ?? undefined;
 
-      const res = await callGatewayRpc<{
+      const res = await this.gatewayConnection.request<{
         cursor?: number;
         lines?: string[];
         truncated?: boolean;
         reset?: boolean;
-      }>({
-        gatewayHttpUrl,
-        token: config.openclawGatewayToken,
-        password: config.openclawGatewayPassword,
-        method: 'logs.tail',
-        methodParams: {
+      }>(
+        'logs.tail',
+        {
           cursor: cursorToUse,
           limit,
           maxBytes,
         },
-        timeoutMs: 8000,
-      });
+        8000,
+      );
 
       if (!res.ok || !res.payload) {
-        // Do not stop polling on transient errors
+        this.gatewayFailureCount += 1;
+        const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
+        this.gatewayCurrentPollMs = Math.min(15_000, base * (2 ** Math.min(this.gatewayFailureCount, 4)));
+        this.scheduleGatewayPoll();
         return;
+      }
+      if (this.gatewayFailureCount > 0) {
+        this.gatewayFailureCount = 0;
+        this.gatewayCurrentPollMs = this.gatewayPollOptions?.pollIntervalMs || 1500;
+        this.scheduleGatewayPoll();
       }
 
       if (typeof res.payload.cursor === 'number') {

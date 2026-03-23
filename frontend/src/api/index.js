@@ -7,6 +7,25 @@ const api = axios.create({
   timeout: 10000,
 });
 
+export function extractApiErrorMessage(error, fallback = 'Request failed') {
+  const data = error?.response?.data;
+  if (typeof data === 'string' && data.trim()) {
+    return data.trim();
+  }
+  if (data && typeof data === 'object') {
+    if (typeof data.error === 'string' && data.error.trim()) {
+      return data.error.trim();
+    }
+    if (typeof data.message === 'string' && data.message.trim()) {
+      return data.message.trim();
+    }
+  }
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    return error.message.trim();
+  }
+  return fallback;
+}
+
 export const skillsApi = {
   getUsage: () => api.get('/skills/usage').then(res => res.data),
   getUsageByUser: () => api.get('/skills/usage-by-user').then(res => res.data),
@@ -23,10 +42,19 @@ export const statusApi = {
 };
 
 export const sessionsApi = {
-  list: () => api.get('/sessions').then(res => res.data),
-  getDetail: (id) => api.get(`/sessions/${id}`).then(res => res.data),
+  list: (params) => api.get('/sessions', { params }).then(res => res.data),
+  getDetail: (id, params) =>
+    api
+      .get(`/sessions/${encodeURIComponent(id)}`, {
+        timeout: 60000,
+        params: params && typeof params === 'object' ? params : undefined,
+      })
+      .then((res) => res.data),
   kill: (id) => api.post(`/sessions/${id}/kill`).then(res => res.data),
   getConfiguredModels: () => api.get('/sessions/config/models').then(res => res.data),
+  /** 归档轮次（*.jsonl.reset.*） */
+  getArchiveEpochs: (id) =>
+    api.get(`/sessions/${encodeURIComponent(id)}/archive-epochs`).then((res) => res.data),
 };
 
 export const logsApi = {
@@ -48,17 +76,24 @@ export const setupApi = {
 export const metricsApi = {
   getLatency: () => api.get('/metrics/latency').then(res => res.data),
   getTools: () => api.get('/metrics/tools').then(res => res.data),
-  getTokenSummary: () => api.get('/metrics/token-summary').then(res => res.data),
-  getTokenUsage: () => api.get('/metrics/token-usage').then(res => res.data),
+  getTokenSummary: (timeRangeMs = 86400000) =>
+    api.get('/metrics/token-summary', { params: { timeRangeMs } }).then(res => res.data),
+  getTokenUsage: (params) => api.get('/metrics/token-usage', { params }).then(res => res.data),
   getTokenUsageBySessionKey: (timeRangeMs = 86400000) =>
-    api.get(`/metrics/token-usage-by-session-key?timeRangeMs=${timeRangeMs}`).then(res => res.data),
+    api.get('/metrics/token-usage-by-session-key', { params: { timeRangeMs } }).then(res => res.data),
+  getTokenUsageBySessionKeyPaged: (params) =>
+    api.get('/metrics/token-usage-by-session-key', { params }).then(res => res.data),
   getArchiveCountBySessionKey: () =>
     api.get('/metrics/archive-count-by-session-key').then(res => res.data),
 };
 
+export const dashboardApi = {
+  /** @param {{ timeRangeMs?: number }} [params] - 不传则后端默认 24h；传极大值可近似全量 metrics */
+  getOverview: (params) => api.get('/dashboard/overview', { params }).then((res) => res.data),
+};
+
 export const actionsApi = {
   restart: () => api.post('/actions/restart').then(res => res.data),
-  cleanupLogs: () => api.post('/actions/cleanup-logs').then(res => res.data),
 };
 
 export const pricingApi = {

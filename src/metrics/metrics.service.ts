@@ -2,7 +2,8 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import initSqlJs, { Database } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
-import { OpenClawService } from '../openclaw/openclaw.service';
+import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
+import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
 import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
 
 // 加载价格配置（支持配置文件覆盖）
@@ -143,6 +144,25 @@ export interface TokenSummaryMetrics {
 export class MetricsService implements OnModuleInit {
   private db: Database | null = null;
   private dbPath: string;
+  private pendingSaveTimer: NodeJS.Timeout | null = null;
+  private toolStatsSnapshot: {
+    tools: Array<{ tool: string; count: number; successRate: number }>;
+    skills: Array<{ skill: string; count: number }>;
+  } = { tools: [], skills: [] };
+  private toolStatsSnapshotAt = 0;
+
+  /**
+   * 按会话缓存 tool/skill 聚合：指纹 = lastActiveAt + transcript 大小 + status。
+   * 未变则跳过 getSessionDetail（避免 idle/已完成会话反复全量读 JSONL）。
+   */
+  private readonly sessionToolStatsCache = new Map<
+    string,
+    {
+      fingerprint: string;
+      toolCounts: Map<string, { count: number; success: number }>;
+      skillCounts: Map<string, number>;
+    }
+  >();
 
   constructor(private readonly openclawService: OpenClawService) {
     this.dbPath = path.join(process.cwd(), 'data', 'metrics.db');
@@ -152,6 +172,100 @@ export class MetricsService implements OnModuleInit {
     const SQL = await initSqlJs();
     this.db = new SQL.Database();
     await this.initDatabase();
+  }
+
+  getToolStatsSnapshot(
+    maxAgeMs = 300_000, // 5 分钟缓存，避免频繁刷新
+  ): { tools: Array<{ tool: string; count: number; successRate: number }>; skills: Array<{ skill: string; count: number }> } | null {
+    if (!this.toolStatsSnapshotAt || Date.now() - this.toolStatsSnapshotAt > maxAgeMs) {
+      return null;
+    }
+    return this.toolStatsSnapshot;
+  }
+
+  private fingerprintForToolStatsSession(s: OpenClawSession): string {
+    return `${s.lastActiveAt}|${s.transcriptFileSizeBytes ?? 0}|${s.status}`;
+  }
+
+  private mergeSessionToolContribution(
+    toolStats: Map<string, { count: number; success: number }>,
+    skillStats: Map<string, number>,
+    toolCounts: Map<string, { count: number; success: number }>,
+    skillCounts: Map<string, number>,
+  ): void {
+    for (const [name, data] of toolCounts) {
+      const cur = toolStats.get(name) || { count: 0, success: 0 };
+      cur.count += data.count;
+      cur.success += data.success;
+      toolStats.set(name, cur);
+    }
+    for (const [skill, n] of skillCounts) {
+      skillStats.set(skill, (skillStats.get(skill) ?? 0) + n);
+    }
+  }
+
+  async refreshToolStatsSnapshot(): Promise<{
+    tools: Array<{ tool: string; count: number; successRate: number }>;
+    skills: Array<{ skill: string; count: number }>;
+  }> {
+    const sessions = await this.openclawService.listSessions();
+    const currentIds = new Set(sessions.map((s) => s.sessionId));
+    for (const id of this.sessionToolStatsCache.keys()) {
+      if (!currentIds.has(id)) this.sessionToolStatsCache.delete(id);
+    }
+
+    const toolStats = new Map<string, { count: number; success: number }>();
+    const skillStats = new Map<string, number>();
+
+    for (const session of sessions) {
+      const fingerprint = this.fingerprintForToolStatsSession(session);
+      const cached = this.sessionToolStatsCache.get(session.sessionId);
+      if (cached && cached.fingerprint === fingerprint) {
+        this.mergeSessionToolContribution(toolStats, skillStats, cached.toolCounts, cached.skillCounts);
+        continue;
+      }
+
+      const detail = await this.openclawService.getSessionDetail(session.sessionId);
+      const localTools = new Map<string, { count: number; success: number }>();
+      const localSkills = new Map<string, number>();
+
+      if (detail?.toolCalls?.length) {
+        for (const tool of detail.toolCalls) {
+          const name = tool.name;
+          const current = localTools.get(name) || { count: 0, success: 0 };
+          current.count += 1;
+          if (tool.success) current.success += 1;
+          localTools.set(name, current);
+        }
+        for (const { skillName, readCount } of inferInvokedSkillsFromToolCalls(detail.toolCalls)) {
+          localSkills.set(skillName, (localSkills.get(skillName) ?? 0) + readCount);
+        }
+      }
+
+      this.sessionToolStatsCache.set(session.sessionId, {
+        fingerprint,
+        toolCounts: localTools,
+        skillCounts: localSkills,
+      });
+      this.mergeSessionToolContribution(toolStats, skillStats, localTools, localSkills);
+    }
+
+    const tools = Array.from(toolStats.entries())
+      .map(([tool, data]) => ({
+        tool,
+        count: data.count,
+        successRate: data.count > 0 ? (data.success / data.count) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const skills = Array.from(skillStats.entries())
+      .map(([skill, count]) => ({ skill, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const snapshot = { tools, skills };
+    this.toolStatsSnapshot = snapshot;
+    this.toolStatsSnapshotAt = Date.now();
+    return snapshot;
   }
 
   private async initDatabase() {
@@ -267,7 +381,7 @@ export class MetricsService implements OnModuleInit {
       );
 
       // 定期保存到磁盘
-      this.saveDatabase();
+      this.scheduleSaveDatabase();
     } catch (error) {
       console.error('Failed to record metric:', error);
     }
@@ -297,7 +411,7 @@ export class MetricsService implements OnModuleInit {
         ],
       );
 
-      this.saveDatabase();
+      this.scheduleSaveDatabase();
     } catch (error) {
       console.error('Failed to record token usage:', error);
     }
@@ -460,7 +574,7 @@ export class MetricsService implements OnModuleInit {
         ],
       );
 
-      this.saveDatabase();
+      this.scheduleSaveDatabase();
     } catch (error) {
       console.error('Failed to record token event:', error);
     }
@@ -468,7 +582,8 @@ export class MetricsService implements OnModuleInit {
 
   /**
    * 获取 Token 汇总指标（进行中 / 归档 分开展示）
-   * 每个 session_id 只取最新一条记录（避免 30 秒采集导致的重复累加）
+   * 进行中（token-%）：每个 session_id 只取最新一条（避免约 30s 采集重复写入）
+   * 归档（archived-%）：每条 id 对应一次 .reset. epoch（id = archived-{sessionId}-{resetTimestamp}），时间窗内 SUM 全部；与 getTokenUsageBySessionKey 对归档的 SUM 口径一致
    */
   async getTokenSummary(timeRangeMs: number = 86400000): Promise<TokenSummaryMetrics> {
     const empty = {
@@ -495,16 +610,11 @@ export class MetricsService implements OnModuleInit {
       [startTime],
     );
 
-    // 归档（archived-%）：每个 session_id 取最新一条（同一归档多次采集会覆盖）
+    // 归档（archived-%）：每 epoch 一行（INSERT OR REPLACE 同 id），时间窗内直接 SUM
     const archivedResult = this.db.exec(
-      `WITH latest AS (
-         SELECT session_id, input_tokens, output_tokens, total_tokens,
-           ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp DESC) AS rn
-         FROM token_usage WHERE timestamp > ? AND id LIKE 'archived-%'
-       )
-       SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
+      `SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
               COALESCE(SUM(total_tokens), 0), COUNT(DISTINCT session_id)
-       FROM latest WHERE rn = 1`,
+       FROM token_usage WHERE timestamp > ? AND id LIKE 'archived-%'`,
       [startTime],
     );
 
@@ -665,13 +775,22 @@ export class MetricsService implements OnModuleInit {
     return sortedArray[Math.max(0, index)];
   }
 
-  private saveDatabase(): void {
-    if (!this.db) return;
+  private scheduleSaveDatabase(delayMs = 5_000): void {
+    if (this.pendingSaveTimer) {
+      return;
+    }
+    this.pendingSaveTimer = setTimeout(() => {
+      this.pendingSaveTimer = null;
+      void this.flushDatabase();
+    }, delayMs);
+  }
 
+  async flushDatabase(): Promise<void> {
+    if (!this.db) return;
     try {
       const data = this.db.export();
       const buffer = Buffer.from(data);
-      fs.writeFileSync(this.dbPath, buffer);
+      await fs.promises.writeFile(this.dbPath, buffer);
     } catch (error) {
       console.error('Failed to save database:', error);
     }

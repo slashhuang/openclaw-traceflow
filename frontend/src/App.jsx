@@ -8,6 +8,7 @@ import SetupWizard from './pages/SetupWizard';
 import Dashboard from './pages/Dashboard';
 import Sessions from './pages/Sessions';
 import SessionDetail from './pages/SessionDetail';
+import SessionArchiveList from './pages/SessionArchiveList';
 import TokenMonitor from './pages/TokenMonitor';
 import Skills from './pages/Skills';
 import SystemPrompt from './pages/SystemPrompt';
@@ -50,6 +51,7 @@ function AppInner() {
         <Route element={<BasicLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/sessions" element={<Sessions />} />
+          <Route path="/sessions/:id/archives" element={<SessionArchiveList />} />
           <Route path="/sessions/:id" element={<SessionDetail />} />
           <Route path="/skills" element={<Skills />} />
           <Route path="/system-prompt" element={<SystemPrompt />} />

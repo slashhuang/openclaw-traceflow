@@ -62,6 +62,8 @@ export interface SessionTokenUsage {
   totalTokens: number;
   limit?: number;
   utilization: number; // 0-100%
+  /** false：索引 totalTokensFresh:false 等，utilization 未反映可信的上下文占用 */
+  contextUtilizationReliable?: boolean;
   threshold: 'normal' | 'warning' | 'serious' | 'critical' | 'limit';
   consumptionRate: number; // tokens per minute
   estimatedTimeToLimit?: number; // minutes
@@ -102,9 +104,10 @@ export class TokenMonitorService {
     try {
       const sessions = await this.openclaw.listSessions();
       const usageList: SessionTokenUsage[] = [];
+      const sessionMap = new Map(sessions.map((s) => [s.sessionKey, s]));
 
       for (const session of sessions) {
-        const usage = await this.getSessionTokenUsage(session.sessionKey);
+        const usage = await this.getSessionTokenUsage(session.sessionKey, sessionMap);
         if (usage) {
           usageList.push(usage);
         }
@@ -120,10 +123,13 @@ export class TokenMonitorService {
   /**
    * 获取单个会话的 token 使用情况
    */
-  async getSessionTokenUsage(sessionKey: string): Promise<SessionTokenUsage | null> {
+  async getSessionTokenUsage(
+    sessionKey: string,
+    preloadedSessions?: Map<string, Awaited<ReturnType<OpenClawService['listSessions']>>[number]>,
+  ): Promise<SessionTokenUsage | null> {
     try {
-      const sessions = await this.openclaw.listSessions();
-      const session = sessions.find(s => s.sessionKey === sessionKey);
+      const session = preloadedSessions?.get(sessionKey)
+        || (await this.openclaw.listSessions()).find(s => s.sessionKey === sessionKey);
 
       if (!session) {
         return null;
@@ -136,17 +142,22 @@ export class TokenMonitorService {
           tokenUsage = detail.tokenUsage;
         }
       }
+      const contextReliable = tokenUsage.contextUtilizationReliable !== false;
       const limit = tokenUsage.limit || 100000; // 默认 100k
-      const utilization = limit > 0 ? Math.round(((tokenUsage.total || 0) / limit) * 100) : 0;
+      const utilization =
+        contextReliable && limit > 0 ? Math.round(((tokenUsage.total || 0) / limit) * 100) : 0;
 
-      const consumptionRate = await this.calculateConsumptionRate(session.sessionId);
+      const consumptionRate = contextReliable
+        ? await this.calculateConsumptionRate(session.sessionId)
+        : 0;
 
       // 估算到达限制的时间
       const remainingTokens = limit - (tokenUsage.total || 0);
-      const estimatedTimeToLimit = consumptionRate > 0 ? Math.round(remainingTokens / consumptionRate) : undefined;
+      const estimatedTimeToLimit =
+        contextReliable && consumptionRate > 0 ? Math.round(remainingTokens / consumptionRate) : undefined;
 
       // 确定阈值等级
-      const threshold = this.getThresholdLevel(utilization);
+      const threshold = contextReliable ? this.getThresholdLevel(utilization) : 'normal';
 
       // 计算费用
       const model = session.model || extractModelFromSessionKey(sessionKey);
@@ -160,6 +171,7 @@ export class TokenMonitorService {
         totalTokens: tokenUsage.total || 0,
         limit,
         utilization,
+        contextUtilizationReliable: contextReliable,
         threshold,
         consumptionRate,
         estimatedTimeToLimit,
@@ -178,27 +190,20 @@ export class TokenMonitorService {
    */
   private async calculateConsumptionRate(sessionId: string): Promise<number> {
     try {
-      const sessionDetail = await this.openclaw.getSessionDetail(sessionId);
+      // 不依赖 getSessionDetail 全量/尾部分片消息，避免大 transcript 截断时首尾时间失真
+      const sessions = await this.openclaw.listSessions();
+      const session = sessions.find((s) => s.sessionId === sessionId);
+      if (!session) return 0;
 
-      if (!sessionDetail?.messages || sessionDetail.messages.length < 2) {
-        return 0;
-      }
+      const timeDiffMinutes = (session.lastActiveAt - session.createdAt) / (1000 * 60);
+      if (timeDiffMinutes <= 0) return 0;
 
-      // 获取第一条和最后一条消息的时间戳
-      const firstMessage = sessionDetail.messages[0];
-      const lastMessage = sessionDetail.messages[sessionDetail.messages.length - 1];
+      const totalTokens = session.tokenUsage?.total ?? session.totalTokens ?? 0;
+      if (totalTokens <= 0) return 0;
 
-      const timeDiffMinutes = (lastMessage.timestamp - firstMessage.timestamp) / (1000 * 60);
-
-      if (timeDiffMinutes <= 0) {
-        return 0;
-      }
-
-      const totalTokens = sessionDetail.messages.reduce((sum, msg) => {
-        return sum + (msg.tokenCount || 0);
-      }, 0);
-
-      return Math.round(totalTokens / timeDiffMinutes);
+      // 分母至少 1 分钟，避免「几秒内的会话」除数过小导致 tok/min 数量级失真
+      const effectiveMinutes = Math.max(timeDiffMinutes, 1);
+      return Math.round(totalTokens / effectiveMinutes);
     } catch (error) {
       this.logger.error('Failed to calculate consumption rate', error);
       return 0;

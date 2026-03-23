@@ -12,8 +12,9 @@ async function listenWithDevRetry(
   host: string,
 ): Promise<void> {
   const isProd = process.env.NODE_ENV === 'production';
-  const maxAttempts = isProd ? 1 : 15;
-  const delayMs = 200;
+  /** watch 热重载时偶发需更长时间释放端口；永久占用时再多重试也无用，失败提示见下方 */
+  const maxAttempts = isProd ? 1 : 40;
+  const delayMs = 250;
   let lastErr: unknown;
   for (let i = 0; i < maxAttempts; i++) {
     try {
@@ -28,7 +29,18 @@ async function listenWithDevRetry(
         e && typeof e === 'object' && 'code' in e
           ? (e as { code?: string }).code
           : undefined;
-      if (code !== 'EADDRINUSE' || i === maxAttempts - 1) {
+      const lastAttempt = i === maxAttempts - 1;
+      if (code !== 'EADDRINUSE' || lastAttempt) {
+        if (!isProd && code === 'EADDRINUSE' && lastAttempt) {
+          console.error(`
+[bootstrap] 端口 ${port} 仍被占用（已重试 ${maxAttempts} 次，约 ${(maxAttempts * delayMs) / 1000}s）。
+  · 若本机已有 TraceFlow / 其它服务占用：先结束该进程，或换端口启动：
+      PORT=3003 pnpm run start:dev
+    前端 Vite 需指向同一后端：
+      VITE_API_PROXY_TARGET=http://localhost:3003 pnpm run dev:frontend
+  · macOS 查看占用：lsof -nP -iTCP:${port} -sTCP:LISTEN
+`);
+        }
         throw e;
       }
       console.warn(

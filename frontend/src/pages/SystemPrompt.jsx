@@ -24,6 +24,7 @@ import {
   Legend,
 } from 'recharts';
 import { useIntl } from 'react-intl';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 /** OpenClaw buildAgentSystemPrompt 组装顺序，用于摘要锚点 */
 const ASSEMBLY_ORDER = [
@@ -204,6 +205,38 @@ export default function SystemPromptPage() {
     [probe?.systemPromptMarkdown],
   );
 
+  // 合并 injectedWorkspaceFiles 和 workspaceFiles：优先使用 injectedWorkspaceFiles
+  const mergedWorkspaceFiles = useMemo(() => {
+    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
+      return workspaceFiles;
+    }
+    // 用 injectedWorkspaceFiles override 同名文件
+    const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
+    return workspaceFiles.map(f => {
+      const injected = injectedMap.get(f.name || f.path);
+      return injected ? { ...f, ...injected, injected: true } : f;
+    });
+  }, [probe?.injectedWorkspaceFiles, workspaceFiles]);
+  
+  // 合并 workspaceFileContents：优先使用 injectedWorkspaceFiles 的内容
+  const mergedWorkspaceFileContents = useMemo(() => {
+    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
+      return workspaceFileContents;
+    }
+    const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
+    return workspaceFileContents.map(wf => {
+      const injected = injectedMap.get(wf.name || wf.path);
+      if (injected) {
+        return {
+          ...wf,
+          content: `// 来自 sessions.json injectedWorkspaceFiles\n// Path: ${injected.path || wf.path}\n\n${wf.content}`,
+          injected: true,
+        };
+      }
+      return wf;
+    });
+  }, [probe?.injectedWorkspaceFiles, workspaceFileContents]);
+
   const collapseItems = useMemo(() => {
     if (!probe?.ok) return [];
     return breakdownItems.map((b) => {
@@ -221,14 +254,27 @@ export default function SystemPromptPage() {
       } else if (isWorkspace) {
         children = (
           <div>
-            {workspaceFileContents.map((wf, i) => (
+            {probe.injectedWorkspaceFiles && probe.injectedWorkspaceFiles.length > 0 && (
+              <Alert
+                type="info"
+                showIcon
+                message={`${probe.injectedWorkspaceFiles.length} 个 injectedWorkspaceFiles 已合并到下方列表（带 📌 标记）`}
+                style={{ marginBottom: 12 }}
+              />
+            )}
+            {mergedWorkspaceFileContents.map((wf, i) => (
               <Collapse
                 key={i}
                 style={{ marginBottom: 8 }}
                 items={[
                   {
                     key: '1',
-                    label: wf.name || wf.path,
+                    label: (
+                      <Space>
+                        <span>{wf.name || wf.path}</span>
+                        {wf.injected && <Tag color="blue">📌 injected</Tag>}
+                      </Space>
+                    ),
                     children: wf.readError ? (
                       <Typography.Text type="danger">{wf.readError}</Typography.Text>
                     ) : (
@@ -241,11 +287,24 @@ export default function SystemPromptPage() {
             <Table
               size="small"
               pagination={false}
-              dataSource={workspaceFiles.map((f, j) => ({ ...f, key: j }))}
+              dataSource={mergedWorkspaceFiles.map((f, j) => ({ ...f, key: j }))}
               columns={[
-                { title: 'File', dataIndex: 'name', render: (_, r) => r.name || r.path },
+                { 
+                  title: 'File', 
+                  dataIndex: 'name', 
+                  render: (_, r) => (
+                    <Space>
+                      <span>{r.name || r.path}</span>
+                      {r.injected && <Tag color="blue" style={{ fontSize: 10 }}>📌</Tag>}
+                    </Space>
+                  )
+                },
                 { title: 'Chars', dataIndex: 'injectedChars', align: 'right', render: (v) => (v ?? 0).toLocaleString() },
                 { title: 'Trunc', dataIndex: 'truncated', render: (v) => (v ? 'Y' : '') },
+                { 
+                  title: 'Source', 
+                  render: (_, r) => r.injected ? 'sessions.json' : 'workspace' 
+                },
               ]}
             />
           </div>
@@ -367,9 +426,24 @@ export default function SystemPromptPage() {
     });
   };
 
+  const sessionsJsonSummary = useMemo(() => {
+    if (!probe) return null;
+    const parts = [];
+    if (probe.sessionKey) parts.push(`sessionKey: ${probe.sessionKey}`);
+    if (probe.sessionId) parts.push(`sessionId: ${probe.sessionId}`);
+    if (probe.agentId) parts.push(`agentId: ${probe.agentId}`);
+    if (probe.workspaceFileContents?.length) parts.push(`workspaceFiles: ${probe.workspaceFileContents.length}`);
+    if (probe.skillsDetail?.length) parts.push(`skills: ${probe.skillsDetail.length}`);
+    if (probe.toolsDetail?.length) parts.push(`tools: ${probe.toolsDetail.length}`);
+    return parts.join(' · ');
+  }, [probe]);
+
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-      <Typography.Title level={4}>{intl.formatMessage({ id: 'menu.systemPrompt' })}</Typography.Title>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'menu.systemPrompt' })}</Typography.Title>
+        <SectionScopeHint intl={intl} messageId="systemPrompt.pageScopeDesc" />
+      </div>
       <Typography.Paragraph type="secondary">
         Gateway · systemPromptReport · sessions.json.
       </Typography.Paragraph>
@@ -384,6 +458,7 @@ export default function SystemPromptPage() {
               label: (
                 <Space>
                   <Typography.Text strong>{intl.formatMessage({ id: 'systemPrompt.fullTitle' })}</Typography.Text>
+                  <SectionScopeHint intl={intl} messageId="systemPrompt.fullCollapseScopeDesc" />
                   {probe?.systemPromptMarkdown?.length > 0 && (
                     <Button
                       type="text"
@@ -497,7 +572,119 @@ export default function SystemPromptPage() {
         />
       )}
 
-      <Card title={intl.formatMessage({ id: 'systemPrompt.breakdownTitle' })} style={{ marginBottom: 16 }}>
+      {/* sessions.json 详情 */}
+      {probe?.ok && (
+        <Collapse
+          style={{ marginBottom: 16 }}
+          items={[
+            {
+              key: 'sessions-json',
+              label: (
+                <Space>
+                  <Typography.Text strong>sessions.json Summary</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>{sessionsJsonSummary}</Typography.Text>
+                </Space>
+              ),
+              children: (
+                <div style={{ fontSize: 12 }}>
+                  {probe.injectedWorkspaceFiles && probe.injectedWorkspaceFiles.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Typography.Text strong>injectedWorkspaceFiles:</Typography.Text>
+                      <Table
+                        size="small"
+                        pagination={false}
+                        dataSource={probe.injectedWorkspaceFiles.map((f, i) => ({ ...f, key: i }))}
+                        columns={[
+                          { title: 'Name', dataIndex: 'name', render: (_, r) => r.name || r.path },
+                          { title: 'Path', dataIndex: 'path', ellipsis: true },
+                        ]}
+                      />
+                    </div>
+                  )}
+                  {skillsSnapshot && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Typography.Text strong>skillsSnapshot:</Typography.Text>
+                      <pre style={{
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        maxHeight: 300,
+                        overflow: 'auto',
+                        padding: 8,
+                        borderRadius: token.borderRadius,
+                        border: `1px solid ${token.colorBorder}`,
+                        background: token.colorFillQuaternary,
+                      }}>
+                        {JSON.stringify({
+                          prompt: skillsSnapshot.prompt?.substring(0, 500) + (skillsSnapshot.prompt?.length > 500 ? '...' : ''),
+                          skills: skillsSnapshot.skills?.length,
+                          resolvedSkills: skillsSnapshot.resolvedSkills?.length,
+                          injectedWorkspaceFiles: skillsSnapshot.injectedWorkspaceFiles?.length,
+                          version: skillsSnapshot.version,
+                        }, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {probe.sessionMeta && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Typography.Text strong>Session Meta (transcript 首行):</Typography.Text>
+                      <pre style={{
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        padding: 8,
+                        borderRadius: token.borderRadius,
+                        border: `1px solid ${token.colorBorder}`,
+                        background: token.colorFillQuaternary,
+                      }}>
+                        {JSON.stringify(probe.sessionMeta, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  <div>
+                    <Typography.Text strong>Full sessions.json entry:</Typography.Text>
+                    <pre style={{
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxHeight: 400,
+                      overflow: 'auto',
+                      padding: 8,
+                      borderRadius: token.borderRadius,
+                      border: `1px solid ${token.colorBorder}`,
+                      background: token.colorFillQuaternary,
+                    }}>
+                      {JSON.stringify(probe.sessionsJsonEntry || {
+                        sessionKey: probe.sessionKey,
+                        sessionId: probe.sessionId,
+                        agentId: probe.agentId,
+                        reportSource: probe.reportSource,
+                        reportGeneratedAt: probe.reportGeneratedAt,
+                        model: probe.model,
+                        provider: probe.provider,
+                        workspaceDir: probe.workspaceDir,
+                        workspaceFilesCount: probe.workspaceFiles?.length,
+                        skillsDetailCount: probe.skillsDetail?.length,
+                        toolsDetailCount: probe.toolsDetail?.length,
+                      }, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              ),
+            },
+          ]}
+          defaultActiveKey={[]}
+        />
+      )}
+
+      <Card
+        title={intl.formatMessage({ id: 'systemPrompt.breakdownTitle' })}
+        extra={<SectionScopeHint intl={intl} messageId="systemPrompt.breakdownCardScopeDesc" />}
+        style={{ marginBottom: 16 }}
+      >
         {probeLoading ? (
           <Spin style={{ display: 'block', margin: '8px 0' }} />
         ) : !probe?.ok ? (
@@ -608,10 +795,16 @@ export default function SystemPromptPage() {
 
       {analysis && (
         <>
-          <Typography.Title level={5}>Skills dir · analysis</Typography.Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Typography.Title level={5} style={{ margin: 0 }}>Skills dir · analysis</Typography.Title>
+            <SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />
+          </div>
           <Row gutter={16} style={{ marginBottom: 24 }}>
             <Col xs={24} lg={12}>
-              <Card>
+              <Card
+                title={intl.formatMessage({ id: 'skills.analysisTokenPieTitle' })}
+                extra={<SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />}
+              >
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie data={tokenDistribution} cx="50%" cy="50%" outerRadius={100} dataKey="value" label>
@@ -626,7 +819,10 @@ export default function SystemPromptPage() {
               </Card>
             </Col>
             <Col xs={24} lg={12}>
-              <Card title="Savings">
+              <Card
+                title={intl.formatMessage({ id: 'skills.analysisSavingsTitle' })}
+                extra={<SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />}
+              >
                 <Typography.Paragraph>Current: {analysis.totalTokens.toLocaleString()}</Typography.Paragraph>
                 <Typography.Paragraph type="success">
                   After: {(analysis.totalTokens - analysis.savings).toLocaleString()} (−{analysis.savings}, {analysis.savingsPercent}%)
@@ -667,7 +863,11 @@ export default function SystemPromptPage() {
       )}
 
       {zombieSkills.length > 0 && (
-        <Card title="Zombie skills" style={{ marginBottom: 16 }}>
+        <Card
+          title="Zombie skills"
+          extra={<SectionScopeHint intl={intl} messageId="systemPrompt.zombieDuplicateCardScopeDesc" />}
+          style={{ marginBottom: 16 }}
+        >
           <Table
             size="small"
             dataSource={zombieSkills.slice(0, 20).map((s, i) => ({ ...s, key: i }))}
@@ -681,7 +881,11 @@ export default function SystemPromptPage() {
       )}
 
       {duplicateSkills.length > 0 && (
-        <Card title="Duplicate skills" style={{ marginBottom: 16 }}>
+        <Card
+          title="Duplicate skills"
+          extra={<SectionScopeHint intl={intl} messageId="systemPrompt.zombieDuplicateCardScopeDesc" />}
+          style={{ marginBottom: 16 }}
+        >
           {duplicateSkills.slice(0, 15).map((s, i) => (
             <Typography.Paragraph key={i}>
               <strong>{s.name}</strong> ↔ {s.duplicateWith?.join(', ')}
@@ -695,11 +899,14 @@ export default function SystemPromptPage() {
         <Card
           title={intl.formatMessage({ id: 'systemPrompt.skillsSnapshotTitle' })}
           extra={
-            skillsSnapshot.prompt && (
-              <Button type="text" size="small" icon={<CopyOutlined />} onClick={copySkillsPrompt}>
-                {copied ? intl.formatMessage({ id: 'systemPrompt.copied' }) : intl.formatMessage({ id: 'systemPrompt.copy' })}
-              </Button>
-            )
+            <Space size="small">
+              {skillsSnapshot.prompt && (
+                <Button type="text" size="small" icon={<CopyOutlined />} onClick={copySkillsPrompt}>
+                  {copied ? intl.formatMessage({ id: 'systemPrompt.copied' }) : intl.formatMessage({ id: 'systemPrompt.copy' })}
+                </Button>
+              )}
+              <SectionScopeHint intl={intl} messageId="systemPrompt.skillsSnapshotDesc" />
+            </Space>
           }
         >
           <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 16 }}>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Space, Typography, message, Modal, Row, Col, Alert } from 'antd';
+import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert } from 'antd';
 import { useIntl } from 'react-intl';
-import { setupApi, actionsApi } from '../api';
+import { setupApi, actionsApi, extractApiErrorMessage } from '../api';
+import SectionScopeHint from '../components/SectionScopeHint';
 
 export default function Settings() {
   const intl = useIntl();
@@ -11,6 +12,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [showPaths, setShowPaths] = useState(false);
   const [sys, setSys] = useState(null);
+  const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -25,7 +27,7 @@ export default function Settings() {
           accessToken: '',
         });
       } catch (e) {
-        message.error(e?.message || e?.response?.data || 'Error');
+        message.error(extractApiErrorMessage(e, 'Error'));
       } finally {
         setLoading(false);
       }
@@ -35,6 +37,7 @@ export default function Settings() {
   const onTest = async () => {
     const v = form.getFieldsValue();
     setTesting(true);
+    setTestResult(null);
     const toastKey = 'settings-test-connection';
     message.loading({ content: '正在测试连接...', key: toastKey, duration: 0 });
     try {
@@ -43,10 +46,16 @@ export default function Settings() {
         openclawGatewayToken: v.openclawGatewayToken || undefined,
         openclawGatewayPassword: v.openclawGatewayPassword || undefined,
       });
-      if (r.connected) message.success({ content: r.message || '连接成功', key: toastKey });
-      else message.error({ content: r.error || r.message || '连接失败', key: toastKey });
+      const resultMessage = r.error || r.message || (r.connected ? '连接成功' : '连接失败');
+      message.destroy(toastKey);
+      if (r.connected) message.success({ content: resultMessage });
+      else message.error({ content: resultMessage });
+      setTestResult({ ok: !!r.connected, message: resultMessage });
     } catch (e) {
-      message.error({ content: e?.message || e?.response?.data || '连接失败', key: toastKey });
+      const errorMessage = extractApiErrorMessage(e, '连接失败');
+      message.destroy(toastKey);
+      message.error({ content: errorMessage });
+      setTestResult({ ok: false, message: errorMessage });
     } finally {
       setTesting(false);
     }
@@ -74,7 +83,7 @@ export default function Settings() {
         message.error('保存失败：请先完善必填项');
         return;
       }
-      message.error({ content: e?.message || e?.response?.data || '保存失败', key: toastKey });
+      message.error({ content: extractApiErrorMessage(e, '保存失败'), key: toastKey });
     } finally {
       setSaving(false);
     }
@@ -94,11 +103,17 @@ export default function Settings() {
 
   return (
     <div>
-      <Typography.Title level={4}>{intl.formatMessage({ id: 'settings.title' })}</Typography.Title>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'settings.title' })}</Typography.Title>
+        <SectionScopeHint intl={intl} messageId="settings.pageScopeDesc" />
+      </div>
       <Form form={form} layout="vertical">
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
-            <Card title={intl.formatMessage({ id: 'settings.gateway' })}>
+            <Card
+              title={intl.formatMessage({ id: 'settings.gateway' })}
+              extra={<SectionScopeHint intl={intl} messageId="settings.gatewayCardScopeDesc" />}
+            >
               <Form.Item name="openclawGatewayUrl" label={intl.formatMessage({ id: 'setup.gatewayUrl' })}>
                 <Input placeholder="http://localhost:18789" />
               </Form.Item>
@@ -109,6 +124,15 @@ export default function Settings() {
                 <Input.Password />
               </Form.Item>
               <Button onClick={onTest} loading={testing}>{intl.formatMessage({ id: 'settings.testConn' })}</Button>
+              {testResult && (
+                <Alert
+                  style={{ marginTop: 12 }}
+                  showIcon
+                  type={testResult.ok ? 'success' : 'error'}
+                  message={testResult.ok ? '连接测试成功' : '连接测试失败'}
+                  description={testResult.message}
+                />
+              )}
               <div style={{ marginTop: 16 }}>
                 <Button type="link" onClick={() => setShowPaths(!showPaths)} style={{ padding: 0 }}>
                   {showPaths ? intl.formatMessage({ id: 'settings.collapse' }) : intl.formatMessage({ id: 'settings.expand' })}{' '}
@@ -128,7 +152,10 @@ export default function Settings() {
             </Card>
           </Col>
           <Col xs={24} lg={12}>
-            <Card title={intl.formatMessage({ id: 'settings.access' })}>
+            <Card
+              title={intl.formatMessage({ id: 'settings.access' })}
+              extra={<SectionScopeHint intl={intl} messageId="settings.accessCardScopeDesc" />}
+            >
               <Alert
                 type="info"
                 showIcon
@@ -179,53 +206,43 @@ export default function Settings() {
         </Row>
       </Form>
 
-      <Card title={intl.formatMessage({ id: 'settings.quick' })} style={{ marginTop: 16 }}>
-        <Space>
-          <Button
-            danger
-            onClick={() => {
-              Modal.confirm({
-                title: intl.formatMessage({ id: 'confirm.restart' }),
-                onOk: async () => {
-                  const toastKey = 'settings-restart';
-                  message.loading({ content: '正在重启服务...', key: toastKey, duration: 0 });
-                  try {
-                    await actionsApi.restart();
-                    message.success({ content: '重启成功', key: toastKey });
-                  } catch (e) {
-                    message.error({ content: e?.message || '重启失败', key: toastKey });
-                    throw e;
-                  }
-                },
-              });
-            }}
-          >
-            {intl.formatMessage({ id: 'settings.restart' })}
-          </Button>
-          <Button
-            onClick={() => {
-              Modal.confirm({
-                title: intl.formatMessage({ id: 'confirm.cleanup' }),
-                onOk: async () => {
-                  const toastKey = 'settings-cleanup-logs';
-                  message.loading({ content: '正在清理日志...', key: toastKey, duration: 0 });
-                  try {
-                    await actionsApi.cleanupLogs();
-                    message.success({ content: '日志清理完成', key: toastKey });
-                  } catch (e) {
-                    message.error({ content: e?.message || '清理日志失败', key: toastKey });
-                    throw e;
-                  }
-                },
-              });
-            }}
-          >
-            {intl.formatMessage({ id: 'settings.cleanup' })}
-          </Button>
-        </Space>
+      <Card
+        title={intl.formatMessage({ id: 'settings.quick' })}
+        extra={<SectionScopeHint intl={intl} messageId="settings.quickCardScopeDesc" />}
+        style={{ marginTop: 16 }}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          {intl.formatMessage({ id: 'settings.restartHint' })}
+        </Typography.Paragraph>
+        <Button
+          danger
+          onClick={() => {
+            Modal.confirm({
+              title: intl.formatMessage({ id: 'confirm.restart' }),
+              content: intl.formatMessage({ id: 'settings.restartHint' }),
+              onOk: async () => {
+                const toastKey = 'settings-restart';
+                message.loading({ content: '正在重启服务...', key: toastKey, duration: 0 });
+                try {
+                  await actionsApi.restart();
+                  message.success({ content: '重启成功', key: toastKey });
+                } catch (e) {
+                  message.error({ content: extractApiErrorMessage(e, '重启失败'), key: toastKey });
+                  throw e;
+                }
+              },
+            });
+          }}
+        >
+          {intl.formatMessage({ id: 'settings.restart' })}
+        </Button>
       </Card>
 
-      <Card title={intl.formatMessage({ id: 'settings.contact' })} style={{ marginTop: 16 }}>
+      <Card
+        title={intl.formatMessage({ id: 'settings.contact' })}
+        extra={<SectionScopeHint intl={intl} messageId="settings.contactCardScopeDesc" />}
+        style={{ marginTop: 16 }}
+      >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
           Author:{' '}
           <a href="https://github.com/slashhuang" target="_blank" rel="noreferrer" style={{ marginLeft: 6, fontWeight: 600 }}>

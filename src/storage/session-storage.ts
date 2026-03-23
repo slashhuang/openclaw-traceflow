@@ -11,11 +11,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import type { OpenClawSession } from '../openclaw/openclaw.service';
+import { formatParticipantSummary, isPlaceholderParticipantId } from '../common/participant-summary';
+import { isIndexTotalTokensUsableForContext } from '../common/session-token-context';
+import { readJsonlHeadTail, scanJsonlForMetadata } from '../openclaw/streaming-jsonl-reader';
+
+/** 参与者扫描逻辑升级时递增，使内存缓存命中后仍会重扫 transcript */
+const TRANSCRIPT_PARTICIPANT_SCAN_VERSION = 3;
 
 /**
  * 会话数据接口（KV 存储的 value）
  */
-export interface SessionData extends Omit<OpenClawSession, 'tokenUsageMeta'> {
+export interface SessionData extends OpenClawSession {
   /** 文件元数据（用于增量扫描） */
   fileMeta?: {
     size: number;
@@ -128,7 +134,7 @@ export class FileSystemSessionStorage implements SessionStorage {
     }
 
     try {
-      const agentDirs = fs.readdirSync(agentsDir);
+      const agentDirs = await fs.promises.readdir(agentsDir);
       
       for (const agent of agentDirs) {
         const sessionsDir = path.join(agentsDir, agent, 'sessions');
@@ -140,7 +146,7 @@ export class FileSystemSessionStorage implements SessionStorage {
         const sessionsMeta = await this.readSessionsMeta(this.stateDir, agent);
 
         // 扫描 JSONL 文件
-        const files = fs.readdirSync(sessionsDir);
+        const files = await fs.promises.readdir(sessionsDir);
         
         for (const file of files) {
           if (!file.endsWith('.jsonl') || file.includes('.reset.')) {
@@ -149,18 +155,22 @@ export class FileSystemSessionStorage implements SessionStorage {
 
           const sessionId = file.replace('.jsonl', '');
           const filePath = path.join(sessionsDir, file);
-          const stats = fs.statSync(filePath);
+          const stats = await fs.promises.stat(filePath);
           const sessionKey = sessionsMeta.get(sessionId)?.storeKey ?? `${agent}/${sessionId}`;
 
-          // 增量扫描：只读取新增/变更的文件
+          // 增量扫描：只读取新增/变更的文件（或缓存缺 messageCount / 文件大小时重扫）
           const cachedMeta = this.fileMetaCache.get(filePath);
-          if (cachedMeta && 
-              cachedMeta.size === stats.size && 
-              cachedMeta.mtimeMs === stats.mtimeMs &&
-              this.cache.has(sessionKey)) {
-            // 文件未变更，复用缓存
-            const cached = this.cache.get(sessionKey)!;
-            newCache.set(sessionKey, cached);
+          const cachedSession = this.cache.get(sessionKey);
+          if (
+            cachedMeta &&
+            cachedMeta.size === stats.size &&
+            cachedMeta.mtimeMs === stats.mtimeMs &&
+            cachedSession &&
+            cachedSession.messageCount != null &&
+            cachedSession.transcriptFileSizeBytes != null &&
+            cachedSession.transcriptParticipantScanVersion === TRANSCRIPT_PARTICIPANT_SCAN_VERSION
+          ) {
+            newCache.set(sessionKey, cachedSession);
             continue;
           }
 
@@ -228,7 +238,7 @@ export class FileSystemSessionStorage implements SessionStorage {
     }
 
     try {
-      const raw = fs.readFileSync(storePath, 'utf-8');
+      const raw = await fs.promises.readFile(storePath, 'utf-8');
       const store = JSON.parse(raw) as Record<string, any>;
 
       for (const [key, entry] of Object.entries(store)) {
@@ -254,6 +264,10 @@ export class FileSystemSessionStorage implements SessionStorage {
 
   /**
    * 读取单个会话文件
+   * 
+   * 性能优化：
+   * - 列表页模式：只读首行获取 userId，messageCount 等从 sessions.json 元数据获取
+   * - 详情页模式：使用流式首尾分片读取
    */
   private async readSessionFile(
     filePath: string,
@@ -272,106 +286,202 @@ export class FileSystemSessionStorage implements SessionStorage {
     stats?: fs.Stats,
   ): Promise<SessionData | null> {
     try {
-      const allLines = fs.readFileSync(filePath, 'utf-8').split('\n').filter((l) => l.trim());
+      // 列表页优化：优先使用 sessions.json 元数据，避免扫描 JSONL
+      const indexTotal = meta?.totalTokens;
+      const indexTotalUsable = isIndexTotalTokensUsableForContext(indexTotal, meta?.totalTokensFresh);
       
+      // 流式读取首行获取 userId 和基本信息
       let userId: string = 'unknown';
       let sessionData: Record<string, unknown> | null = null;
+      let messageCount: number | undefined;
+      let distinctSenders: string[] = [];
+      let scanResult: Awaited<ReturnType<typeof scanJsonlForMetadata>> | undefined;
       
-      // 读取首行获取 user
-      const firstLine = allLines[0];
-      if (firstLine) {
+      try {
+        // 只读首行获取 userId
+        const fd = await fs.promises.open(filePath, 'r');
         try {
-          sessionData = JSON.parse(firstLine) as Record<string, unknown>;
-          userId = (sessionData?.user as string)?.trim() || 'unknown';
-        } catch {
-          /* ignore */
-        }
-      }
-
-      // 若首行无 user，从前几条消息中提取 sender
-      if (userId === 'unknown' && allLines.length > 1) {
-        for (let i = 1; i < Math.min(allLines.length, 15); i++) {
-          try {
-            const entry = JSON.parse(allLines[i]);
-            const sender = this.extractSenderFromMessageEntry(entry);
-            if (sender) {
-              userId = sender;
-              break;
+          const headBuffer = Buffer.alloc(8192);
+          await fd.read(headBuffer, 0, 8192, 0);
+          const firstLine = headBuffer.toString('utf-8').split('\n')[0];
+          if (firstLine) {
+            try {
+              sessionData = JSON.parse(firstLine) as Record<string, unknown>;
+              // userId 可能需要在后续从 message 中提取
+            } catch {
+              /* ignore */
             }
-          } catch {
-            /* ignore */
           }
+        } finally {
+          await fd.close();
+        }
+        
+        // 如果 sessions.json 有 messageCount，直接用（避免扫描）
+        // 否则使用流式扫描获取（最多扫 1000 行）
+        if (stats) {
+          scanResult = await scanJsonlForMetadata(filePath, 1000);
+          if (scanResult.userId) {
+            userId = scanResult.userId;
+          }
+          messageCount = scanResult.messageCount;
+          distinctSenders = scanResult.distinctSenders;
+        }
+      } catch (error) {
+        this.logger.debug(`Failed to stream read ${filePath}: ${error.message}`);
+        // 降级：全量读取（仅小文件）
+        if (stats && stats.size < 1024 * 1024) {
+          const allLines = (await fs.promises.readFile(filePath, 'utf-8')).split('\n').filter((l) => l.trim());
+          if (allLines.length > 0) {
+            try {
+              sessionData = JSON.parse(allLines[0]) as Record<string, unknown>;
+            } catch {
+              /* ignore */
+            }
+          }
+          // 简化扫描
+          const senderSet = new Set<string>();
+          for (const line of allLines.slice(0, 100)) {
+            try {
+              const entry = JSON.parse(line);
+              const sender = this.extractSenderFromMessageEntry(entry);
+              if (sender && !senderSet.has(sender)) {
+                senderSet.add(sender);
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          distinctSenders = Array.from(senderSet);
+          messageCount = allLines.filter((l) => l.includes('"message"')).length;
         }
       }
 
-      // 解析 token usage
+      const participantSummary = formatParticipantSummary(distinctSenders);
+
+      const humanSenders = distinctSenders.filter((t) => !isPlaceholderParticipantId(t));
+      if (humanSenders.length >= 1 && isPlaceholderParticipantId(userId)) {
+        userId = humanSenders[0];
+      }
+
+      // 解析 token usage（列表口径：首行 tokenUsage + sessions.json 元数据）
       const parsedFromTranscript = this.parseTokenUsage(sessionData?.tokenUsage);
-      const totalTokens = meta?.totalTokens;
       const contextTokens = meta?.contextTokens;
       const model = meta?.model;
-      
+
       const limit = contextTokens ?? parsedFromTranscript?.limit;
       const input = meta?.inputTokens ?? parsedFromTranscript?.input ?? 0;
       const output = meta?.outputTokens ?? parsedFromTranscript?.output ?? 0;
-      
-      const tokenUsage = totalTokens != null && limit != null
-        ? {
-            input,
-            output,
-            total: totalTokens,
-            limit,
-            utilization: Math.round((totalTokens / limit) * 100),
-          }
-        : parsedFromTranscript
-          ? { ...parsedFromTranscript, input, output }
-          : { input, output, total: totalTokens ?? 0, limit };
 
-      // 扫描 usage.cost
-      let hasCostField = false;
-      let sumCostInput = 0;
-      let sumCostOutput = 0;
-      let sumCostCacheRead = 0;
-      let sumCostCacheWrite = 0;
-      let sumCostTotal = 0;
+      const firstLineHasTotals =
+        !!parsedFromTranscript &&
+        ((parsedFromTranscript.input ?? 0) + (parsedFromTranscript.output ?? 0) > 0 ||
+          (typeof parsedFromTranscript.total === 'number' && parsedFromTranscript.total > 0));
 
-      for (const line of allLines) {
-        if (!line.includes('"cost"')) continue;
-        try {
-          const entry = JSON.parse(line) as any;
-          const usage = entry?.message?.usage ?? entry?.tokenUsage;
-          if (!usage || typeof usage.totalTokens !== 'number') continue;
-          const cost = usage?.cost;
-          if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
-            hasCostField = true;
-            sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
-            sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
-            sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
-            sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
-            sumCostTotal += cost.total;
-          }
-        } catch {
-          /* ignore */
+      let resolvedTotal: number | undefined;
+      let contextUtilizationReliable = false;
+
+      if (firstLineHasTotals) {
+        resolvedTotal =
+          parsedFromTranscript!.total ??
+          (parsedFromTranscript!.input ?? 0) + (parsedFromTranscript!.output ?? 0);
+        contextUtilizationReliable = typeof limit === 'number' && limit > 0;
+      } else if (indexTotalUsable && typeof indexTotal === 'number') {
+        resolvedTotal = indexTotal;
+        contextUtilizationReliable = typeof limit === 'number' && limit > 0;
+      } else {
+        const sumIo = input + output;
+        if (sumIo > 0) {
+          resolvedTotal = sumIo;
+          contextUtilizationReliable = false;
+        } else {
+          resolvedTotal = undefined;
+          contextUtilizationReliable = false;
         }
       }
 
-      const usageCost = hasCostField
-        ? {
-            input: sumCostInput,
-            output: sumCostOutput,
-            cacheRead: sumCostCacheRead,
-            cacheWrite: sumCostCacheWrite,
-            total: sumCostTotal,
-          }
-        : undefined;
+      const tokenUsage =
+        typeof limit === 'number' &&
+        limit > 0 &&
+        typeof resolvedTotal === 'number'
+          ? {
+              input,
+              output,
+              total: resolvedTotal,
+              limit,
+              utilization: contextUtilizationReliable
+                ? Math.round((resolvedTotal / limit) * 100)
+                : undefined,
+              contextUtilizationReliable,
+            }
+          : parsedFromTranscript
+            ? {
+                ...parsedFromTranscript,
+                input,
+                output,
+                total: resolvedTotal ?? parsedFromTranscript.total ?? input + output,
+                limit: limit ?? parsedFromTranscript.limit,
+                contextUtilizationReliable,
+              }
+            : {
+                input,
+                output,
+                total: resolvedTotal ?? 0,
+                limit,
+                contextUtilizationReliable,
+              };
 
-      // 推断 systemSent
+      const totalTokens =
+        indexTotalUsable && typeof indexTotal === 'number'
+          ? indexTotal
+          : typeof resolvedTotal === 'number'
+            ? resolvedTotal
+            : undefined;
+
+      // 扫描 usage.cost（流式扫描结果中已包含）
+      const usageCost = scanResult?.usageCost || undefined;
+
+      // 推断 systemSent（流式扫描无法获取，设为 undefined）
       let systemSent = meta?.systemSent;
-      if (systemSent === undefined && userId === 'unknown' && allLines.length > 1) {
-        systemSent = this.inferSystemSentFromTranscript(allLines);
-      }
 
       const sessionKey = meta?.storeKey ?? `${agent}/${sessionId}`;
-      const actualStats = stats || fs.statSync(filePath);
+      const actualStats = stats || await fs.promises.stat(filePath);
+
+      // transcriptUsageObserved 从 scanResult 获取
+      const transcriptUsageObserved = scanResult?.totalTokens != null;
+
+      const storeTokenFieldsPresent =
+        typeof meta?.totalTokens === 'number' ||
+        typeof meta?.inputTokens === 'number' ||
+        typeof meta?.outputTokens === 'number';
+
+      let tokenUsageSource: NonNullable<OpenClawSession['tokenUsageMeta']>['source'] = 'unknown';
+      if (firstLineHasTotals && storeTokenFieldsPresent) {
+        tokenUsageSource = 'mixed';
+      } else if (firstLineHasTotals) {
+        tokenUsageSource = 'transcript';
+      } else if (storeTokenFieldsPresent) {
+        tokenUsageSource = 'sessions.json';
+      }
+
+      const transcriptPathForMeta =
+        this.stateDir && filePath.startsWith(this.stateDir)
+          ? filePath.slice(this.stateDir.length + 1).replace(/\\/g, '/')
+          : filePath;
+
+      const tokenUsageMeta: OpenClawSession['tokenUsageMeta'] = {
+        source: tokenUsageSource,
+        transcriptUsageObserved,
+        storeTokenFieldsPresent,
+        totalTokensFresh: meta?.totalTokensFresh,
+        transcriptPath: transcriptPathForMeta,
+        stateRootAbsolute: this.stateDir || undefined,
+        sessionLogAbsolutePath: filePath,
+        sessionsIndexRelativePath:
+          this.stateDir && agent
+            ? path.join('agents', agent, 'sessions', 'sessions.json').replace(/\\/g, '/')
+            : undefined,
+        sessionLogFileSizeBytes: actualStats.size,
+      };
 
       return {
         sessionKey,
@@ -386,6 +496,12 @@ export class FileSystemSessionStorage implements SessionStorage {
         model,
         tokenUsage,
         usageCost,
+        messageCount,
+        transcriptFileSizeBytes: actualStats.size,
+        tokenUsageMeta,
+        transcriptParticipantScanVersion: TRANSCRIPT_PARTICIPANT_SCAN_VERSION,
+        ...(humanSenders.length > 0 ? { participantIds: humanSenders } : {}),
+        ...(participantSummary ? { participantSummary } : {}),
         fileMeta: {
           size: actualStats.size,
           mtimeMs: actualStats.mtimeMs,
@@ -418,7 +534,10 @@ export class FileSystemSessionStorage implements SessionStorage {
     if (typeof msg.senderLabel === 'string' && msg.senderLabel.trim()) {
       return msg.senderLabel.trim();
     }
-    
+    if (typeof msg.sender === 'string' && msg.sender.trim()) {
+      return msg.sender.trim();
+    }
+
     if (msg.role !== 'user') return null;
     
     const content = msg.content;
@@ -452,6 +571,20 @@ export class FileSystemSessionStorage implements SessionStorage {
       try {
         const obj = JSON.parse(senderBlockMatch[1]);
         const v = obj?.label || obj?.name || obj?.username || obj?.e164 || obj?.id;
+        if (typeof v === 'string' && v.trim()) return v.trim();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // Conversation info 块（与 openclaw.service extractSenderFromMessageContent 对齐）
+    const convBlockMatch = trimmed.match(
+      /Conversation info \(untrusted metadata\):\s*\n```json\s*\n([\s\S]*?)\n```/
+    );
+    if (convBlockMatch) {
+      try {
+        const obj = JSON.parse(convBlockMatch[1]);
+        const v = obj?.sender;
         if (typeof v === 'string' && v.trim()) return v.trim();
       } catch {
         /* ignore */

@@ -21,9 +21,4 @@ export class ActionsController {
   ): Promise<{ success: boolean; message: string }> {
     return this.actionsService.updateConcurrency(maxConcurrent);
   }
-
-  @Post('cleanup-logs')
-  async cleanupLogs(): Promise<{ success: boolean; message: string }> {
-    return this.actionsService.cleanupLogs();
-  }
 }

@@ -22,10 +22,13 @@ export default {
   'gateway.disconnected': 'Gateway disconnected',
   'gateway.healthError': 'Failed to fetch gateway health. Please try again later.',
   'header.health': 'Health',
+  'header.healthPollHint': 'Header health status refreshes every {seconds}s',
   'header.gateway': 'Gateway',
   'header.github': 'GitHub',
   'setup.wizard.title': 'OpenClaw TraceFlow',
   'setup.wizard.subtitle': 'First-time setup',
+  'setup.wizardScopeDesc':
+    'The wizard only writes Gateway settings and access mode via POST /api/setup/configure—the same store as Settings; it does not change remote OpenClaw data.',
   'setup.step1.title': 'Step 1: Connect Gateway',
   'setup.step1.desc': 'Enter Gateway URL and test connection.',
   'setup.step2.title': 'Step 2: Access control',
@@ -56,10 +59,20 @@ export default {
   'common.detail': 'Detail',
   'common.kill': 'Kill',
   'common.retry': 'Retry',
+  'common.statsScopeHint': 'Statistical scope',
   'common.back': 'Back to list',
   'common.all': 'All',
   'common.yes': 'OK',
   'settings.title': 'Settings',
+  'settings.pageScopeDesc':
+    'TraceFlow local configuration (GET/POST /api/setup/*). Only affects how this app connects to Gateway and protects config APIs—not OpenClaw business data.',
+  'settings.gatewayCardScopeDesc':
+    'Gateway URL / token / password for test & save; optional State/Workspace paths for local session/transcript resolution.',
+  'settings.accessCardScopeDesc':
+    'Access mode protects configuration APIs only; browsing dashboard/sessions/logs is usually unrestricted (see the info alert).',
+  'settings.quickCardScopeDesc':
+    'Runs `openclaw gateway restart` on this machine (local Gateway process managed by the CLI).',
+  'settings.contactCardScopeDesc': 'Author and repository links (not metrics).',
   'settings.gateway': 'Gateway',
   'settings.access': 'Access control',
   'settings.access.scope': 'These modes only protect configuration APIs (save settings, test connection, generate token). They do not affect dashboard/session/log viewing.',
@@ -67,7 +80,8 @@ export default {
   'settings.access.tokenHelpDesc': 'When calling configuration APIs, include this header: Authorization: Bearer <your token>',
   'settings.quick': 'Quick actions',
   'settings.restart': 'Restart Gateway',
-  'settings.cleanup': 'Cleanup logs',
+  'settings.restartHint':
+    'Runs on this machine: `openclaw gateway restart` (set OPENCLAW_CLI to override the binary). Restarts only the local Gateway process managed by that CLI. If the Gateway URL above points to another host, this button does not restart it.',
   'settings.contact': 'Author & project links',
   'settings.testConn': 'Test connection',
   'settings.saveCfg': 'Save',
@@ -78,21 +92,24 @@ export default {
   'settings.stateDir': 'State dir (optional)',
   'settings.workspaceDir': 'Workspace dir (optional)',
   'confirm.restart': 'Restart Gateway? Active sessions may be interrupted.',
-  'confirm.cleanup': 'Delete logs older than 7 days?',
   'confirm.killSession': 'Kill this session?',
   'dashboard.title': 'Dashboard',
+  'dashboard.titleDesc':
+    'Data comes from TraceFlow’s periodic dashboard overview: Gateway health, local session cache, metric snapshots, and log excerpts. Use the ℹ icons on the summary cards and section headers for each block’s statistical scope.',
+  'dashboard.buildLabel': 'Build: ',
+  'dashboard.buildGit': 'Git ',
   'dashboard.systemStatus': 'Status',
   'dashboard.systemStatusDesc': 'Overall OpenClaw service status',
   'dashboard.totalSessions': 'Current session count',
-  'dashboard.totalSessionsDesc': 'Number of sessions in the system (active + idle + completed), excluding archived',
+  'dashboard.totalSessionsDesc': 'Number of sessions in the system (active + idle + ended), excluding archived',
   'dashboard.active': 'Active',
   'dashboard.activeDesc': 'Sessions with recent message activity (e.g. within 5 minutes)',
   'dashboard.idle': 'Idle',
   'dashboard.idleDesc': 'Sessions with no messages for over 5 minutes',
   'dashboard.archived': 'Archived',
   'dashboard.archivedDesc': 'When a user starts a new conversation, the previous one is archived; each archive = one new conversation started',
-  'dashboard.completed': 'Completed',
-  'dashboard.completedDesc': 'Sessions with ended conversations',
+  'dashboard.completed': 'Ended',
+  'dashboard.completedDesc': 'Last message is agent:final (this turn has ended)',
   'dashboard.latency': 'Latency (1h)',
   'dashboard.latencyDesc': 'P50/P95/P99 percentiles of API response time, Count = sample size',
   'dashboard.latencyP50': 'P50',
@@ -107,26 +124,71 @@ export default {
   'dashboard.tokenSummaryActive': 'Token summary (active)',
   'dashboard.tokenSummaryArchived': 'Token summary (archived)',
   'dashboard.tokenActive': 'Active',
-  'dashboard.tokenActiveDesc': 'Active + idle sessions, latest per session',
+  'dashboard.tokenActiveDesc':
+    'Active + idle sessions; latest row per session in the time window. Sourced from local metrics (~30s snapshots of OpenClaw session tokenUsage). If sessions.json marks totalTokensFresh:false, the index may be out of sync with the current turn—input/output/total here may show 0 or be low; that does not prove zero usage.',
   'dashboard.tokenArchived': 'Archived',
-  'dashboard.tokenArchivedDesc': 'Token consumption from previous conversations after the user started new ones',
+  'dashboard.tokenArchivedDesc':
+    'Separate from “Active” on the left: this does not include the current ongoing turn.\n\nIt only sums prior turns that were written to *.jsonl.reset.* when a new chat started—one snapshot per file (last line with usage, same fields OpenClaw recorded), summed for epochs whose reset/archive time falls in the selected window. Stays near zero if you rarely start new chats or reset files lack usage lines.',
   'dashboard.tokenInput': 'Input',
   'dashboard.tokenInputDesc': 'Tokens sent to the model (user message + context)',
   'dashboard.tokenOutput': 'Output',
   'dashboard.tokenOutputDesc': 'Tokens generated by the model',
   'dashboard.tokenTotal': 'Total',
-  'dashboard.tokenTotalDesc': 'Input + Output',
+  'dashboard.tokenTotalDesc':
+    'Input + Output. Same metrics pipeline as above; when totalTokensFresh:false, active totals may be untrustworthy—use session transcript for ground truth.',
+  'dashboard.tokenDualTrackRecordedCard': 'Token summary — recorded (metrics)',
+  'dashboard.tokenDualTrackRecordedDesc':
+    'Same as Token monitor: GET /api/metrics/token-summary for active/archived input, output, and totals in the time window.',
+  'dashboard.tokenDualTrackEstimatedCard': 'Token summary — log estimate (heuristic)',
+  'dashboard.tokenDualTrackEstimatedDesc':
+    'Aggregates stale-index sessions using live log-byte heuristics; with per-key metrics, estimates split into active/archived buckets like the chart below.',
+  'dashboard.tokenSummaryChartTitle': 'Token summary — recorded vs estimate (full range)',
+  'dashboard.tokenSummaryChartDesc':
+    'Time window = all rows in local metrics (same as GET /dashboard/overview with a very large timeRangeMs). X-axis: “Active” = SUM of latest token-% rows per session; “Archived” = SUM of archived-% rows from *.jsonl.reset.*. When archived is often zero, see the banner below and the second ℹ. Grouped bars: recorded total, In, Out, est.(log). Not a per-minute history chart.',
+  'dashboard.tokenMetricsTraceDoc':
+    '[Active]\nRecorded: token_usage rows with id LIKE \'token-%\', latest per session_id in the window, then SUM.\nCollection: ~30s snapshots for sessions from listSessions() that have tokenUsage.\n\n[Archived]\nRecorded: id LIKE \'archived-%\', parsed from reset JSONL (prior turn), SUM in window.\nIf you rarely /new, reset files lack usage lines, or no snapshot in the window, archived recorded = 0 and the right group looks empty.\n\n[Est.(log)]\nOnly sessions with totalTokensFresh:false; log-byte heuristic bucketed by token-usage-by-session-key active vs archived.\n\nWorked example + JSON: openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json.',
+  'dashboard.tokenArchivedZeroBannerTitle': 'Archived recorded totals are zero',
+  'dashboard.tokenArchivedZeroBannerDesc':
+    'Archived numbers come from archived-* rows fed by *.jsonl.reset.* (prior turn before a new chat), with snapshots in the time window. If you rarely start a new chat, reset files have no usage lines, or collection has not run, recorded archived stays 0 and the right-hand bars look empty.\n\nCurrent-turn usage is in “Active” on the left.\n\nArchived-side log estimate sum in this environment: {estArchived} (stale-index sessions only, bucketed per key); est.(log) bars can still be near zero.',
+  'dashboard.tokenFixtureDocLine':
+    'Reference sample: openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json',
+  'dashboard.tokenCategoryActive': 'Active',
+  'dashboard.tokenCategoryArchived': 'Archived',
+  'dashboard.tokenChartSeriesRecorded': 'Recorded total',
+  'dashboard.tokenChartSeriesRecordedIn': 'Recorded · In',
+  'dashboard.tokenChartSeriesRecordedOut': 'Recorded · Out',
+  'dashboard.tokenChartSeriesEstimated': 'Est.(log)',
+  'dashboard.tokenIoFootnote':
+    'Recorded In/Out — active: In {ai} / Out {ao}; archived: In {ri} / Out {ro} (same metrics pipeline).',
+  'dashboard.estimatedOrphanLabel': 'Estimate unbucketed',
+  'dashboard.estimatedOrphanHint':
+    'Sum of log estimates for stale-index sessions with no metrics row or zero active & archived—excluded from the two “Est.(log)” bars.',
+  'metrics.tokenUsageSourceTitle': 'Token metrics: data source & trust',
+  'metrics.tokenUsageSourceNote':
+    'Figures for “active / archived” come from TraceFlow’s local data/metrics.db, table token_usage. Active: ~every 30s we snapshot each session’s tokenUsage from OpenClaw’s session list. Archived: parsed from *.jsonl.reset.* under the OpenClaw state directory.\n\nWhen OpenClaw marks totalTokensFresh:false in the index, context totals may not match the current turn—reported values can be 0 or too low. That does not mean no tokens were used. Check Session detail → transcript, or wait for the index/Gateway to refresh.',
+  'tokenMetricHint.popoverTitle': 'About token numbers',
+  'tokenMetricHint.zeroExtra':
+    'Zero or missing: often the index is out of sync (totalTokensFresh:false), metrics hasn’t captured a snapshot yet, or usage is truly zero. Compare with the transcript in Session detail.',
+  'tokenMetricHint.nonZeroAccuracy':
+    'Non-zero numbers can still come from sampled or slightly stale index data and may differ from transcript or billing.',
+  'tokenMetricHint.genericContext':
+    'Session tokens come from OpenClaw’s merged view and TraceFlow’s local metrics. Hover or click the icon for the full data-source note.',
   'dashboard.sessionPie': 'Session distribution',
-  'dashboard.sessionPieDesc': 'Proportion of current sessions, active, idle, completed, archived',
-  'dashboard.toolsTop': 'Top tools',
-  'dashboard.toolsTopDesc': 'Scope: tool call count from current sessions, top 8 by tool name',
+  'dashboard.sessionPieDesc': 'Proportion of current sessions, active, idle, ended, archived',
+  'dashboard.skillsTop': 'Skills Top 5',
+  'dashboard.skillsTopDesc':
+    'Scope: read calls to skills/*/SKILL.md in each session’s live transcript (*.jsonl), top 5 by skill name; archived turns (*.jsonl.reset.*) are not included',
+  'dashboard.skillsToolsScopeHint': 'Excludes archived turns; live *.jsonl transcript only',
+  'dashboard.toolsTop': 'Tool calls Top 5',
+  'dashboard.toolsTopDesc':
+    'Scope: tool calls in each session’s live transcript (*.jsonl), top 5 by tool name; archived turns (*.jsonl.reset.*) are not included',
   'dashboard.tokenTop': 'Top sessions by token',
   'dashboard.tokenTopActive': 'Active token top 10',
   'dashboard.tokenTopActiveDesc': 'Top 10 current sessions by token usage in 24h',
   'dashboard.tokenTopArchived': 'Archived token top 10',
   'dashboard.tokenTopArchivedDesc': 'Top 10 archived sessions by token usage in 24h',
   'dashboard.colType': 'Type',
-  'dashboard.colTypeDesc': 'Session type: user, heartbeat, cron, Wave',
+  'dashboard.colTypeDesc': 'Session type: user, main bucket (agent:*:main), heartbeat, cron, Wave, …',
   'dashboard.colUser': 'User',
   'dashboard.colUserDesc': 'Session owner or identifier',
   'dashboard.colTotal': 'Total',
@@ -136,7 +198,8 @@ export default {
   'dashboard.colOut': 'Out',
   'dashboard.colOutDesc': 'Output tokens (model generated)',
   'dashboard.colPct': '%',
-  'dashboard.colPctDesc': 'Context utilization (used / context limit)',
+  'dashboard.colPctDesc':
+    'Context utilization (used / context limit). When the index marks totalTokensFresh:false, TraceFlow hides a trustworthy utilization percentage.',
   'dashboard.colSession': 'Session',
   'dashboard.colSessionDesc': 'Session key',
   'dashboard.colToken': 'Token',
@@ -144,11 +207,12 @@ export default {
   'dashboard.colArchivedCount': 'Count',
   'dashboard.colArchivedCountDesc': 'Times this session was archived (user started new conversation)',
   'dashboard.colStatus': 'Status',
-  'dashboard.colStatusDesc': 'active, idle, completed',
+  'dashboard.colStatusDesc': 'active, idle, completed (ended turn — agent:final)',
   'dashboard.colLast': 'Last',
   'dashboard.colLastDesc': 'Last activity time',
   'dashboard.gatewayContext': 'Context',
-  'dashboard.gatewayContextDesc': 'Used tokens / context limit, (utilization %)',
+  'dashboard.gatewayContextDesc':
+    'Gateway-reported used tokens / context limit (may differ from TraceFlow’s “utilization” column, which hides % when the index is unreliable).',
   'dashboard.gatewayCompactions': 'Compactions',
   'dashboard.gatewayCompactionsDesc': 'Context compaction count (when exceeding limit)',
   'dashboard.gatewayQueueDepth': 'Queue depth',
@@ -160,34 +224,147 @@ export default {
   'dashboard.healthCpu': 'CPU',
   'dashboard.healthCpuDesc': 'Gateway process CPU usage',
   'dashboard.recentSessions': 'Recent sessions',
-  'dashboard.recentSessionsDesc': 'Latest 5 sessions in the system',
+  'dashboard.recentSessionsDesc':
+    'Latest 10 sessions by last activity. “Recorded” is merged usage + utilization; “Est.(log)” is a log-size heuristic. Hover Status / Archived headers for definitions.',
   'dashboard.viewAll': 'View all',
   'dashboard.health': 'Health',
   'dashboard.healthDesc': 'Gateway connection, memory, CPU usage',
+  'dashboard.healthRefreshEvery': 'Refreshes every {seconds}s',
   'dashboard.recentLogs': 'Recent logs',
   'dashboard.recentLogsDesc': 'Recent server logs with live refresh',
   'dashboard.fullLogs': 'Full logs',
   'dashboard.gatewayStatus': 'Gateway status',
   'dashboard.gatewayStatusDesc': 'OpenClaw Gateway connection, version, current session context',
+  'dashboard.gatewayStatusSourceMerged':
+    'Data sources: model, tokens, context, compactions — local sessions.json (aligned with health session key). Version & queue — Gateway health (WebSocket RPC).',
+  'dashboard.gatewayStatusSourceHealthNoRow':
+    'Data sources: stateDir is set but no matching row in sessions.json; model/context may be placeholders. Session key & time — health; version & queue — health RPC.',
+  'dashboard.gatewayStatusSourceHealthNoStateDir':
+    'Data sources: no local stateDir (common when only a remote Gateway is configured); model/context are health placeholders. Version & queue — health RPC. Set OPENCLAW_STATE_DIR or use a local Gateway to merge sessions.json.',
+  'dashboard.gatewayStatusSourceTooltip':
+    'TraceFlow uses Gateway health for the session key, time, and queue (no operator.read required). When the OpenClaw state directory is resolved, the same session key is used to read agents/…/sessions/sessions.json for model and token fields.',
+  'dashboard.overviewFetchFailed':
+    'Could not load dashboard overview (check TraceFlow backend, network, and /api proxy)',
+  'dashboard.overviewStaleTitle': 'Data may be out of date',
+  'dashboard.overviewStaleDetail':
+    'This refresh failed; still showing the last successful load. Reason: {detail} Try again later or use Refresh.',
+  'dashboard.overviewFirstLoadFailedTitle': 'Failed to load dashboard data',
+  'dashboard.overviewRetry': 'Refresh',
   'sessions.title': 'Sessions',
+  'sessions.pageScopeDesc':
+    'Data from GET /api/sessions (filter + paging match the request). “Recorded” and “Est.(log)” are separate columns; other columns align with Dashboard “Recent sessions”; hover headers for scope.',
   'sessions.sortHint': 'Click header to sort',
   'sessions.empty': 'No sessions',
   'sessions.filter.active': 'Active',
   'sessions.filter.idle': 'Idle',
-  'sessions.filter.completed': 'Completed',
+  'sessions.filter.completed': 'Ended',
   'sessions.filter.failed': 'Failed',
+  'sessions.filter.archived': 'Archived',
+  'sessions.filter.staleIndex': 'Stale index',
+  'sessions.staleIndexBadge': 'Stale index',
+  'sessions.estimatedTokensFromLog': '≈ {n} (est.)',
+  'sessions.estimatedTokensDisclaimer':
+    'Heuristic: transcript .jsonl size ÷ divisor (default 4 bytes ≈ 1 token; override with TOKEN_ESTIMATE_BYTES_DIVISOR). Not billing-accurate or tokenizer-exact; use when totalTokensFresh:false or usage is zero.',
+  'sessions.status.active': 'Active',
+  'sessions.status.idle': 'Idle',
+  'sessions.status.completed': 'Ended',
+  'sessions.status.failed': 'Failed',
   'sessions.column.session': 'Session',
+  'sessions.chatKind.group': 'Group',
+  'sessions.chatKind.channel': 'Channel',
+  'sessions.chatKind.direct': 'DM',
+  'sessions.chatKind.tooltip':
+    'Inferred from :group: / :channel: / DM routing in sessionKey (complements channel labels like Feishu / heartbeat).',
   'sessions.column.status': 'Status',
-  'sessions.column.user': 'User',
+  'sessions.column.statusTooltip':
+    'Inferred from the transcript: active / idle / ended / failed. “Ended” means the last message is agent:final (this turn finished). This is not the same as the “Archived” column—Archived counts how many times a new chat was started for this thread (writes to *.jsonl.reset.*).',
+  'sessions.column.user': 'Participant',
+  'sessions.column.participantTooltip':
+    'One row = one conversation thread in OpenClaw; sessionKey encodes routing (DM / group / channel). “Main session” is the default DM bucket (agent:*:main) when dmScope is main; it is not the same as the heartbeat job. Identity shown here comes from the session index (e.g. Feishu open_id). Use with the channel/kind tags in the Session column.',
+  'sessions.detailParticipantLabel': 'Participant',
+  'session.participantsListTitle': 'All participants ({n})',
+  'session.participantsGroupHint':
+    'Sender identities parsed from the transcript (deduped by first appearance). In group chats this may not match the full channel roster.',
   'sessions.column.lastActive': 'Last active',
   'sessions.column.duration': 'Duration',
+  'sessions.column.messages': 'Messages',
+  'sessions.column.fileSize': 'File size',
   'sessions.column.archived': 'Archived',
+  'sessions.column.archivedTooltip':
+    'How many times a new conversation was started for this thread, which archives the previous turn into *.jsonl.reset.* (one count per new chat). This differs from Status “Ended”: Archived is historical epochs from new chats; Ended only means the current transcript ends with agent:final.',
+  'sessions.archivedCellTooltip': 'Open the full archived-turns list (paginated)',
+  'sessions.archivesTitle': 'Archived turns',
+  'sessions.archivesPageScopeDesc':
+    'GET /api/sessions/:id/archive-epochs. Each row is one *.jsonl.reset.* epoch; In/Out/Total are token usage parsed from that file.',
+  'sessions.archivesIntro':
+    'Each row is one *.jsonl.reset.* epoch (prior conversation before /new). Open a row to view that transcript in session detail.',
+  'sessions.archivesEmpty': 'No archived turns',
+  'sessions.archivesLoadError': 'Failed to load archived turns',
+  'sessions.archivesColumnTime': 'Archived at',
+  'sessions.archivesColumnIn': 'Input',
+  'sessions.archivesColumnOut': 'Output',
+  'sessions.archivesColumnTotal': 'Total tokens',
+  'sessions.archivesRowAction': 'Open',
+  'sessions.archivesBackSessions': 'All sessions',
+  'sessions.archivesBackSession': 'Session overview',
+  'sessions.archivesTotalFmt': '{n} rows',
+  'sessions.archivedCountFmt': '{count}×',
+  'sessions.statusVsArchivedHint':
+    'Note: Status = progress of the current turn (“Ended” = agent:final). Archived column = number of new-chat epochs (*.jsonl.reset.*) for this session—they are different concepts.',
   'sessions.column.tokens': 'Tokens',
   'sessions.column.util': 'Utilization',
+  'sessions.column.tokensUtilHint':
+    'Tokens column shows the best-effort usage figure; utilization is “used / context limit”. If OpenClaw marks totalTokensFresh:false in sessions.json, the context total is not aligned with the latest run—TraceFlow hides a trustworthy utilization (shown as * or —).',
+  'sessions.column.recordedTokens': 'Recorded',
+  'sessions.column.recordedTokensTooltip':
+    'Merged totalTokens and utilization vs context limit; * when totalTokensFresh:false.',
+  'sessions.column.estimatedLog': 'Est.(log)',
+  'sessions.column.estimatedLogTooltip': 'Heuristic from live log bytes—not billing; only when stale index and estimate is shown.',
+  'sessions.tokensTotalUnreliableHint':
+    'This figure comes from transcript sums or partial fields; it is **not** OpenClaw’s confirmed “current context window” total when the index may be stale (totalTokensFresh:false).',
+  'sessions.utilUnreliableHint':
+    'Cannot compute a reliable “used / context limit” from current data; wait for the Gateway to persist a fresh total or inspect usage in the session log.',
   'sessions.column.actions': 'Actions',
   'session.detail': 'Session detail',
+  'session.detailPageScopeDesc':
+    'GET /api/sessions/:id. Content reflects the selected transcript (live *.jsonl or an archived file when resetTimestamp is set).',
+  'session.transcriptPanelTitle': 'Transcript',
+  'session.transcriptPanelScopeDesc':
+    'Tabs (Messages / Tools / Events / Skills) all use the same transcript version, reverse-chronological (newest at top).',
+  'session.tokenCardTitleDual': 'Token (valid data / estimate)',
+  'session.tokenValidDataLabel': 'Valid data (recorded)',
+  'session.tokenEstimateLabel': 'Token estimate (log)',
+  'session.tokenInOutInline': 'In {inTok} · Out {outTok}',
+  'session.tokenCardScopeDesc':
+    'Same dual-track as the session list: **valid data** = merged tokenUsage from the detail API (incl. In/Out); **estimate** = log-byte heuristic when the index is stale. The bar shows In vs Out composition.',
+  'session.invokedSkillsCardScopeDesc':
+    'Aggregated from read calls to skills/…/SKILL.md in this transcript (same inference as Skills page Calls).',
+  'session.transcriptCurrent': 'Current conversation',
+  'session.archiveTranscriptLabel': 'Transcript',
+  'session.archiveEpochOption': '{time} · {tokens} tok',
+  'session.viewingArchiveBanner':
+    'You are viewing an archived turn (content saved to *.jsonl.reset.* before a new chat). Token figures reflect this file, not the live thread.',
+  'session.archivesListLink': 'All archived turns (list)',
   'session.messages': 'Messages',
+  'session.messageCount': 'Message count',
+  'session.messageCountTooltip':
+    'Counts rows that contain a conversation `message` field (e.g. user / assistant / toolResult). The JSONL line count in “Parse scope” is all non-empty lines in the file, including metadata such as session, model changes, and custom events—so “Message count” is usually lower; that is expected.',
   'session.tools': 'Tool calls',
+  'session.msgRoleFilterLabel': 'Kind',
+  'session.msgRoleFilterAll': 'All',
+  'session.msgRoleFilterTooltip':
+    'Filter by display label: user/assistant from JSONL role; boot matches boot-style content (including assistant replies). Use All for heartbeat/cron.',
+  'session.detailSearchPlaceholder': 'Search… (matches content, role, tool names…)',
+  'session.detailSortHint': 'Newest first',
+  'session.detailSortSubline':
+    'Sorted by time with the newest at the top; scroll down for older entries.',
+  'session.msgExpandTooltip': 'Click the row or arrow to expand',
+  'session.msgCollapseTooltip': 'Click the arrow to collapse',
+  'session.detailSortTooltip':
+    'Messages, tool calls, events, and Skills tabs are all reverse-chronological: newest at the top, older below.',
+  'session.detailNewestBadge': 'Latest',
+  'session.detailSearchMatch': 'Showing {n} of {total} matches',
+  'session.toolCalledAt': 'Called at',
   'session.toolArgs': 'Arguments',
   'session.toolOutput': 'Output',
   'session.events': 'Events',
@@ -195,20 +372,64 @@ export default {
   'session.loadError': 'Load failed',
   'session.invokedSkills': 'Skills invoked (inferred from read path)',
   'session.skills': 'Skills',
+  'session.transcriptLogSize': 'Session log file size',
+  'session.transcriptParseScope': 'Parse scope',
+  'session.transcriptParseFullDetail':
+    'Full file: {lines} non-empty JSONL lines. “Message count” only includes rows with a conversation message—usually fewer than JSONL lines (the gap is mostly metadata rows).',
+  'session.transcriptParseHeadTailDetail':
+    'Head/tail windows: {head} JSONL lines (head) + {tail} (tail); messages/tools reflect the tail window only',
+  'session.transcriptHeadTailAlertTitle': 'Large log loaded with head/tail strategy',
+  'session.transcriptHeadTailAlertDesc':
+    'This session log is about {size} and exceeds the server full-parse threshold. Only the first {head} and last {tail} non-empty JSONL lines were parsed; the middle was not loaded—lists are not the full history.',
+  'session.loadFullTranscript': 'Load full transcript',
+  'session.loadFullTranscriptTitle': 'Load full transcript?',
+  'session.loadFullTranscriptContent': 'This session log is about {size}. Loading the full content may take a while.',
+  'common.loadFull': 'Load full',
+  'session.loadingFull': 'Loading full transcript...',
+  'session.loadedFull': 'Loaded. Reloading page.',
   'logs.title': 'Live logs',
   'logs.connected': 'Live',
   'logs.disconnected': 'Disconnected',
   'logs.clear': 'Clear',
   'logs.scrollBottom': 'Scroll to bottom',
   'logs.filterLevel': 'Level',
+  'logs.pageScopeDesc':
+    'Initial lines from GET /api/logs; then Socket.IO `logs:new` appends. Clear only clears the in-browser buffer.',
+  'logs.cardScopeDesc': 'Shows streamed and recently fetched log lines; level filter is client-side.',
   'skills.title': 'Skills',
   'skills.subtitle': 'Skill × Tool relationship, usage, zombie & duplicate skills',
+  'skills.pageScopeDesc':
+    'Data from GET /api/skills/* (usage, system-prompt/analysis, usage-by-user, skill-tool-usage). Each block’s ℹ explains that section’s scope.',
+  'skills.kpiSectionTitle': 'Summary',
+  'skills.kpiRowScopeDesc':
+    'Total/Enabled/Zombie/Dup are derived from the skills array: Zombie = unused for 30d, Dup = duplicateWith is non-empty.',
+  'skills.insightChartScopeDesc':
+    'Dimension comes from each skill object; only entries with value > 0, top 20, descending.',
+  'skills.top10ChartScopeDesc': 'Top 10 by callCount (callCount > 0 only).',
+  'skills.userDistChartScopeDesc':
+    'From getUsageByUser: one row per skill, stacked Top-5 users + other by read count.',
+  'skills.skillListTableScopeDesc':
+    'Full skills array; Calls etc. are backend aggregates. See the gray hint under Calls on this tab.',
+  'skills.skillToolChartScopeDesc':
+    'Up to 15 skills × up to 8 tool columns (same attribution rules as the hint above).',
+  'skills.analysisChartsScopeDesc':
+    'Same as the “Skills token use” tab note: token estimates from the system-prompt analysis API (active/zombie/duplicate).',
+  'skills.analysisTokenPieTitle': 'Token split',
+  'skills.analysisSavingsTitle': 'Savings estimate',
+  'skills.listTableTitle': 'Skills list',
   'skills.tabList': 'List',
-  'skills.tabAnalysis': 'SystemPrompt',
+  'skills.tabAnalysis': 'Skills token use',
+  'skills.tabAnalysisHint':
+    'Estimates tokens from Skills-related sections in the current system prompt (active vs zombie vs duplicate), plus savings tips. This is not the same as the full System Prompt page in the sidebar.',
   'skills.callTrackingHint': 'Calls column: inferred from read tool path (path containing skills/xxx/SKILL.md). See session detail for per-session invoked skills.',
   'skills.tabSkillTool': 'Skill × Tool',
-  'skills.skillToolHint': 'Skill invocation inferred from read(skills/xxx/SKILL.md); tool calls aggregated from same session.',
-  'skills.toolBreakdownHint': 'Tools column: exec=run commands (e.g. scripts), read=read files, write/edit=edit files. Numbers are call counts; Total = sum of tool calls in the same session when this skill was invoked.',
+  'skills.skillToolHint':
+    'Skill usage is inferred from read paths to skills/<name>/SKILL.md. Tool calls are attributed in transcript order: after each read of a skill’s SKILL.md, subsequent tools count toward that skill until the next read of any SKILL.md; tools before the first SKILL.md read are not attributed. Totals accumulate across sessions.',
+  'skills.toolBreakdownHint':
+    'Tools column: names are tool names (e.g. exec=commands, read=files, write/edit=files, message=messages). Numbers are calls attributed to that skill. Total = sum of those tools for the row (across sessions). This differs from the Calls column in the list tab (read-to-SKILL.md count only)—do not compare them directly.',
+  'skills.skillToolTableNote':
+    'This table is the attributed tool breakdown; differing from Calls is expected.',
+  'skills.toolColumnTooltip': 'Tool name and attributed call count; see the notes above for attribution rules.',
   'skills.skillToolChartTitle': 'Skill × Tool distribution',
   'skills.skillToolTableTitle': 'Skill tool breakdown',
   'skills.toolBreakdown': 'Tools',
@@ -225,20 +446,81 @@ export default {
   'skills.duplicateSkillList': 'Duplicate skills',
   'token.title': 'Token monitor',
   'token.subtitle': 'Session tokens & thresholds',
+  'token.pageScopeDesc':
+    'Data from: session token usage (GET /api/sessions/token-usage), per–session-key metrics aggregates (24h window), and token alert history. Top overview is split: left = metrics “recorded”, right = log-size estimate. Same local metrics pipeline as the Dashboard token summary. Use the ℹ on each block for scope.',
+  'token.overviewEstimateSectionTitle': 'Stale index & log-size estimate (overview)',
+  'token.overviewStaleCount': 'Sessions with stale index',
+  'token.overviewStaleCountDesc':
+    'Count of sessions where sessions.json has totalTokensFresh:false (from the loaded session list). Different source from metrics “recorded” totals.',
+  'token.overviewStaleWithActive': 'Of those, with active usage (24h)',
+  'token.overviewStaleWithActiveDesc':
+    'Stale-index sessions that also appear in metrics with activeTokens>0 (matched by sessionKey).',
+  'token.overviewRecorded24h': 'Recorded · active (24h)',
+  'token.overviewRecorded24hDesc': 'activeTokens from GET /api/metrics/token-summary for the time window.',
+  'token.overviewRecordedArchived24h': 'Recorded · archived (24h)',
+  'token.overviewRecordedArchived24hDesc': 'archivedTokens from token-summary.',
+  'token.overviewEstimatedSum': 'Estimated sum (stale + zero usage)',
+  'token.overviewEstimatedSumDesc':
+    'Sum of log-size estimates for totalTokensFresh:false sessions with zero token totals; may diverge from recorded metrics.',
+  'token.columnStale': 'Index',
+  'token.columnEstimated': 'Est.(log)',
+  'token.columnRecorded': 'Recorded',
+  'token.columnEstimatedLog': 'Est.(log)',
+  'token.dualTrack.recordedTitle': 'Recorded (metrics)',
+  'token.dualTrack.recordedDesc':
+    'GET /api/metrics/token-summary: active/archived input, output, and totals in the time window; may diverge from the right-hand estimate.',
+  'token.dualTrack.estimatedTitle': 'Log estimate (heuristic)',
+  'token.dualTrack.estimatedDesc':
+    'Stale-index sessions (totalTokensFresh:false) with log-byte estimates; “with active metrics” needs rows matched by sessionKey.',
+  'token.dualTrack.activeBlock': 'Active (active + idle)',
+  'token.dualTrack.archivedBlock': 'Archived (*.jsonl.reset.*)',
+  'token.dualTrack.formulaHint':
+    'Estimate ≈ ceil(log bytes ÷ divisor); divisor comes from server config—reference only, not a vendor bill.',
+  'token.estimatedFromLogHint': 'Heuristic from log bytes; not official billing.',
+  'token.kpiSectionTitle': 'Sessions by threshold',
+  'token.kpiRowDesc':
+    'Same source as the pie chart: counts from the current token-usage page, grouped by each session row’s threshold (normal / warning / serious / critical / limit). “Serious/Crit” sums serious + critical.',
+  'token.thresholdPieTitle': 'Threshold distribution',
+  'token.thresholdPieDesc':
+    'Pie slices match the KPI row: distribution of sessions across threshold buckets for the same snapshot.',
+  'token.alertsTitle': 'Alerts',
+  'token.alertsDesc':
+    'From GET /api/sessions/token-alerts/history; this panel shows the latest few entries (newest first).',
+  'token.highUtilTitle': 'Utilization > 50%',
+  'token.highUtilDesc':
+    'Filtered from the same token-usage snapshot (utilization > 50); row color follows threshold. “Used” is current total tokens (same source as the tables).',
   'token.autoRefresh': 'Auto refresh (30s)',
   'token.sessionsCount': 'Sessions',
+  'token.sessionsCountDesc':
+    'GET /api/sessions/token-usage?page=1&pageSize=200 — this count is the number of session rows returned (≤200).',
   'token.tableActive': 'Active sessions (active + idle)',
-  'token.tableActiveDesc': 'Latest per session within 24h, runtime only',
+  'token.tableActiveDesc':
+    'Latest per session in 24h (same metrics pipeline as Dashboard). May read low or 0 when totalTokensFresh:false.',
   'token.tableArchived': 'Archived sessions',
-  'token.tableArchivedDesc': 'Token from previous conversations after user started new ones within 24h, grouped by session',
+  'token.tableArchivedDesc':
+    'Archived usage from *.jsonl.reset.* within 24h, grouped by session. Use the icon next to numbers for the data-source note.',
   'token.costHint': 'Cost estimate: Priority given to actual usage.cost from API; fallback to configured pricing when missing.',
+  'token.chartTopRate': 'Top 10 by total tokens',
+  'token.chartTopRateDualLine': 'Top 10 — recorded vs log estimate',
+  'token.chartTopRateDualLineDesc':
+    'Two lines on the same sessions: blue = token-usage recorded total; green = log estimate (gaps when no estimate). Sort prefers recorded; falls back to estimate when zero.',
+  'token.chartSeriesRecorded': 'Recorded',
+  'token.chartSeriesEstimated': 'Est.(log)',
+  'token.chartTopRateDesc':
+    'Sorted by total token usage in the current snapshot (GET /api/sessions/token-usage). Each totalTokens is merged live transcript usage and excludes archived reset-epoch totals. Covers all listSessions rows, not only active. Differs from the metrics active/archived tables on this page. Axis shows a sessionKey suffix in parens to disambiguate.',
+  'token.chartTopUnit': 'tok',
   'session.tokenZeroTitle': 'Tokens showing 0 — Explanation and verification',
-  'session.tokenZeroExpandLabel': '▶ Click to expand/collapse details and verification steps',
+  'session.tokenZeroExpandLabel': 'Expand to read the explanation and verification steps; collapse again to save space',
   'session.tokenZeroPoint1Title': '1) Where do the numbers come from',
   'session.tokenZeroPoint1Desc': 'TraceFlow reads <strong>session logs</strong> (each session is a <code>.jsonl</code> file) under <code>agents</code> in the OpenClaw <strong>state directory</strong>. Each assistant reply includes <code>usage</code> (including input/output/totalTokens, etc.), and this page summarizes based on these fields. It is not related to <code>usage.cost</code>.',
   'session.tokenZeroPoint2Title': '2) Why is it 0',
   'session.tokenZeroPoint2Desc': 'In this session log, the <code>usage</code> values read are all 0, so we can only display 0.',
-  'session.tokenZeroPoint2FreshHint': 'Additionally, the index marks <code>totalTokensFresh: false</code>, indicating that the Gateway/runtime has not yet written a reliable total to the index, and this page has no alternative value to display.',
+  'session.tokenZeroPoint2FreshHint':
+    'Also, if the index has <code>totalTokensFresh: false</code>, OpenClaw is telling you the <code>totalTokens</code> field in sessions.json is **not** a reliable snapshot of the current context; this page will show “context utilization unconfirmed” and will not treat utilization as exact.',
+  'session.tokenContextUnreliableTitle': 'Context utilization unconfirmed',
+  'session.tokenContextUnreliableDesc':
+    'OpenClaw marked <code>totalTokensFresh</code> as <code>false</code>: do not read “used / limit” here as an accurate context-window fill level. The In/Out bar below shows **composition** (input vs output share), not percent of the limit.',
+  'session.estimatedTokensFromLogLine': 'Log-size estimate: ≈ {n} tok (heuristic, not billing)',
   'session.tokenZeroPoint3Title': '3) How to verify locally (consistent with what the service reads)',
   'session.tokenZeroStateRootLabel': 'State root directory (current parsing result of this service, generally corresponds to environment variable <code>OPENCLAW_STATE_DIR</code> or the state path in settings):',
   'session.tokenZeroStateRootFallback': 'The state root directory is obtained from this service\'s OpenClaw path parsing (environment variable <code>OPENCLAW_STATE_DIR</code> or CLI/configuration inference); if there is no absolute path below, please confirm in \"Settings\" that the Gateway/state directory is consistent with the machine running OpenClaw.',
@@ -248,6 +530,16 @@ export default {
   'session.tokenZeroIndexPathHint': '(Full path = state root + the above relative path)',
   'session.tokenZeroPoint4Title': '4) Conclusion',
   'session.tokenZeroPoint4Desc': 'If you see different numbers here than what TraceFlow displays, the session log/index may not have been refreshed yet. Try re-running the session or restarting the service and check again.',
+  'systemPrompt.pageScopeDesc':
+    'Probe and analysis from GET /api/skills/system-prompt/probe, /analysis, /usage; aligned with the current Gateway session/report. Each ℹ describes that block’s data source.',
+  'systemPrompt.fullCollapseScopeDesc':
+    'Collapsed panel holds full Markdown: may come from transcript system, model reveal, or rebuild—see the alert when expanded.',
+  'systemPrompt.breakdownCardScopeDesc':
+    'Per-block tokens from probe.breakdown; expand each block for text or tables (workspace, skills, tools, …).',
+  'systemPrompt.analysisBlockScopeDesc':
+    'Same analysis API as the Skills “token use” tab: pie chart of active/zombie/duplicate skill-related token estimates.',
+  'systemPrompt.zombieDuplicateCardScopeDesc':
+    'Zombie/duplicate lists filtered from the current skills usage array (30d unused / duplicateWith set).',
   'systemPrompt.fullTitle': 'Full System Prompt (Markdown)',
   'systemPrompt.fromTranscript': 'Below is the actual system prompt sent to the model for this request (from session transcript).',
   'systemPrompt.fromModelReveal': 'Below is the system prompt returned by the model probe (used when transcript system text is missing).',
@@ -269,6 +561,13 @@ export default {
   'systemPrompt.toolsSchemaHintTitle': 'Why no schema here?',
   'systemPrompt.toolsSchemaHint': "Tool JSON Schemas are sent via the API's tools parameter (e.g. OpenAI function calling), not in system prompt text. The model receives full schema from the API request to call tools correctly. This page only parses system prompt text, so schema cannot be displayed. The table below shows per-tool stats from the Gateway report (schema chars, properties count).",
   'pricing.title': 'Model Pricing Configuration',
+  'pricing.pageScopeDesc':
+    'Prices from GET /api/pricing and local config; “In use” merges session models with configured models. Values are $ per 1M tokens for estimates.',
+  'pricing.filtersCardScopeDesc': 'Search and “custom only” filter client-side; they do not change the loaded price map.',
+  'pricing.tableCardScopeDesc':
+    'Table respects the current tab (in-use/domestic/foreign/all) and filters; pagination is client-side.',
+  'pricing.filtersCardTitle': 'Filters',
+  'pricing.tableCardTitle': 'Model prices',
   'pricing.subtitle': 'Configure pricing for all supported models (USD per million tokens)',
   'pricing.lastUpdated': 'Last updated',
   'pricing.addModel': 'Add Model',

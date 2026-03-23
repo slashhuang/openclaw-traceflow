@@ -75,6 +75,12 @@ export type SystemPromptProbeResult = {
     prompt?: string;
     skills?: Array<{ name: string; primaryEnv?: string; requiredEnv?: string[] }>;
   };
+  /** Session 元数据（来自 transcript 首行） */
+  sessionMeta?: Record<string, unknown>;
+  /** 完整的 sessions.json entry */
+  sessionsJsonEntry?: Record<string, unknown>;
+  /** injectedWorkspaceFiles 列表（来自 sessions.json systemPromptReport） */
+  injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
 };
 
 function charsToTok(c: number): number {
