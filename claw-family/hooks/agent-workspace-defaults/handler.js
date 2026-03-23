@@ -40,7 +40,7 @@ const handler = async (event) => {
   if (!ctx || !Array.isArray(ctx.bootstrapFiles)) return;
 
   const beforeCount = ctx.bootstrapFiles.length;
-  console.log(`${LOG_PREFIX} 触发 agent:bootstrap，bootstrapFiles 数量: ${beforeCount}`);
+  console.log(`${LOG_PREFIX} 触发 agent:bootstrap，bootstrapFiles 数量：${beforeCount}`);
 
   const workspaceDefaultsPath = getWorkspaceDefaultsPath(event);
   if (!workspaceDefaultsPath) {
@@ -57,7 +57,7 @@ const handler = async (event) => {
     }
     const loaded = Object.keys(defaultsByBasename);
     if (loaded.length) {
-      console.log(`${LOG_PREFIX} 从 workspace-defaults 加载: ${loaded.join(', ')}`);
+      console.log(`${LOG_PREFIX} 从 workspace-defaults 加载：${loaded.join(', ')}`);
     } else {
       console.warn(`${LOG_PREFIX} workspace-defaults 下未读到任何白名单文件`);
     }
@@ -66,23 +66,50 @@ const handler = async (event) => {
   const whitelistSeen = new Map();
   const nonWhitelist = [];
   for (const item of ctx.bootstrapFiles) {
-    const name = basename(item?.path ?? '');
-    if (!name) continue;
+    const originalPath = item?.path ?? '';
+    const name = basename(originalPath);
+    
+    // 详细日志：每个 bootstrapFiles 项的 path
+    console.log(`${LOG_PREFIX} [DEBUG] 处理 bootstrapFiles 项：name=${name}, originalPath=${originalPath}, hasContent=${item?.content !== undefined}`);
+    
+    if (!name) {
+      console.warn(`${LOG_PREFIX} [WARN] 跳过无 name 的项：${JSON.stringify(item)}`);
+      continue;
+    }
+    
     if (WHITELIST.includes(name)) {
-      if (whitelistSeen.has(name)) continue;
+      if (whitelistSeen.has(name)) {
+        console.log(`${LOG_PREFIX} [DEBUG] 跳过重复的白名单文件：${name}`);
+        continue;
+      }
+      
       const contentFromDefaults = defaultsByBasename[name];
       const fromDefaults = contentFromDefaults !== undefined;
+      
+      // 计算新的 path
+      const newPath = contentFromDefaults !== undefined
+        ? path.join(workspaceDefaultsPath, name)
+        : originalPath;
+      
+      console.log(`${LOG_PREFIX} [DEBUG] 白名单文件：${name}`);
+      console.log(`${LOG_PREFIX} [DEBUG]   - 原始 path: ${originalPath}`);
+      console.log(`${LOG_PREFIX} [DEBUG]   - 新 path: ${newPath}`);
+      console.log(`${LOG_PREFIX} [DEBUG]   - 使用 workspace-defaults 内容：${fromDefaults}`);
+      console.log(`${LOG_PREFIX} [DEBUG]   - workspaceDefaultsPath: ${workspaceDefaultsPath || '(empty)'}`);
+      
       whitelistSeen.set(name, {
         ...item,
-          path: contentFromDefaults !== undefined
-    ? path.join(workspaceDefaultsPath, name)
-    : item.path,,
+        path: newPath,
         content: contentFromDefaults !== undefined ? contentFromDefaults : (item.content ?? ''),
       });
+      
       if (fromDefaults) {
-        console.log(`${LOG_PREFIX} 使用 workspace-defaults 内容替换: ${name}`);
+        console.log(`${LOG_PREFIX} ✅ 使用 workspace-defaults 内容替换：${name}, path=${newPath}`);
+      } else {
+        console.log(`${LOG_PREFIX} ℹ️ 保留原始内容：${name}, path=${originalPath}`);
       }
     } else {
+      console.log(`${LOG_PREFIX} [DEBUG] 非白名单文件：${name}, path=${originalPath}`);
       nonWhitelist.push(item);
     }
   }
@@ -96,7 +123,13 @@ const handler = async (event) => {
   }
 
   const afterCount = ctx.bootstrapFiles.length;
-  console.log(`${LOG_PREFIX} 完成: 白名单去重后 ${whitelistSeen.size} 个，非白名单 ${nonWhitelist.length} 个，合计 bootstrapFiles: ${afterCount}`);
+  console.log(`${LOG_PREFIX} 完成：白名单去重后 ${whitelistSeen.size} 个，非白名单 ${nonWhitelist.length} 个，合计 bootstrapFiles: ${afterCount}`);
+  
+  // 输出最终 bootstrapFiles 的详细信息
+  console.log(`${LOG_PREFIX} [DEBUG] 最终 bootstrapFiles 详情:`);
+  ctx.bootstrapFiles.forEach((item, index) => {
+    console.log(`${LOG_PREFIX} [DEBUG]   [${index}] name=${basename(item?.path ?? '')}, path=${item?.path ?? ''}, hasContent=${item?.content !== undefined}`);
+  });
 };
 
 module.exports = handler;
