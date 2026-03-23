@@ -204,7 +204,7 @@ Socket.IO namespace **`logs`**: `logs:subscribe` · `logs:unsubscribe` · server
 | Gateway unreachable | `OPENCLAW_GATEWAY_URL`, firewall; set token/password in Settings |
 | **Test connection** fails with **`missing scope: operator.read`** | TraceFlow uses a device-less backend WebSocket; Gateway clears scopes, so older builds that called `skills.status` after connect failed. Current code uses connect **snapshot** for path checks and **`health` RPC** for overview (scope-exempt). See repo root **`AGENTS.md`**. |
 | Empty logs | Gateway `logs.tail` may be unavailable without operator scope (falls back to empty); or set `OPENCLAW_LOG_PATH` |
-| Token metrics show zero | Confirm sessions produce usage; check `/api/metrics/token-summary` and `/api/sessions/token-usage` |
+| Token metrics show zero; archived bucket empty on Dashboard | Confirm sessions produce usage; check `/api/metrics/token-summary` and `/api/sessions/token-usage`. Archived often stays zero (no `/new`, reset files without usage, etc.); see **`docs/token-metrics-dual-track-example.md`** for field traceability and sample JSON |
 
 ---
 

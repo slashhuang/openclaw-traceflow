@@ -136,6 +136,33 @@ export default {
   'dashboard.tokenTotal': '合计',
   'dashboard.tokenTotalDesc':
     '输入 + 输出。与上方同一 metrics 口径；totalTokensFresh:false 时「进行中」合计可能不可信，请以会话详情 transcript 为准。',
+  'dashboard.tokenDualTrackRecordedCard': 'Token 汇总 — 记录值（metrics）',
+  'dashboard.tokenDualTrackRecordedDesc':
+    '与 Token 监控页一致：GET /api/metrics/token-summary 近时间窗内 active/archived 的 input、output、合计。',
+  'dashboard.tokenDualTrackEstimatedCard': 'Token 汇总 — 日志估算（启发式）',
+  'dashboard.tokenDualTrackEstimatedDesc':
+    '由会话列表中 totalTokensFresh:false 的会话，按 live 日志大小估算并聚合；已拉取 metrics-by-key 时估算可按「进行中 / 归档」分桶，与下图一致。',
+  'dashboard.tokenSummaryChartTitle': 'Token 汇总 — 记录值 vs 估算（全量）',
+  'dashboard.tokenSummaryChartDesc':
+    '时间窗为 metrics 库内全量（与 GET /dashboard/overview?timeRangeMs=极大值 一致）。横轴「进行中」= token-% 快照汇总；「归档」= archived-%（*.jsonl.reset.*）。归档记录值常为 0 时见下方提示与第二个 ℹ。分组柱：记录值合计、In、Out、估算(log)。非按分钟的历史曲线。',
+  'dashboard.tokenMetricsTraceDoc':
+    '【进行中】\n记录值：metrics 表 id 以 token- 开头，时间窗内每 session_id 取最新一条后 SUM。\n采集：约每 30s 对 listSessions() 有 tokenUsage 的会话写入。\n\n【归档】\n记录值：id 以 archived- 开头，来自 reset 文件解析的上一轮累计，时间窗内 SUM。\n若从未 /new、reset 无 usage 行，或窗内无归档快照，则「归档」记录值为 0，柱状图右侧会显得空。\n\n【估算(log)】\n仅 totalTokensFresh:false 的会话；按 live 日志字节启发式，并依 token-usage-by-session-key 的 active/archived 分桶。\n\n双桶均有记录值的字段表与示例 JSON：openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json。',
+  'dashboard.tokenArchivedZeroBannerTitle': '「归档」记录值为 0',
+  'dashboard.tokenArchivedZeroBannerDesc':
+    '「归档」侧来自 *.jsonl.reset.* 写入 metrics 的 archived-* 行：只统计新开对话前的上一轮累计，且时间窗内需有对应快照。若很少 /new、reset 里没有带 usage 的行，或尚未采集到，记录值会为 0，右侧柱子会接近空白。\n\n当前轮消耗在左侧「进行中」。\n\n本环境归档侧日志估算合计：{estArchived}（仅索引不可信且能按 per-key 分桶时）；估算柱仍可能接近 0。',
+  'dashboard.tokenFixtureDocLine':
+    '双桶对照示例：openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json',
+  'dashboard.tokenCategoryActive': '进行中',
+  'dashboard.tokenCategoryArchived': '归档',
+  'dashboard.tokenChartSeriesRecorded': '记录值合计',
+  'dashboard.tokenChartSeriesRecordedIn': '记录值 · In',
+  'dashboard.tokenChartSeriesRecordedOut': '记录值 · Out',
+  'dashboard.tokenChartSeriesEstimated': '估算(log)',
+  'dashboard.tokenIoFootnote':
+    '记录值 In/Out：进行中 In {ai} / Out {ao}；归档 In {ri} / Out {ro}（与 metrics 一致）。',
+  'dashboard.estimatedOrphanLabel': '估算未分桶',
+  'dashboard.estimatedOrphanHint':
+    '有日志估算但 metrics 行缺失或 active/archived 均为 0 的不可信会话估算合计；未计入上图「估算(log)」柱的两桶。',
   'metrics.tokenUsageSourceTitle': 'Token 指标：数据源与可信度',
   'metrics.tokenUsageSourceNote':
     '「进行中 / 归档」数字来自 TraceFlow 本地 data/metrics.db 中 token_usage 表。进行中：约每 30 秒按会话写入一条快照（来源为 OpenClaw 列表合并后的 tokenUsage）。归档：来自状态目录下 *.jsonl.reset.* 文件解析后的用量。\n\n当 OpenClaw 在索引中将 totalTokensFresh 标为 false 时，sessions.json 中的上下文累计可能尚未与当前对话轮对齐，采集到的数字可能为 0 或明显偏低——这不表示一定没有 token 消耗。需要核对时请打开会话详情查看 transcript 或等待索引/Gateway 刷新。',
@@ -196,7 +223,7 @@ export default {
   'dashboard.healthCpuDesc': 'Gateway 进程 CPU 使用率',
   'dashboard.recentSessions': '最近会话',
   'dashboard.recentSessionsDesc':
-    '按最后活跃时间排序的最近 10 条会话（列与「会话」页一致）。将鼠标悬停在「状态」「归档」表头可查看二者含义区别。',
+    '按最后活跃时间排序的最近 10 条会话。「记录值」为合并用量与利用率，「估算(log)」为日志大小启发式；将鼠标悬停在「状态」「归档」表头可查看二者含义区别。',
   'dashboard.viewAll': '查看全部',
   'dashboard.health': '系统健康',
   'dashboard.healthDesc': 'Gateway 连接状态、内存、CPU 使用情况',
@@ -223,7 +250,7 @@ export default {
   'dashboard.overviewRetry': '刷新',
   'sessions.title': '会话列表',
   'sessions.pageScopeDesc':
-    '数据来自 GET /api/sessions（筛选与分页与 URL 参数一致）。列含义与仪表盘「最近会话」相同；表头悬停可看状态、归档、Token/利用率等口径。',
+    '数据来自 GET /api/sessions（筛选与分页与 URL 参数一致）。「记录值」与「估算(log)」分列展示；其余列含义与仪表盘「最近会话」相同；表头悬停可看口径。',
   'sessions.sortHint': '点击表头排序',
   'sessions.empty': '暂无会话',
   'sessions.filter.active': '活跃',
@@ -231,6 +258,11 @@ export default {
   'sessions.filter.completed': '已结束',
   'sessions.filter.failed': '失败',
   'sessions.filter.archived': '归档',
+  'sessions.filter.staleIndex': '索引未刷新',
+  'sessions.staleIndexBadge': '索引未刷新',
+  'sessions.estimatedTokensFromLog': '≈ {n}（估算）',
+  'sessions.estimatedTokensDisclaimer':
+    '按当前会话 .jsonl 文件大小 ÷ 除数估算（服务端默认 4，环境变量 TOKEN_ESTIMATE_BYTES_DIVISOR 可改）。非计费、非 tokenizer 精确值；适用于 totalTokensFresh:false 或官方用量为 0 时。',
   'sessions.status.active': '活跃',
   'sessions.status.idle': '空闲',
   'sessions.status.completed': '已结束',
@@ -280,6 +312,11 @@ export default {
   'sessions.column.util': '利用率',
   'sessions.column.tokensUtilHint':
     'Token 列为当前展示的用量数字；利用率为「相对上下文上限」的占比。若 OpenClaw 在 sessions.json 中将 totalTokensFresh 标为 false，表示索引里的上下文总量尚未与当前轮次对齐，此时不显示可信利用率（标 * 或 —）。',
+  'sessions.column.recordedTokens': '记录值',
+  'sessions.column.recordedTokensTooltip':
+    '合并后的 totalTokens 与利用率；索引 totalTokensFresh:false 时数字可能带 *，利用率弱化显示。',
+  'sessions.column.estimatedLog': '估算(log)',
+  'sessions.column.estimatedLogTooltip': '由 live 日志字节数换算（启发式），非官方计费；仅当索引不可信且展示估算时有值。',
   'sessions.tokensTotalUnreliableHint':
     '此数字来自 transcript 累加或部分字段，**不**代表 OpenClaw 已确认的「当前上下文窗口总量」（索引可能 totalTokensFresh:false）。',
   'sessions.utilUnreliableHint':
@@ -291,8 +328,12 @@ export default {
   'session.transcriptPanelTitle': '转录内容',
   'session.transcriptPanelScopeDesc':
     '本卡片内各 Tab（消息 / 工具 / 事件 / Skills）均来自同一份 transcript，时间倒序，最新在顶部。',
+  'session.tokenCardTitleDual': 'Token（有效数据 / 预估）',
+  'session.tokenValidDataLabel': '有效数据（记录值）',
+  'session.tokenEstimateLabel': 'Token 预估（日志）',
+  'session.tokenInOutInline': 'In {inTok} · Out {outTok}',
   'session.tokenCardScopeDesc':
-    '用量来自会话详情 API 合并的 tokenUsage 与消息解析；若索引 totalTokensFresh:false 会有「上下文未确认」提示。条带表示 In/Out 构成比。',
+    '与会话列表双轨一致：**有效数据**为详情 API 合并的 tokenUsage（含 In/Out）；**Token 预估**为 live 日志字节启发式（索引不可信时）。条带为 In/Out 构成比。',
   'session.invokedSkillsCardScopeDesc':
     '由当前 transcript 中 read 到 skills/…/SKILL.md 的次数聚合（与 Skills 页 Calls 反推口径一致）。',
   'session.transcriptCurrent': '当前对话',
@@ -394,7 +435,36 @@ export default {
   'token.title': 'Token 监控',
   'token.subtitle': '会话 Token 与阈值',
   'token.pageScopeDesc':
-    '本页数据来自：会话 token 用量列表（GET /api/sessions/token-usage）、按会话 key 聚合的 metrics（近 24h）、阈值告警历史。与仪表盘 Token 汇总使用同一套本地 metrics 管道。各区块标题旁 ℹ 为对应统计口径。',
+    '本页数据来自：会话 token 用量列表（GET /api/sessions/token-usage）、按会话 key 聚合的 metrics（近 24h）、阈值告警历史。上方双栏：左为 metrics 记录值，右为日志启发式估算；与仪表盘 Token 汇总使用同一套本地 metrics 管道。各区块标题旁 ℹ 为对应统计口径。',
+  'token.overviewEstimateSectionTitle': '索引用量与估算（概览）',
+  'token.overviewStaleCount': '索引不可信会话数',
+  'token.overviewStaleCountDesc':
+    'sessions.json 中 totalTokensFresh:false（当前页拉取的会话列表）。与 metrics「记录值」数据源不同。',
+  'token.overviewStaleWithActive': '其中（近 24h）有进行中记录',
+  'token.overviewStaleWithActiveDesc':
+    '不可信会话中，在下方 metrics 表内 activeTokens>0 的条数（需 sessionKey 能对上）。',
+  'token.overviewRecorded24h': '记录值 · 进行中(24h)',
+  'token.overviewRecorded24hDesc': 'GET /api/metrics/token-summary 的 activeTokens（近时间窗）。',
+  'token.overviewRecordedArchived24h': '记录值 · 归档(24h)',
+  'token.overviewRecordedArchived24hDesc': 'token-summary 的 archivedTokens。',
+  'token.overviewEstimatedSum': '估算合计（仅不可信且用量为 0）',
+  'token.overviewEstimatedSumDesc':
+    '对 totalTokensFresh:false 且 token 合计为 0 的会话，用 live 日志大小估算并求和；与记录值不同步属预期。',
+  'token.columnStale': '索引',
+  'token.columnEstimated': '估算(log)',
+  'token.columnRecorded': '记录值',
+  'token.columnEstimatedLog': '估算(log)',
+  'token.dualTrack.recordedTitle': '记录值（metrics）',
+  'token.dualTrack.recordedDesc':
+    'GET /api/metrics/token-summary：近时间窗内进行中/归档的 input、output、合计；与右侧估算不同步属预期。',
+  'token.dualTrack.estimatedTitle': '日志估算（启发式）',
+  'token.dualTrack.estimatedDesc':
+    '基于会话列表中 totalTokensFresh:false 的会话，按 live 日志字节估算；「有进行中记录」需 metrics 行与 sessionKey 对齐。',
+  'token.dualTrack.activeBlock': '进行中（活跃 + 空闲）',
+  'token.dualTrack.archivedBlock': '归档（*.jsonl.reset.*）',
+  'token.dualTrack.formulaHint':
+    '估算 ≈ ceil(日志字节 ÷ divisor)，divisor 来自服务环境配置；仅供参考，非云厂商账单。',
+  'token.estimatedFromLogHint': '由日志字节数换算（启发式），非官方 billing。',
   'token.kpiSectionTitle': '阈值档位会话数',
   'token.kpiRowDesc':
     '与下方饼图同源：当前页拉取的 token-usage 列表中，按每条会话记录的 threshold 字段计数（normal / warning / serious / critical / limit）。「Serious/Crit」为 serious 与 critical 之和。',
@@ -419,7 +489,13 @@ export default {
     '近 24h 内 *.jsonl.reset.* 归档用量按会话聚合。数字旁图标可查看数据源说明。',
   'token.costHint': '费用估算：优先使用 API 返回的实际 usage.cost 数据；缺失时使用配置价格估算。',
   'token.chartTopRate': 'Token 消耗 Top 10',
-  'token.chartTopRateDesc': '按当前快照中的总 token 排序；横轴括号内为 sessionKey 后缀以便区分同名类型。',
+  'token.chartTopRateDualLine': 'Token 消耗 Top 10（记录值 vs 估算）',
+  'token.chartTopRateDualLineDesc':
+    '同一批会话上两条折线：蓝线为 token-usage 记录值，绿线为日志估算（无估算则断点）。排序优先记录值，为 0 时用估算兜底。',
+  'token.chartSeriesRecorded': '记录值',
+  'token.chartSeriesEstimated': '估算(log)',
+  'token.chartTopRateDesc':
+    '按当前快照中的总 token 排序；横轴括号内为 sessionKey 后缀以便区分同名类型。数据来源为 GET /api/sessions/token-usage：每条 totalTokens 为当前 live 合并用量，不含归档纪元（*.jsonl.reset.*）累计；会话为 listSessions 全量，非仅进行中。与同页「进行中/归档」metrics 表口径不同。',
   'token.chartTopUnit': 'tok',
   'session.tokenZeroTitle': 'tokens 显示为 0 — 说明与核对方式',
   'session.tokenZeroExpandLabel': '点击展开查看说明与核对步骤；展开后可再收起以节省版面',
@@ -432,6 +508,7 @@ export default {
   'session.tokenContextUnreliableTitle': '上下文占用未确认',
   'session.tokenContextUnreliableDesc':
     'OpenClaw 在索引中将 <code>totalTokensFresh</code> 标为 <code>false</code>：此时不宜把「已用量 / 上限」当作准确的上下文窗口占用。下方 In/Out 条带仅表示输入与输出的**构成比例**，不表示占满上限的百分比。',
+  'session.estimatedTokensFromLogLine': '由日志大小估算：≈ {n} tok（启发式，非计费）',
   'session.tokenZeroPoint3Title': '3）本机怎么核对（与服务读的是否一致）',
   'session.tokenZeroStateRootLabel': '状态根目录（本服务当前解析结果，一般对应环境变量 <code>OPENCLAW_STATE_DIR</code> 或设置里的状态路径）：',
   'session.tokenZeroStateRootFallback': '状态根目录由本服务的 OpenClaw 路径解析得到（环境变量 <code>OPENCLAW_STATE_DIR</code> 或 CLI/配置推断）；若下方无绝对路径，请到「设置」里确认 Gateway/状态目录与运行 OpenClaw 的机器一致。',
