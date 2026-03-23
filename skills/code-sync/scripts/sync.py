@@ -270,7 +270,7 @@ def generate_report(main_result, subtree_results, gateway_result, cleanup_result
         "timestamp": datetime.now().astimezone().isoformat(),
         "mainRepo": main_result,
         "subtrees": subtree_results,
-        "gatewayRestart": gateway_result,
+        "gatewayRestart": gateway_result,  # None 表示未重启
         "worktreeCleanup": cleanup_result
     }
     return report
@@ -316,13 +316,13 @@ def print_summary(report):
         else:
             print(f"  {status} {st['dir']}: {st['beforeCommit']} → {st['afterCommit']}")
     
-    # Gateway
-    gw = report["gatewayRestart"]
-    if gw["success"]:
-        print(f"✅ Gateway: 已{gw['action']}")
-    else:
-        print(f"❌ Gateway: {gw['message']}")
+    # Worktree 清理
+    cleanup = report.get("worktreeCleanup")
+    if cleanup and cleanup.get("cleaned"):
+        print(f"✅ Worktree 清理：{len(cleanup['cleaned'])} 个")
     
+    print("")
+    print("⚠️  Gateway 未重启，如需重启请手动执行：pm2 restart claw-gateway")
     print("=" * 60)
 
 
@@ -349,31 +349,19 @@ def main():
     cleanup_result = cleanup_worktrees(repo_root)
     print("")
     
-    # 4. 检查 PM2
-    if not check_pm2():
-        sys.exit(1)
-    
-    # 5. 重启 Gateway
-    gateway_result = restart_gateway(repo_root)
-    
-    # 6. 验证启动
-    if not wait_and_verify(repo_root):
-        print("[code-sync] 请检查 pm2 logs claw-gateway")
-        sys.exit(1)
-    
-    # 7. 生成并保存报告
-    report = generate_report(main_result, subtree_results, gateway_result, cleanup_result)
+    # 4. 生成并保存报告（不再重启 Gateway）
+    report = generate_report(main_result, subtree_results, None, cleanup_result)
     save_report(repo_root, report)
     
-    # 8. 打印摘要
+    # 5. 打印摘要
     print_summary(report)
     
-    # 9. 输出完整报告（供 OpenClaw 检测并发送通知）
+    # 6. 输出完整报告（供 OpenClaw 检测并发送通知）
     print("")
     print(f"[SYNC_REPORT] {json.dumps(report, ensure_ascii=False)}")
     
     print("")
-    print("[code-sync] 完成。维护命令：pm2 status | pm2 logs claw-gateway | pm2 restart claw-gateway")
+    print("[code-sync] ✅ 代码同步完成！Gateway 未重启，如需重启请手动执行：pm2 restart claw-gateway")
 
 
 if __name__ == "__main__":
