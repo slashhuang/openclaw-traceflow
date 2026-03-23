@@ -568,6 +568,23 @@ export default function SystemPromptPage() {
                       </pre>
                     </div>
                   )}
+                  {probe.sessionMeta && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Typography.Text strong>Session Meta (transcript 首行):</Typography.Text>
+                      <pre style={{
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        padding: 8,
+                        borderRadius: token.borderRadius,
+                        border: `1px solid ${token.colorBorder}`,
+                        background: token.colorFillQuaternary,
+                      }}>
+                        {JSON.stringify(probe.sessionMeta, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                   <div>
                     <Typography.Text strong>Full sessions.json entry:</Typography.Text>
                     <pre style={{
