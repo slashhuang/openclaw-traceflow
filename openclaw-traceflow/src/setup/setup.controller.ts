@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
@@ -25,6 +25,7 @@ export interface SetupResponse {
 @Controller('api/setup')
 @UseGuards(AuthGuard)
 export class SetupController {
+  private readonly logger = new Logger(SetupController.name);
   constructor(
     private configService: ConfigService,
     private openclawService: OpenClawService,
@@ -33,6 +34,7 @@ export class SetupController {
 
   /**
    * 获取当前配置状态（用于首次启动引导）
+   * 优化：并行执行检查 + 性能日志 + 超时保护
    */
   @Get('status')
   async getSetupStatus(): Promise<{
@@ -41,9 +43,45 @@ export class SetupController {
     gatewayConnected: boolean;
     gatewayError?: string;
   }> {
+    const startTime = Date.now();
+    this.logger.debug('[getSetupStatus] starting status check...');
+
     const config = this.configService.getConfig();
-    const connectionResult = await this.openclawService.checkConnection();
-    const ocPaths = await this.openclawService.getResolvedPaths();
+
+    // 并行执行两个独立检查，避免串行累加超时
+    const [connectionResult, ocPaths] = await Promise.allSettled([
+      this.withTimeout(
+        this.openclawService.checkConnection(),
+        8000,
+        'checkConnection timeout',
+      ),
+      this.withTimeout(
+        this.openclawService.getResolvedPaths(),
+        8000,
+        'getResolvedPaths timeout',
+      ),
+    ]);
+
+    const connectionData =
+      connectionResult.status === 'fulfilled'
+        ? connectionResult.value
+        : { connected: false, error: connectionResult.reason?.message || 'unknown error' };
+    const pathsData =
+      ocPaths.status === 'fulfilled'
+        ? ocPaths.value
+        : {
+            stateDir: null,
+            configPath: null,
+            workspaceDir: null,
+            source: { stateDir: 'unknown' },
+            gatewayHint: null,
+            cliHint: 'path resolution failed',
+          };
+
+    const totalTime = Date.now() - startTime;
+    this.logger.debug(
+      `[getSetupStatus] completed in ${totalTime}ms | gatewayConnected=${connectionData.connected} | stateDir=${pathsData.stateDir ?? 'n/a'}`,
+    );
 
     return {
       isSetup: true, // 始终认为是已配置状态
@@ -58,17 +96,37 @@ export class SetupController {
         hasGatewayToken: !!config.openclawGatewayToken,
         isPublicAccess: config.host === '0.0.0.0',
         openclawPaths: {
-          stateDir: ocPaths.stateDir,
-          configPath: ocPaths.configPath,
-          workspaceDir: ocPaths.workspaceDir,
-          source: ocPaths.source,
-          gatewayHint: ocPaths.gatewayHint,
-          cliHint: ocPaths.cliHint,
+          stateDir: pathsData.stateDir,
+          configPath: pathsData.configPath,
+          workspaceDir: pathsData.workspaceDir,
+          source: pathsData.source,
+          gatewayHint: pathsData.gatewayHint,
+          cliHint: pathsData.cliHint,
+        },
+        performance: {
+          totalTimeMs: totalTime,
+          connectionCheckMs: totalTime, // 并行执行，无法单独统计
         },
       },
-      gatewayConnected: connectionResult.connected,
-      gatewayError: connectionResult.error,
+      gatewayConnected: connectionData.connected,
+      gatewayError: connectionData.error,
     };
+  }
+
+  /**
+   * 带超时控制的 Promise 包装器
+   */
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    timeoutMsg: string,
+  ): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(timeoutMsg)), timeoutMs),
+      ),
+    ]);
   }
 
   /**
