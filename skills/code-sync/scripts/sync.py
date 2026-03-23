@@ -167,14 +167,86 @@ def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
 
 def sync_all_subtrees(repo_root):
     """
-    同步所有 subtree
+    同步所有 subtree（pull）
     返回：[subtree_result, ...]
     """
-    print("[code-sync] === 同步 Subtree 项目 ===")
+    print("[code-sync] === 同步 Subtree 项目（pull） ===")
     results = []
     
     for config in SUBTREE_CONFIG:
         result = sync_subtree(repo_root, config["dir"], config["remote"])
+        results.append(result)
+        print("")  # 空行分隔
+    
+    return results
+
+
+def has_unpushed_commits(repo_root, subtree_dir):
+    """检查 subtree 目录是否有未推送的提交"""
+    # 检查是否有针对该目录的未推送提交
+    success, stdout, _ = run_command(
+        f"git log origin/main..main --pretty=format:'%h' -- {subtree_dir}",
+        cwd=repo_root,
+        capture_output=True
+    )
+    return success and bool(stdout.strip())
+
+
+def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
+    """
+    推送 subtree 到上游
+    返回：{success, message}
+    """
+    print(f"[code-sync] 🔄 推送 subtree: {subtree_dir} (to {remote_name}/{upstream_branch})")
+    
+    # 检查是否有未推送的提交
+    if not has_unpushed_commits(repo_root, subtree_dir):
+        print(f"[code-sync]   ⏭️  无需推送（无本地修改）")
+        return {
+            "success": True,
+            "dir": subtree_dir,
+            "remote": remote_name,
+            "pushed": False,
+            "message": "No local changes to push"
+        }
+    
+    # 执行 subtree push
+    cmd = f"git subtree push --prefix {subtree_dir} {remote_name} {upstream_branch}"
+    success, stdout, stderr = run_command(cmd, cwd=repo_root, timeout=300)
+    
+    if success:
+        print(f"[code-sync]   ✅ 推送成功")
+        msg = (stdout or "").strip().split('\n')[-1][:100] or "Pushed successfully"
+        print(f"[code-sync]   {msg}")
+        return {
+            "success": True,
+            "dir": subtree_dir,
+            "remote": remote_name,
+            "pushed": True,
+            "message": msg
+        }
+    else:
+        error_msg = (stderr or "").strip() or (stdout or "").strip()
+        print(f"[code-sync]   ❌ 推送失败：{error_msg}")
+        return {
+            "success": False,
+            "dir": subtree_dir,
+            "remote": remote_name,
+            "pushed": False,
+            "message": error_msg[:200]
+        }
+
+
+def push_all_subtrees(repo_root):
+    """
+    推送所有有本地修改的 subtree
+    返回：[push_result, ...]
+    """
+    print("[code-sync] === 推送 Subtree 项目（push） ===")
+    results = []
+    
+    for config in SUBTREE_CONFIG:
+        result = push_subtree(repo_root, config["dir"], config["remote"])
         results.append(result)
         print("")  # 空行分隔
     
@@ -264,12 +336,13 @@ def cleanup_worktrees(repo_root):
     return None
 
 
-def generate_report(main_result, subtree_results, gateway_result, cleanup_result):
+def generate_report(main_result, subtree_results, gateway_result, cleanup_result, push_results=None):
     """生成同步报告"""
     report = {
         "timestamp": datetime.now().astimezone().isoformat(),
         "mainRepo": main_result,
         "subtrees": subtree_results,
+        "subtreesPush": push_results or [],  # push 结果
         "gatewayRestart": gateway_result,  # None 表示未重启
         "worktreeCleanup": cleanup_result
     }
@@ -306,15 +379,26 @@ def print_summary(report):
     else:
         print(f"❌ 主仓库：{main['message']}")
     
-    # Subtree
+    # Subtree Pull
     print("")
-    print("Subtree 项目:")
+    print("Subtree Pull（从上游拉取）:")
     for st in report["subtrees"]:
         status = "✅" if st["success"] else "❌"
         if st["beforeCommit"] == st["afterCommit"]:
             print(f"  {status} {st['dir']}: 无更新")
         else:
             print(f"  {status} {st['dir']}: {st['beforeCommit']} → {st['afterCommit']}")
+    
+    # Subtree Push
+    push_results = report.get("subtreesPush", [])
+    if push_results:
+        print("")
+        print("Subtree Push（推送到上游）:")
+        for pr in push_results:
+            if pr.get("pushed"):
+                print(f"  ✅ {pr['dir']}: 已推送到 {pr['remote']}")
+            else:
+                print(f"  ⏭️  {pr['dir']}: 无本地修改")
     
     # Worktree 清理
     cleanup = report.get("worktreeCleanup")
@@ -342,21 +426,24 @@ def main():
     main_result = sync_main_repo(repo_root)
     print("")
     
-    # 2. 同步所有 subtree
+    # 2. 同步所有 subtree（pull）
     subtree_results = sync_all_subtrees(repo_root)
     
-    # 3. 清理已合并的 worktree
+    # 3. 推送本地修改到上游 subtree（push）
+    push_results = push_all_subtrees(repo_root)
+    
+    # 4. 清理已合并的 worktree
     cleanup_result = cleanup_worktrees(repo_root)
     print("")
     
-    # 4. 生成并保存报告（不再重启 Gateway）
-    report = generate_report(main_result, subtree_results, None, cleanup_result)
+    # 5. 生成并保存报告（不再重启 Gateway）
+    report = generate_report(main_result, subtree_results, None, cleanup_result, push_results)
     save_report(repo_root, report)
     
-    # 5. 打印摘要
+    # 6. 打印摘要
     print_summary(report)
     
-    # 6. 输出完整报告（供 OpenClaw 检测并发送通知）
+    # 7. 输出完整报告（供 OpenClaw 检测并发送通知）
     print("")
     print(f"[SYNC_REPORT] {json.dumps(report, ensure_ascii=False)}")
     
