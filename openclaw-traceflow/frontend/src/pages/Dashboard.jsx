@@ -18,8 +18,17 @@ import {
   Button,
 } from 'antd';
 import { HistoryOutlined } from '@ant-design/icons';
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { dashboardApi, extractApiErrorMessage } from '../api';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+import { dashboardApi, extractApiErrorMessage, metricsApi } from '../api';
 import { sessionStatusLabel } from '../i18n/sessionStatusLabel';
 import {
   inferSessionTypeLabel,
@@ -30,9 +39,12 @@ import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
 import TokenMetricHint from '../components/TokenMetricHint';
 import SectionScopeHint from '../components/SectionScopeHint';
+import { aggregateStaleAndEstimated } from '../utils/token-dual-track';
 
 /** 仪表盘整页轮询（含系统健康）；仅在前台标签页触发 */
 const DASHBOARD_POLL_INTERVAL_MS = 10000;
+/** 仪表盘 Token 汇总与分桶：metrics 时间窗用极大值，等价「库内全量可见行」（与后端 now - timeRangeMs 一致） */
+const DASHBOARD_METRICS_TIME_RANGE_MS = Number.MAX_SAFE_INTEGER;
 
 function formatTokenShort(n) {
   if (n == null || typeof n !== 'number') return '?';
@@ -304,19 +316,17 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
     {
       title: (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', width: '100%' }}>
-          <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
-            <span style={{ cursor: 'help' }}>
-              {`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
-            </span>
+          <Tooltip title={intl.formatMessage({ id: 'sessions.column.recordedTokensTooltip' })}>
+            <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.recordedTokens' })}</span>
           </Tooltip>
           <TokenMetricHint intl={intl} />
         </div>
       ),
-      key: 'tokenUtil',
-      width: 160,
+      key: 'tokenRecorded',
+      width: 140,
       align: 'right',
       onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-      onCell: () => ({ style: { minWidth: 160, verticalAlign: 'middle' } }),
+      onCell: () => ({ style: { minWidth: 140, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
         const unreliable = r.tokenUsage?.contextUtilizationReliable === false;
@@ -375,6 +385,26 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
           </div>
         );
       },
+    },
+    {
+      title: (
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.estimatedLogTooltip' })}>
+          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.estimatedLog' })}</span>
+        </Tooltip>
+      ),
+      key: 'tokenEstimated',
+      width: 100,
+      align: 'right',
+      render: (_, r) =>
+        r.estimatedTokensFromLog != null ? (
+          <Tooltip title={intl.formatMessage({ id: 'sessions.estimatedTokensDisclaimer' })}>
+            <Typography.Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+              {formatTokensShort(r.estimatedTokensFromLog)}
+            </Typography.Text>
+          </Tooltip>
+        ) : (
+          '—'
+        ),
     },
   ];
 }
@@ -535,6 +565,8 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
   const [archiveCountMap, setArchiveCountMap] = useState({});
+  /** 与 Token 监控同源：用于估算按进行中/归档分桶 */
+  const [tokenByKeyFull, setTokenByKeyFull] = useState([]);
   const [metrics, setMetrics] = useState({
     latency: null,
     tools: [],
@@ -554,7 +586,9 @@ export default function Dashboard() {
     fetchInFlightRef.current = true;
     try {
       let overviewHttpErr = null;
-      const data = await dashboardApi.getOverview().catch((err) => {
+      const data = await dashboardApi
+        .getOverview({ timeRangeMs: DASHBOARD_METRICS_TIME_RANGE_MS })
+        .catch((err) => {
         overviewHttpErr = err;
         return null;
       });
@@ -572,6 +606,7 @@ export default function Dashboard() {
           setSessions([]);
           setRecentLogs([]);
           setArchiveCountMap({});
+          setTokenByKeyFull([]);
           setMetrics({
             latency: { p50: 0, p95: 0, p99: 0, count: 0 },
             tools: [],
@@ -648,6 +683,13 @@ export default function Dashboard() {
         tokenSummary: tokenSummaryData || {},
         archiveCount: Object.values(acMap).reduce((s, n) => s + (Number(n) || 0), 0),
       });
+
+      try {
+        const rows = await metricsApi.getTokenUsageBySessionKey(DASHBOARD_METRICS_TIME_RANGE_MS);
+        setTokenByKeyFull(Array.isArray(rows) ? rows : []);
+      } catch {
+        setTokenByKeyFull([]);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -686,6 +728,16 @@ export default function Dashboard() {
   const recentSessionColumns = useMemo(
     () => buildDashboardRecentSessionColumns(intl, archiveCountMap),
     [intl, archiveCountMap],
+  );
+
+  const dashboardDualStats = useMemo(
+    () =>
+      aggregateStaleAndEstimated({
+        sessionList: sessions,
+        tokenByKeyRows: tokenByKeyFull,
+        tokenSummary: metrics.tokenSummary,
+      }),
+    [sessions, metrics.tokenSummary, tokenByKeyFull],
   );
 
   if (loading) {
@@ -940,128 +992,6 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {metrics.tokenSummary && (() => {
-        const ts = metrics.tokenSummary;
-        return (
-          <>
-            <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
-              <Col xs={24} md={12}>
-                <Card
-                  title={intl.formatMessage({ id: 'dashboard.tokenSummaryActive' })}
-                  extra={<SectionScopeHint intl={intl} messageId="dashboard.tokenActiveDesc" />}
-                  size="small"
-                  bodyStyle={{ padding: '12px 16px' }}
-                >
-                  <Row gutter={[8, 0]}>
-                    <Col span={8}>
-                      <Statistic
-                        title={
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {intl.formatMessage({ id: 'dashboard.tokenInput' })}
-                            <SectionScopeHint intl={intl} messageId="dashboard.tokenInputDesc" />
-                          </span>
-                        }
-                        value={ts.activeInput ?? 0}
-                        valueStyle={{ fontSize: 14 }}
-                      />
-                    </Col>
-                    <Col span={8}>
-                      <Statistic
-                        title={
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {intl.formatMessage({ id: 'dashboard.tokenOutput' })}
-                            <SectionScopeHint intl={intl} messageId="dashboard.tokenOutputDesc" />
-                          </span>
-                        }
-                        value={ts.activeOutput ?? 0}
-                        valueStyle={{ fontSize: 14 }}
-                      />
-                    </Col>
-                    <Col span={8}>
-                      <Statistic
-                        title={
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {intl.formatMessage({ id: 'dashboard.tokenTotal' })}
-                            <SectionScopeHint intl={intl} messageId="dashboard.tokenTotalDesc" />
-                          </span>
-                        }
-                        value={ts.activeTokens ?? 0}
-                        valueStyle={{ fontSize: 14 }}
-                      />
-                    </Col>
-                  </Row>
-                </Card>
-              </Col>
-              <Col xs={24} md={12}>
-                <Card
-                  title={intl.formatMessage({ id: 'dashboard.tokenSummaryArchived' })}
-                  extra={<SectionScopeHint intl={intl} messageId="dashboard.tokenArchivedDesc" />}
-                  size="small"
-                  bodyStyle={{ padding: '12px 16px' }}
-                >
-                  <Row gutter={[8, 0]}>
-                    <Col span={8}>
-                      <Statistic
-                        title={
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {intl.formatMessage({ id: 'dashboard.tokenInput' })}
-                            <SectionScopeHint intl={intl} messageId="dashboard.tokenInputDesc" />
-                          </span>
-                        }
-                        value={ts.archivedInput ?? 0}
-                        valueStyle={{ fontSize: 14 }}
-                        formatter={(val) => (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            {val}
-                            <TokenMetricHint intl={intl} value={ts.archivedInput ?? 0} />
-                          </span>
-                        )}
-                      />
-                    </Col>
-                    <Col span={8}>
-                      <Statistic
-                        title={
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {intl.formatMessage({ id: 'dashboard.tokenOutput' })}
-                            <SectionScopeHint intl={intl} messageId="dashboard.tokenOutputDesc" />
-                          </span>
-                        }
-                        value={ts.archivedOutput ?? 0}
-                        valueStyle={{ fontSize: 14 }}
-                        formatter={(val) => (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            {val}
-                            <TokenMetricHint intl={intl} value={ts.archivedOutput ?? 0} />
-                          </span>
-                        )}
-                      />
-                    </Col>
-                    <Col span={8}>
-                      <Statistic
-                        title={
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {intl.formatMessage({ id: 'dashboard.tokenTotal' })}
-                            <SectionScopeHint intl={intl} messageId="dashboard.tokenTotalDesc" />
-                          </span>
-                        }
-                        value={ts.archivedTokens ?? 0}
-                        valueStyle={{ fontSize: 14 }}
-                        formatter={(val) => (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            {val}
-                            <TokenMetricHint intl={intl} value={ts.archivedTokens ?? 0} />
-                          </span>
-                        )}
-                      />
-                    </Col>
-                  </Row>
-                </Card>
-              </Col>
-            </Row>
-          </>
-        );
-      })()}
-
       <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
         <Col xs={24}>
           <Card
@@ -1088,6 +1018,178 @@ export default function Dashboard() {
           </Card>
         </Col>
       </Row>
+
+      {metrics.tokenSummary && (() => {
+        const ts = metrics.tokenSummary;
+        const d = dashboardDualStats;
+        const chartData = [
+          {
+            name: intl.formatMessage({ id: 'dashboard.tokenCategoryActive' }),
+            recorded: ts.activeTokens ?? 0,
+            recordedIn: ts.activeInput ?? 0,
+            recordedOut: ts.activeOutput ?? 0,
+            estimated: d.estimatedSumActive ?? 0,
+          },
+          {
+            name: intl.formatMessage({ id: 'dashboard.tokenCategoryArchived' }),
+            recorded: ts.archivedTokens ?? 0,
+            recordedIn: ts.archivedInput ?? 0,
+            recordedOut: ts.archivedOutput ?? 0,
+            estimated: d.estimatedSumArchived ?? 0,
+          },
+        ];
+        return (
+          <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
+            <Col xs={24}>
+              <Card
+                title={intl.formatMessage({ id: 'dashboard.tokenSummaryChartTitle' })}
+                extra={
+                  <Space wrap size={4}>
+                    <SectionScopeHint intl={intl} messageId="dashboard.tokenSummaryChartDesc" />
+                    <SectionScopeHint intl={intl} messageId="dashboard.tokenMetricsTraceDoc" overlayMaxWidth={520} />
+                  </Space>
+                }
+                size="small"
+                bodyStyle={{ padding: '12px 16px' }}
+              >
+                {(() => {
+                  const archivedRecZero =
+                    (ts.archivedTokens ?? 0) === 0 &&
+                    (ts.archivedInput ?? 0) === 0 &&
+                    (ts.archivedOutput ?? 0) === 0;
+                  if (!archivedRecZero) return null;
+                  return (
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message={intl.formatMessage({ id: 'dashboard.tokenArchivedZeroBannerTitle' })}
+                      description={intl.formatMessage(
+                        { id: 'dashboard.tokenArchivedZeroBannerDesc' },
+                        { estArchived: (d.estimatedSumArchived ?? 0).toLocaleString() },
+                      )}
+                    />
+                  );
+                })()}
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart
+                    data={chartData}
+                    margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
+                    barCategoryGap="18%"
+                    barGap={2}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: token.colorTextSecondary }} />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: token.colorTextSecondary }}
+                      tickFormatter={(v) => formatTokensShort(v)}
+                      width={56}
+                    />
+                    <RechartsTooltip
+                      formatter={(value, name) => [formatTokensShort(value), name]}
+                      contentStyle={{ background: token.colorBgElevated }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar
+                      dataKey="recorded"
+                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecorded' })}
+                      fill={token.colorPrimary}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={36}
+                    />
+                    <Bar
+                      dataKey="recordedIn"
+                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecordedIn' })}
+                      fill={token.colorInfo}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={36}
+                    />
+                    <Bar
+                      dataKey="recordedOut"
+                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecordedOut' })}
+                      fill={token.colorWarning}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={36}
+                    />
+                    <Bar
+                      dataKey="estimated"
+                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesEstimated' })}
+                      fill={token.colorSuccess}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={36}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+
+                <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 4, fontSize: 12, lineHeight: 1.6 }}>
+                  {intl.formatMessage(
+                    { id: 'dashboard.tokenIoFootnote' },
+                    {
+                      ai: (ts.activeInput ?? 0).toLocaleString(),
+                      ao: (ts.activeOutput ?? 0).toLocaleString(),
+                      ri: (ts.archivedInput ?? 0).toLocaleString(),
+                      ro: (ts.archivedOutput ?? 0).toLocaleString(),
+                    },
+                  )}
+                </Typography.Paragraph>
+                <Typography.Paragraph type="secondary" style={{ marginTop: 0, marginBottom: 8, fontSize: 12, lineHeight: 1.6 }}>
+                  {intl.formatMessage({ id: 'dashboard.tokenFixtureDocLine' })}
+                </Typography.Paragraph>
+
+                <Row gutter={[12, 12]}>
+                  <Col xs={12} sm={6} md={6}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'token.overviewStaleCount' })}
+                          <SectionScopeHint intl={intl} messageId="token.overviewStaleCountDesc" />
+                        </span>
+                      }
+                      value={d.staleCount}
+                    />
+                  </Col>
+                  <Col xs={12} sm={6} md={6}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'token.overviewStaleWithActive' })}
+                          <SectionScopeHint intl={intl} messageId="token.overviewStaleWithActiveDesc" />
+                        </span>
+                      }
+                      value={d.staleWithActive}
+                    />
+                  </Col>
+                  <Col xs={12} sm={6} md={6}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'token.overviewEstimatedSum' })}
+                          <SectionScopeHint intl={intl} messageId="token.overviewEstimatedSumDesc" />
+                        </span>
+                      }
+                      value={d.estimatedSum}
+                    />
+                  </Col>
+                  <Col xs={12} sm={6} md={6}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'dashboard.estimatedOrphanLabel' })}
+                          <SectionScopeHint intl={intl} messageId="dashboard.estimatedOrphanHint" />
+                        </span>
+                      }
+                      value={d.estimatedSumOrphan ?? 0}
+                    />
+                  </Col>
+                </Row>
+                <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
+                  {intl.formatMessage({ id: 'token.dualTrack.formulaHint' })}
+                </Typography.Paragraph>
+              </Card>
+            </Col>
+          </Row>
+        );
+      })()}
 
       <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
         <Col xs={24} md={12}>

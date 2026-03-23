@@ -25,6 +25,12 @@ export interface Config {
 
   /** OpenClaw 日志文件路径（用户配置，OpenClaw 输出到该文件） */
   openclawLogPath?: string;
+
+  /**
+   * 由 transcript .jsonl 字节数估算 token 时的除数（启发式，非 tokenizer）。
+   * 可通过环境变量 TOKEN_ESTIMATE_BYTES_DIVISOR 覆盖，默认 4。
+   */
+  tokenEstimateBytesDivisor: number;
 }
 
 @Injectable()
@@ -54,6 +60,7 @@ export class ConfigService {
       dataDir: path.join(realCwd, 'data'),
       /** OpenClaw 日志路径，需用户配置（OpenClaw 输出到该文件） */
       openclawLogPath: undefined,
+      tokenEstimateBytesDivisor: 4,
     };
 
     // 2. 从配置文件加载（如果存在）
@@ -80,6 +87,9 @@ export class ConfigService {
       accessMode: process.env.OPENCLAW_ACCESS_MODE as Config['accessMode'] || undefined,
       dataDir: process.env.DATA_DIR || undefined,
       openclawLogPath: process.env.OPENCLAW_LOG_PATH || undefined,
+      tokenEstimateBytesDivisor: process.env.TOKEN_ESTIMATE_BYTES_DIVISOR
+        ? parseFloat(process.env.TOKEN_ESTIMATE_BYTES_DIVISOR)
+        : undefined,
     };
 
     // 4. 合并配置
@@ -88,6 +98,14 @@ export class ConfigService {
       ...fileConfig,
       ...Object.fromEntries(Object.entries(envConfig).filter(([_, v]) => v !== undefined)),
     } as Config;
+
+    if (
+      typeof merged.tokenEstimateBytesDivisor !== 'number' ||
+      !Number.isFinite(merged.tokenEstimateBytesDivisor) ||
+      merged.tokenEstimateBytesDivisor <= 0
+    ) {
+      merged.tokenEstimateBytesDivisor = 4;
+    }
 
     // 5. 确保数据目录存在（dataDir 由 cwd + 配置文件 + DATA_DIR 等合并决定，不写死）
     if (!fs.existsSync(merged.dataDir)) {

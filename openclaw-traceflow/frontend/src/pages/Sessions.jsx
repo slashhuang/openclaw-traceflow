@@ -116,6 +116,8 @@ export default function Sessions() {
           return s.messageCount ?? 0;
         case 'transcriptFileSizeBytes':
           return s.transcriptFileSizeBytes ?? 0;
+        case 'estimatedTokensFromLog':
+          return s.estimatedTokensFromLog ?? 0;
         case 'utilization': {
           const pct = sessionTokenUtilizationPercent(s);
           return pct ?? -1;
@@ -173,6 +175,7 @@ export default function Sessions() {
     { value: 'completed', label: intl.formatMessage({ id: 'sessions.filter.completed' }) },
     { value: 'failed', label: intl.formatMessage({ id: 'sessions.filter.failed' }) },
     { value: 'archived', label: intl.formatMessage({ id: 'sessions.filter.archived' }) },
+    { value: 'stale_index', label: intl.formatMessage({ id: 'sessions.filter.staleIndex' }) },
   ];
 
   const columns = [
@@ -231,6 +234,13 @@ export default function Sessions() {
               >
                 {typeLabel}
               </Tag>
+              {r.tokenUsageMeta?.totalTokensFresh === false && (
+                <Tooltip title={intl.formatMessage({ id: 'sessions.estimatedTokensDisclaimer' })}>
+                  <Tag color="volcano" style={{ margin: 0, fontSize: 11 }}>
+                    {intl.formatMessage({ id: 'sessions.staleIndexBadge' })}
+                  </Tag>
+                </Tooltip>
+              )}
               {chatKindLabel && (
                 <Tooltip title={intl.formatMessage({ id: 'sessions.chatKind.tooltip' })}>
                   <Tag color={chatKindColor} style={{ margin: 0, fontSize: 12 }}>
@@ -459,11 +469,11 @@ export default function Sessions() {
     {
       title: (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', width: '100%' }}>
-          <Tooltip title={intl.formatMessage({ id: 'sessions.column.tokensUtilHint' })}>
+          <Tooltip title={intl.formatMessage({ id: 'sessions.column.recordedTokensTooltip' })}>
             <span style={{ cursor: 'help' }}>
               <SortableTitle
-                label={`${intl.formatMessage({ id: 'sessions.column.tokens' })} / ${intl.formatMessage({ id: 'sessions.column.util' })}`}
-                active={sortKey === 'utilization'}
+                label={intl.formatMessage({ id: 'sessions.column.recordedTokens' })}
+                active={sortKey === 'totalTokens' || sortKey === 'utilization'}
                 order={sortOrder}
                 onClick={() => {
                   if (sortKey !== 'utilization') {
@@ -479,11 +489,11 @@ export default function Sessions() {
           <TokenMetricHint intl={intl} />
         </div>
       ),
-      key: 'tokenUtil',
-      width: 160,
+      key: 'tokenRecorded',
+      width: 150,
       align: 'right',
       onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-      onCell: () => ({ style: { minWidth: 160, verticalAlign: 'middle' } }),
+      onCell: () => ({ style: { minWidth: 150, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
         const unreliable = r.tokenUsage?.contextUtilizationReliable === false;
@@ -516,34 +526,66 @@ export default function Sessions() {
               </Tooltip>
               <TokenMetricHint intl={intl} value={r.totalTokens} />
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <Tooltip
-                title={
-                  unreliable
-                    ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' })
-                    : undefined
-                }
-              >
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <Progress
-                    percent={pct ?? 0}
-                    size="small"
-                    status={utilizationColor(pct)}
-                    showInfo={false}
-                    style={{ width: 76, flexShrink: 0, opacity: unreliable ? 0.45 : 1 }}
-                  />
-                  <Typography.Text
-                    style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}
-                    type={unreliable ? 'secondary' : undefined}
-                  >
-                    {pct == null ? '—' : `${pct}%`}
-                  </Typography.Text>
-                </span>
-              </Tooltip>
-            </div>
+            <Tooltip
+              title={
+                unreliable
+                  ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' })
+                  : undefined
+              }
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Progress
+                  percent={pct ?? 0}
+                  size="small"
+                  status={utilizationColor(pct)}
+                  showInfo={false}
+                  style={{ width: 76, flexShrink: 0, opacity: unreliable ? 0.45 : 1 }}
+                />
+                <Typography.Text
+                  style={{ minWidth: 34, textAlign: 'right', whiteSpace: 'nowrap' }}
+                  type={unreliable ? 'secondary' : undefined}
+                >
+                  {pct == null ? '—' : `${pct}%`}
+                </Typography.Text>
+              </span>
+            </Tooltip>
           </div>
         );
       },
+    },
+    {
+      title: (
+        <Tooltip title={intl.formatMessage({ id: 'sessions.column.estimatedLogTooltip' })}>
+          <span style={{ cursor: 'help' }}>
+            <SortableTitle
+              label={intl.formatMessage({ id: 'sessions.column.estimatedLog' })}
+              active={sortKey === 'estimatedTokensFromLog'}
+              order={sortOrder}
+              onClick={() => {
+                if (sortKey !== 'estimatedTokensFromLog') {
+                  setSortKey('estimatedTokensFromLog');
+                  setSortOrder('desc');
+                } else {
+                  setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+                }
+              }}
+            />
+          </span>
+        </Tooltip>
+      ),
+      key: 'tokenEstimated',
+      width: 110,
+      align: 'right',
+      render: (_, r) =>
+        r.estimatedTokensFromLog != null ? (
+          <Tooltip title={intl.formatMessage({ id: 'sessions.estimatedTokensDisclaimer' })}>
+            <Typography.Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+              {formatTokensShort(r.estimatedTokensFromLog)}
+            </Typography.Text>
+          </Tooltip>
+        ) : (
+          '—'
+        ),
     },
   ];
 
