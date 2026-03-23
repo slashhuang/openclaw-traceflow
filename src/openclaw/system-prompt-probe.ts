@@ -77,6 +77,8 @@ export type SystemPromptProbeResult = {
   };
   /** Session 元数据（来自 transcript 首行） */
   sessionMeta?: Record<string, unknown>;
+  /** 完整的 sessions.json entry */
+  sessionsJsonEntry?: Record<string, unknown>;
 };
 
 function charsToTok(c: number): number {
