@@ -79,6 +79,8 @@ export type SystemPromptProbeResult = {
   sessionMeta?: Record<string, unknown>;
   /** 完整的 sessions.json entry */
   sessionsJsonEntry?: Record<string, unknown>;
+  /** injectedWorkspaceFiles 列表（来自 sessions.json systemPromptReport） */
+  injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
 };
 
 function charsToTok(c: number): number {
