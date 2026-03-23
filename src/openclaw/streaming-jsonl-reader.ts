@@ -133,7 +133,7 @@ export async function readJsonlHeadTail(
     }
 
     // 5. 读取尾部（seek 到文件末尾）
-    const actualTailBufferSize = Math.min(tailBufferSize, stats.size / 4);
+    const actualTailBufferSize = Math.min(tailBufferSize, Math.floor(stats.size / 4));
     const tailBuffer = Buffer.alloc(actualTailBufferSize);
     const tailStart = Math.max(0, stats.size - actualTailBufferSize);
     const tailRead = await fd.read(tailBuffer, 0, actualTailBufferSize, tailStart);
