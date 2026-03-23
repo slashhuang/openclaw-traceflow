@@ -763,6 +763,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     skillsPrompt?: string;
     /** 完整 skillsSnapshot（prompt + skills 列表） */
     skillsSnapshot?: SkillsSnapshotData;
+    /** injectedWorkspaceFiles 列表（从 sessions.json 提取） */
+    injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
   } | null {
     const agentsDir = path.join(dir, 'agents');
     if (!fs.existsSync(agentsDir)) return null;
@@ -777,6 +779,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         resolvedSkills?: Array<{ name: string; filePath?: string; description?: string }>;
         skillsPrompt?: string;
         skillsSnapshot?: SkillsSnapshotData;
+        injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
       }> = [];
       for (const agent of agentDirs) {
         const storePath = path.join(agentsDir, agent, 'sessions', 'sessions.json');
@@ -791,6 +794,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
             skillsSnapshot?: {
               prompt?: string;
               resolvedSkills?: Array<{ name?: string; filePath?: string; description?: string }>;
+              injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
             };
           }
         >;
@@ -811,6 +815,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
               typeof entry?.skillsSnapshot?.prompt === 'string' ? entry.skillsSnapshot.prompt : undefined;
             const skillsSnapshot =
               entry?.skillsSnapshot && typeof entry.skillsSnapshot === 'object' ? entry.skillsSnapshot : undefined;
+            const injectedWorkspaceFiles = Array.isArray(entry?.skillsSnapshot?.injectedWorkspaceFiles)
+              ? entry.skillsSnapshot.injectedWorkspaceFiles
+              : undefined;
             candidates.push({
               key,
               sessionId: entry.sessionId,
@@ -820,6 +827,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
               resolvedSkills,
               skillsPrompt,
               skillsSnapshot,
+              injectedWorkspaceFiles,
             });
           }
         }
@@ -833,6 +841,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         resolvedSkills: chosen.resolvedSkills,
         skillsPrompt: chosen.skillsPrompt,
         skillsSnapshot: chosen.skillsSnapshot,
+        injectedWorkspaceFiles: chosen.injectedWorkspaceFiles,
       };
     } catch {
       return null;
@@ -1148,111 +1157,138 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           };
         }
 
-        // 提取消息
-        if (entry.message) {
+        // 提取消息（包括 session、model_change 等元数据行）
+        if (entry.message || entry.type === 'session' || entry.type === 'model_change' || entry.type === 'thinking_level_change' || entry.type === 'custom') {
           const msg = entry.message;
-          const messageContent = msg.content;
-          const role = msg.role as string;
-
-          // 顶层 + content 级：toolResult 消息（role=toolResult）关联到之前的 toolCall
-          if (role === 'toolResult') {
-            const toolCallId = msg.toolCallId as string | undefined;
-            const toolName = msg.toolName as string | undefined;
-            const isError = msg.isError === true;
-            const details = msg.details as { durationMs?: number; status?: string } | undefined;
-            const durationMs = details?.durationMs ?? 0;
-
-            let output: any = {};
-            if (Array.isArray(messageContent)) {
-              const texts: string[] = [];
-              for (const item of messageContent) {
-                if (item?.type === 'text' && typeof item.text === 'string') {
-                  texts.push(item.text);
-                }
-              }
-              output = texts.length === 1 ? texts[0] : texts.length > 1 ? texts : {};
-            }
-            if (details && Object.keys(details).length > 0 && (typeof output !== 'object' || Object.keys(output as object).length === 0)) {
-              output = details;
-            }
-
-            if (toolCallId && toolCallIdToIndex.has(toolCallId)) {
-              const idx = toolCallIdToIndex.get(toolCallId)!;
-              const prev = toolCalls[idx];
-              toolCalls[idx] = {
-                ...prev,
-                output,
-                durationMs,
-                success: !isError,
-                error: isError ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined,
-                timestamp:
-                  prev.timestamp ??
-                  (typeof entry.timestamp === 'number' ? entry.timestamp : undefined),
-              };
+          const role = msg?.role as string || 'system';
+          
+          // 处理元数据行（session、model_change 等）
+          if (!msg && entry.type) {
+            let metaContent = '';
+            if (entry.type === 'session') {
+              metaContent = `[Session] id=${entry.id}, version=${entry.version}`;
+            } else if (entry.type === 'model_change') {
+              metaContent = `[Model] ${entry.provider}/${entry.modelId}`;
+            } else if (entry.type === 'thinking_level_change') {
+              metaContent = `[Thinking] level=${entry.thinkingLevel || 'unknown'}`;
+            } else if (entry.type === 'custom' && entry.customType) {
+              metaContent = `[Custom] ${entry.customType}`;
             } else {
-              toolCalls.push({
-                name: toolName || 'unknown',
-                input: {},
-                output,
-                durationMs,
-                success: !isError,
-                error: isError ? (typeof output === 'string' ? output : undefined) : undefined,
-                timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
-              });
+              metaContent = `[${entry.type}]`;
             }
+            
+            messages.push({
+              role: 'system' as const,
+              content: metaContent,
+              timestamp: entry.timestamp || Date.now(),
+              tokenCount: 0,
+            });
           }
+          
+          // 处理普通消息
+          if (msg) {
+            const messageContent = msg.content;
+            
+            // 顶层 + content 级：toolResult 消息（role=toolResult）关联到之前的 toolCall
+            if (role === 'toolResult') {
+              const toolCallId = msg.toolCallId as string | undefined;
+              const toolName = msg.toolName as string | undefined;
+              const isError = msg.isError === true;
+              const details = msg.details as { durationMs?: number; status?: string } | undefined;
+              const durationMs = details?.durationMs ?? 0;
 
-          // 处理 content 可能是数组或字符串的情况
-          let contentText = '';
-          if (Array.isArray(messageContent)) {
-            for (const item of messageContent) {
-              if (item.type === 'toolCall') {
-                const id = item.id || item.toolCallId;
-                const name = item.name || item.toolName || 'unknown';
-                const args = item.arguments || item.input || {};
-                const idx = toolCalls.length;
+              let output: any = {};
+              if (Array.isArray(messageContent)) {
+                const texts: string[] = [];
+                for (const item of messageContent) {
+                  if (item?.type === 'text' && typeof item.text === 'string') {
+                    texts.push(item.text);
+                  }
+                }
+                output = texts.length === 1 ? texts[0] : texts.length > 1 ? texts : {};
+              }
+              if (details && Object.keys(details).length > 0 && (typeof output !== 'object' || Object.keys(output as object).length === 0)) {
+                output = details;
+              }
+
+              if (toolCallId && toolCallIdToIndex.has(toolCallId)) {
+                const idx = toolCallIdToIndex.get(toolCallId)!;
+                const prev = toolCalls[idx];
+                toolCalls[idx] = {
+                  ...prev,
+                  output,
+                  durationMs,
+                  success: !isError,
+                  error: isError ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined,
+                  timestamp:
+                    prev.timestamp ??
+                    (typeof entry.timestamp === 'number' ? entry.timestamp : undefined),
+                };
+              } else {
                 toolCalls.push({
-                  name,
-                  input: args,
-                  output: {},
-                  durationMs: 0,
-                  success: true,
-                  error: undefined,
+                  name: toolName || 'unknown',
+                  input: {},
+                  output,
+                  durationMs,
+                  success: !isError,
+                  error: isError ? (typeof output === 'string' ? output : undefined) : undefined,
                   timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
                 });
-                if (id) toolCallIdToIndex.set(id, idx);
-              } else if (item.type === 'text') {
-                contentText += item.text || '';
-              } else if (item.type === 'thinking') {
-                // 跳过 thinking 内容，不显示
               }
             }
-            if (!contentText && role === 'assistant') {
-              const tcNames = messageContent.filter((c: any) => c?.type === 'toolCall').map((c: any) => c.name || c.toolName).filter(Boolean);
-              if (tcNames.length > 0) {
-                contentText = '[工具调用：' + tcNames.join(', ') + ']';
+
+            // 处理 content 可能是数组或字符串的情况
+            let contentText = '';
+            if (Array.isArray(messageContent)) {
+              for (const item of messageContent) {
+                if (item.type === 'toolCall') {
+                  const id = item.id || item.toolCallId;
+                  const name = item.name || item.toolName || 'unknown';
+                  const args = item.arguments || item.input || {};
+                  const idx = toolCalls.length;
+                  toolCalls.push({
+                    name,
+                    input: args,
+                    output: {},
+                    durationMs: 0,
+                    success: true,
+                    error: undefined,
+                    timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
+                  });
+                  if (id) toolCallIdToIndex.set(id, idx);
+                } else if (item.type === 'text') {
+                  contentText += item.text || '';
+                } else if (item.type === 'thinking') {
+                  // 跳过 thinking 内容，不显示
+                }
+              }
+              if (!contentText && role === 'assistant') {
+                const tcNames = messageContent.filter((c: any) => c?.type === 'toolCall').map((c: any) => c.name || c.toolName).filter(Boolean);
+                if (tcNames.length > 0) {
+                  contentText = '[工具调用：' + tcNames.join(', ') + ']';
+                } else if (!contentText) {
+                  contentText = '[无内容]';
+                }
               } else if (!contentText) {
                 contentText = '[无内容]';
               }
-            } else if (!contentText) {
-              contentText = '[无内容]';
+            } else {
+              contentText = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
             }
-          } else {
-            contentText = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
-          }
 
-          const sender =
-            role === 'user'
-              ? (msg.senderLabel as string) || extractSenderFromMessageContent(contentText)
-              : undefined;
-          const displayRole = role === 'toolResult' ? 'assistant' : (role as 'user' | 'assistant' | 'system');
-          messages.push({
-            role: displayRole,
-            content: contentText,
-            timestamp: entry.timestamp || Date.now(),
-            tokenCount: msg.tokenCount,
-            ...(sender ? { sender } : {}),
-          });
+            const sender =
+              role === 'user'
+                ? (msg.senderLabel as string) || extractSenderFromMessageContent(contentText)
+                : undefined;
+            const displayRole = role === 'toolResult' ? 'assistant' : (role as 'user' | 'assistant' | 'system');
+            messages.push({
+              role: displayRole,
+              content: contentText,
+              timestamp: entry.timestamp || Date.now(),
+              tokenCount: msg.tokenCount,
+              ...(sender ? { sender } : {}),
+            });
+          }
         }
 
         // 提取工具调用（兼容旧的 toolUse 格式）
