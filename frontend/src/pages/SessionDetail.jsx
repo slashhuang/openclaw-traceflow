@@ -764,14 +764,46 @@ export default function SessionDetail() {
           showIcon
           style={{ marginBottom: 16 }}
           message={intl.formatMessage({ id: 'session.transcriptHeadTailAlertTitle' })}
-          description={intl.formatMessage(
-            { id: 'session.transcriptHeadTailAlertDesc' },
-            {
-              size: formatFileSize(resolveSessionLogBytes(session)),
-              head: session.transcriptHeadJsonlLineCount ?? 0,
-              tail: session.transcriptTailJsonlLineCount ?? 0,
-            },
-          )}
+          description={
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <span>
+                {intl.formatMessage(
+                  { id: 'session.transcriptHeadTailAlertDesc' },
+                  {
+                    size: formatFileSize(resolveSessionLogBytes(session)),
+                    head: session.transcriptHeadJsonlLineCount ?? 0,
+                    tail: session.transcriptTailJsonlLineCount ?? 0,
+                  },
+                )}
+              </span>
+              <Button
+                size="small"
+                onClick={() => {
+                  Modal.confirm({
+                    title: intl.formatMessage({ id: 'session.loadFullTranscriptTitle' }),
+                    content: intl.formatMessage({ id: 'session.loadFullTranscriptContent' }, {
+                      size: formatFileSize(resolveSessionLogBytes(session)),
+                    }),
+                    okText: intl.formatMessage({ id: 'common.loadFull' }),
+                    cancelText: intl.formatMessage({ id: 'common.cancel' }),
+                    onOk: () => {
+                      message.loading({ content: intl.formatMessage({ id: 'session.loadingFull' }), key: 'loadFull' });
+                      sessionsApi.getSessionDetail(session.sessionId, { full: true })
+                        .then(() => {
+                          message.success({ content: intl.formatMessage({ id: 'session.loadedFull' }), key: 'loadFull' });
+                          window.location.reload();
+                        })
+                        .catch((err) => {
+                          message.error({ content: err.message || 'Failed', key: 'loadFull' });
+                        });
+                    },
+                  });
+                }}
+              >
+                {intl.formatMessage({ id: 'session.loadFullTranscript' })}
+              </Button>
+            </Space>
+          }
         />
       )}
 

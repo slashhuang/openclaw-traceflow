@@ -175,7 +175,7 @@ export class MetricsService implements OnModuleInit {
   }
 
   getToolStatsSnapshot(
-    maxAgeMs = 45_000,
+    maxAgeMs = 300_000, // 5 分钟缓存，避免频繁刷新
   ): { tools: Array<{ tool: string; count: number; successRate: number }>; skills: Array<{ skill: string; count: number }> } | null {
     if (!this.toolStatsSnapshotAt || Date.now() - this.toolStatsSnapshotAt > maxAgeMs) {
       return null;
