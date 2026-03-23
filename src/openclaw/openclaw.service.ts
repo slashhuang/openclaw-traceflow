@@ -2132,6 +2132,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       skillsSnapshot,
       sessionMeta,
       sessionsJsonEntry,
+      injectedWorkspaceFiles: (chosen?.entry?.systemPromptReport as any)?.injectedWorkspaceFiles,
     };
   }
 }
