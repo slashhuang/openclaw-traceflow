@@ -18,6 +18,7 @@ import { rebuildSystemPromptMarkdown } from './system-prompt-rebuild';
 import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
 import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
 import { FileSystemSessionStorage, type SessionData, type SessionStorage } from '../storage/session-storage';
+import { readJsonlHeadTail, type HeadTailResult } from './streaming-jsonl-reader';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -389,11 +390,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   /** 缓存 TTL（毫秒） */
   private static readonly CACHE_TTL_MS = 10_000;
   /** 小于此大小的 .jsonl 一次性读入并全量解析 */
-  private static readonly SESSION_JSONL_FULL_SCAN_MAX_BYTES = 5 * 1024 * 1024;
+  private static readonly SESSION_JSONL_FULL_SCAN_MAX_BYTES = 500 * 1024; // 500KB (优化前 2MB)
   /** 大文件时读取文件头部字节数（用于首条 user / 元信息） */
-  private static readonly SESSION_JSONL_HEAD_MAX_BYTES = 128 * 1024;
+  private static readonly SESSION_JSONL_HEAD_MAX_BYTES = 64 * 1024; // 64KB ≈ 20-25 行
   /** 大文件时读取文件尾部字节数（近期消息、usage 多在尾部） */
-  private static readonly SESSION_JSONL_TAIL_MAX_BYTES = 16 * 1024 * 1024;
+  private static readonly SESSION_JSONL_TAIL_MAX_BYTES = 64 * 1024; // 64KB ≈ 20-25 行 (优化前 2MB)
   /** Promise 级别缓存（防并发重复） */
   private pendingRefresh: Promise<void> | null = null;
 
@@ -1336,61 +1337,50 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const stats = fs.statSync(sessionFile.filePath);
       /** JSON 序列化不支持 bigint；统一为 number */
       const size = Number(stats.size);
-      const splitJsonl = (t: string) => t.split('\n').filter((line) => line.trim());
       const FULL = OpenClawService.SESSION_JSONL_FULL_SCAN_MAX_BYTES;
-      const HEAD = OpenClawService.SESSION_JSONL_HEAD_MAX_BYTES;
-      const TAIL = OpenClawService.SESSION_JSONL_TAIL_MAX_BYTES;
 
       let transcriptParseMode: 'full' | 'head_tail' = 'full';
       let transcriptJsonlLineCount: number | undefined;
       let transcriptHeadJsonlLineCount: number | undefined;
       let transcriptTailJsonlLineCount: number | undefined;
-      let linesForInfer: string[];
       let scan: SessionJsonlScan;
 
+      // 使用流式读取器处理大文件
       if (size <= FULL) {
+        // 小文件：全量读取
         const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
-        const lines = splitJsonl(content);
+        const lines = content.split('\n').filter((line) => line.trim());
         if (lines.length === 0) {
           return null;
         }
         scan = this.scanSessionJsonlLines(lines);
-        linesForInfer = lines;
         transcriptJsonlLineCount = lines.length;
       } else {
-        const headLen = Math.min(HEAD, size);
-        const tailLen = Math.min(TAIL, size);
-        if (headLen + tailLen >= size) {
-          const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
-          const lines = splitJsonl(content);
-          if (lines.length === 0) {
-            return null;
-          }
-          scan = this.scanSessionJsonlLines(lines);
-          linesForInfer = lines;
-          transcriptJsonlLineCount = lines.length;
-        } else {
-          transcriptParseMode = 'head_tail';
-          const headText = this.readFileUtf8Slice(sessionFile.filePath, 0, headLen);
-          const tailBufStart = size - tailLen;
-          const tailRaw = this.readFileUtf8Slice(sessionFile.filePath, tailBufStart, tailLen);
-          const nl = tailRaw.indexOf('\n');
-          const tailText = nl === -1 ? tailRaw : tailRaw.slice(nl + 1);
+        // 大文件：使用流式首尾分片读取
+        transcriptParseMode = 'head_tail';
+        
+        try {
+          const result: HeadTailResult = await readJsonlHeadTail(sessionFile.filePath, {
+            headLines: 15,
+            tailLines: 10,
+            scanForUser: 100,
+          });
 
-          const headLines = splitJsonl(headText);
-          const tailLines = splitJsonl(tailText);
-          if (headLines.length === 0 && tailLines.length === 0) {
-            return null;
-          }
-          transcriptHeadJsonlLineCount = headLines.length;
-          transcriptTailJsonlLineCount = tailLines.length;
-          const headScan = this.scanSessionJsonlLines(headLines);
-          const tailScan = this.scanSessionJsonlLines(tailLines);
-          scan = {
-            ...tailScan,
-            firstUserData: headScan.firstUserData ?? tailScan.firstUserData,
-          };
-          linesForInfer = [...headLines.slice(0, 80), ...tailLines.slice(0, 80)];
+          transcriptHeadJsonlLineCount = result.headLines.length;
+          transcriptTailJsonlLineCount = result.tailLines.length;
+          transcriptJsonlLineCount = result.totalLines;
+
+          // 合并首尾数据进行扫描
+          const allLines = [...result.headLines, ...result.tailLines];
+          scan = this.scanSessionJsonlLines(allLines);
+        } catch (error) {
+          this.logger.error(`Stream read failed, fallback to full read: ${error.message}`);
+          // 降级：全量读取
+          const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
+          const lines = content.split('\n').filter((line) => line.trim());
+          scan = this.scanSessionJsonlLines(lines);
+          transcriptJsonlLineCount = lines.length;
+          transcriptParseMode = 'full';
         }
       }
 

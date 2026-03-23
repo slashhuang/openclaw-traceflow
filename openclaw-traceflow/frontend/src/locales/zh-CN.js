@@ -376,6 +376,12 @@ export default {
   'session.transcriptHeadTailAlertTitle': '大文件已按首尾策略加载',
   'session.transcriptHeadTailAlertDesc':
     '当前会话日志约 {size}，超过服务端单文件全量解析阈值。仅解析首部 {head} 条与尾部 {tail} 条 JSONL 记录（非空行）；中间区段未载入，列表展示不代表完整历史。',
+  'session.loadFullTranscript': '加载完整对话',
+  'session.loadFullTranscriptTitle': '确认加载完整对话？',
+  'session.loadFullTranscriptContent': '当前会话日志约 {size}，加载完整内容可能需要较长时间。',
+  'common.loadFull': '加载完整',
+  'session.loadingFull': '正在加载完整对话...',
+  'session.loadedFull': '加载完成，页面将刷新',
   'logs.title': '实时日志',
   'logs.connected': '实时已连接',
   'logs.disconnected': '未连接',

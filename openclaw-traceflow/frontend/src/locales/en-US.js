@@ -381,6 +381,12 @@ export default {
   'session.transcriptHeadTailAlertTitle': 'Large log loaded with head/tail strategy',
   'session.transcriptHeadTailAlertDesc':
     'This session log is about {size} and exceeds the server full-parse threshold. Only the first {head} and last {tail} non-empty JSONL lines were parsed; the middle was not loaded—lists are not the full history.',
+  'session.loadFullTranscript': 'Load full transcript',
+  'session.loadFullTranscriptTitle': 'Load full transcript?',
+  'session.loadFullTranscriptContent': 'This session log is about {size}. Loading the full content may take a while.',
+  'common.loadFull': 'Load full',
+  'session.loadingFull': 'Loading full transcript...',
+  'session.loadedFull': 'Loaded. Reloading page.',
   'logs.title': 'Live logs',
   'logs.connected': 'Live',
   'logs.disconnected': 'Disconnected',
