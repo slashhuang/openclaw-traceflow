@@ -129,7 +129,7 @@ export class TraceflowGatewayPersistentClient {
       return Promise.reject(new Error('Gateway URL 未配置'));
     }
     const wsUrl = gatewayHttpUrlToWs(url);
-    const timeoutMs = 20_000;
+    const timeoutMs = 5_000; // 优化：缩短 WebSocket 握手超时从 20s 到 5s
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl, { maxPayload: 25 * 1024 * 1024 });
@@ -266,7 +266,7 @@ export class TraceflowGatewayPersistentClient {
   async request<T = unknown>(
     method: string,
     params: Record<string, unknown>,
-    timeoutMs = 15_000,
+    timeoutMs = 5_000, // 优化：缩短默认 RPC 超时从 15s 到 5s
   ): Promise<GatewayRpcResult<T>> {
     await this.connect();
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -308,7 +308,7 @@ export class TraceflowGatewayPersistentClient {
     await this.connect();
     const payloads: unknown[] = [];
     for (const c of calls) {
-      const r = await this.request(c.method, c.methodParams ?? {}, 20_000);
+      const r = await this.request(c.method, c.methodParams ?? {}, 5_000); // 优化：缩短序列请求超时从 20s 到 5s
       if (!r.ok) {
         return { ok: false, error: r.error };
       }
