@@ -76,7 +76,8 @@ export const setupApi = {
 export const metricsApi = {
   getLatency: () => api.get('/metrics/latency').then(res => res.data),
   getTools: () => api.get('/metrics/tools').then(res => res.data),
-  getTokenSummary: () => api.get('/metrics/token-summary').then(res => res.data),
+  getTokenSummary: (timeRangeMs = 86400000) =>
+    api.get('/metrics/token-summary', { params: { timeRangeMs } }).then(res => res.data),
   getTokenUsage: (params) => api.get('/metrics/token-usage', { params }).then(res => res.data),
   getTokenUsageBySessionKey: (timeRangeMs = 86400000) =>
     api.get('/metrics/token-usage-by-session-key', { params: { timeRangeMs } }).then(res => res.data),
@@ -87,7 +88,8 @@ export const metricsApi = {
 };
 
 export const dashboardApi = {
-  getOverview: () => api.get('/dashboard/overview').then(res => res.data),
+  /** @param {{ timeRangeMs?: number }} [params] - 不传则后端默认 24h；传极大值可近似全量 metrics */
+  getOverview: (params) => api.get('/dashboard/overview', { params }).then((res) => res.data),
 };
 
 export const actionsApi = {

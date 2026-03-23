@@ -1,0 +1,54 @@
+{
+  "_comment": "Illustrative snapshot: both active and archived buckets non-zero. Maps to dashboard token chart + dual-track estimates.",
+  "getTokenSummary": {
+    "totalInput": 15100,
+    "totalOutput": 10100,
+    "totalTokens": 25200,
+    "activeInput": 12000,
+    "activeOutput": 8000,
+    "activeTokens": 20000,
+    "archivedInput": 3100,
+    "archivedOutput": 2100,
+    "archivedTokens": 5200,
+    "nearLimitCount": 0,
+    "limitReachedCount": 0,
+    "sessionCount": 4
+  },
+  "getTokenUsageBySessionKey_item_example": {
+    "sessionKey": "agent:main:main",
+    "sessionId": "125eae26-7a03-42ca-b429-b5c0217a1d85",
+    "totalTokens": 25200,
+    "activeTokens": 20000,
+    "archivedTokens": 5200,
+    "archivedCount": 2,
+    "inputTokens": 15100,
+    "outputTokens": 10100,
+    "model": "claude-sonnet-4-20250514"
+  },
+  "metrics_db_row_patterns": {
+    "ongoing_snapshot": "id: token-{sessionId}-{Date.now()} — from periodic listSessions + tokenUsage",
+    "archived_epoch": "id: archived-{sessionId}-{resetTimestamp} — from *.jsonl.reset.* last usage line"
+  },
+  "sessions_stale_for_estimate_bucket": [
+    {
+      "sessionKey": "agent:main:main",
+      "sessionId": "125eae26-7a03-42ca-b429-b5c0217a1d85",
+      "tokenUsageMeta": { "totalTokensFresh": false },
+      "estimatedTokensFromLog": 19800
+    }
+  ],
+  "dashboard_chart_bars_same_numbers": {
+    "进行中": {
+      "recorded": 20000,
+      "recordedIn": 12000,
+      "recordedOut": 8000,
+      "estimated_log": "from aggregateStaleAndEstimated.estimatedSumActive when stale rows bucket active"
+    },
+    "归档": {
+      "recorded": 5200,
+      "recordedIn": 3100,
+      "recordedOut": 2100,
+      "estimated_log": "estimatedSumArchived when stale rows bucket archived"
+    }
+  }
+}

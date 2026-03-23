@@ -787,18 +787,16 @@ export default function SessionDetail() {
         <Card
           size="small"
           title={
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Tooltip title={contextUnreliable ? intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' }) : undefined}>
-                <span>
-                  Token{' '}
-                  <Typography.Text type="secondary" style={{ fontWeight: 'normal', fontSize: 13 }}>
-                    ({total.toLocaleString()}/{limit.toLocaleString()})
-                    {contextUnreliable ? ' *' : ''}
-                  </Typography.Text>
-                </span>
-              </Tooltip>
-              <TokenMetricHint intl={intl} value={total} />
-            </span>
+            <Space wrap size={8}>
+              <span>{intl.formatMessage({ id: 'session.tokenCardTitleDual' })}</span>
+              {tokenUsageMeta?.totalTokensFresh === false && (
+                <Tooltip title={intl.formatMessage({ id: 'sessions.estimatedTokensDisclaimer' })}>
+                  <Tag color="volcano" style={{ margin: 0, fontSize: 11 }}>
+                    {intl.formatMessage({ id: 'sessions.staleIndexBadge' })}
+                  </Tag>
+                </Tooltip>
+              )}
+            </Space>
           }
           extra={<SectionScopeHint intl={intl} messageId="session.tokenCardScopeDesc" />}
           style={{ marginBottom: 16 }}
@@ -812,6 +810,53 @@ export default function SessionDetail() {
               description={intl.formatMessage({ id: 'session.tokenContextUnreliableDesc' })}
             />
           )}
+          <Descriptions size="small" column={{ xs: 1, sm: 2 }} style={{ marginBottom: 12 }}>
+            <Descriptions.Item
+              label={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {intl.formatMessage({ id: 'session.tokenValidDataLabel' })}
+                  <TokenMetricHint intl={intl} value={total} />
+                </span>
+              }
+            >
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <Tooltip title={contextUnreliable ? intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' }) : undefined}>
+                  <Typography.Text type={contextUnreliable ? 'secondary' : undefined}>
+                    {total.toLocaleString()} / {limit.toLocaleString()}
+                    {contextUnreliable ? ' *' : ''}
+                  </Typography.Text>
+                </Tooltip>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {intl.formatMessage(
+                    { id: 'session.tokenInOutInline' },
+                    { inTok: input.toLocaleString(), outTok: output.toLocaleString() },
+                  )}
+                </Typography.Text>
+                {!contextUnreliable && utilPct != null && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {intl.formatMessage({ id: 'sessions.column.util' })}: {utilPct}%
+                  </Typography.Text>
+                )}
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item
+              label={
+                <Tooltip title={intl.formatMessage({ id: 'sessions.column.estimatedLogTooltip' })}>
+                  <span style={{ cursor: 'help' }}>
+                    {intl.formatMessage({ id: 'session.tokenEstimateLabel' })}
+                  </span>
+                </Tooltip>
+              }
+            >
+              {session.estimatedTokensFromLog != null ? (
+                <Tooltip title={intl.formatMessage({ id: 'sessions.estimatedTokensDisclaimer' })}>
+                  <Typography.Text type="secondary">≈ {session.estimatedTokensFromLog.toLocaleString()}</Typography.Text>
+                </Tooltip>
+              ) : (
+                '—'
+              )}
+            </Descriptions.Item>
+          </Descriptions>
           <div style={{ marginBottom: 8, opacity: contextUnreliable ? 0.55 : 1 }}>
             <div
               style={{

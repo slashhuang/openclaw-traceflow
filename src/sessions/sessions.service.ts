@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '../config/config.service';
 import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
 import { inferSessionTypeLabel, resolveDisplayUser } from '../common/session-user-resolver';
+import {
+  estimateTokensFromTranscriptBytes,
+  shouldOfferLogSizeTokenEstimate,
+} from '../common/estimated-tokens-from-log';
 import { MetricsService } from '../metrics/metrics.service';
 
 function mapTokenUsageForApi(u: OpenClawSession['tokenUsage'] | undefined): Session['tokenUsage'] | undefined {
@@ -51,6 +56,8 @@ export interface Session {
   tokenUsageMeta?: OpenClawSession['tokenUsageMeta'];
   messageCount?: number;
   transcriptFileSizeBytes?: number;
+  /** 当索引用量不可信且官方 total 为 0 时，由日志字节数推算（启发式） */
+  estimatedTokensFromLog?: number;
 }
 
 export interface InvokedSkill {
@@ -106,30 +113,37 @@ export class SessionsService {
   constructor(
     private openclawService: OpenClawService,
     private metricsService: MetricsService,
+    private configService: ConfigService,
   ) {}
 
   async listSessions(): Promise<Session[]> {
     try {
       const sessions = await this.openclawService.listSessions();
 
+      const divisor = this.configService.getConfig().tokenEstimateBytesDivisor;
       return sessions.map((s) => {
         const typeLabel = inferSessionTypeLabel(s.sessionKey, s.sessionId);
+        const estimatedTokensFromLog = shouldOfferLogSizeTokenEstimate(s)
+          ? estimateTokensFromTranscriptBytes(s.transcriptFileSizeBytes, divisor)
+          : undefined;
         return {
           sessionKey: s.sessionKey,
           sessionId: s.sessionId,
           user: s.participantSummary || resolveDisplayUser(s.userId, typeLabel, s.systemSent),
           ...(s.participantSummary ? { participantSummary: s.participantSummary } : {}),
           typeLabel,
-        status: s.status,
-        lastActive: s.lastActiveAt,
-        duration: Date.now() - s.createdAt,
-        totalTokens: s.totalTokens,
-        contextTokens: s.contextTokens,
-        model: s.model,
+          status: s.status,
+          lastActive: s.lastActiveAt,
+          duration: Date.now() - s.createdAt,
+          totalTokens: s.totalTokens,
+          contextTokens: s.contextTokens,
+          model: s.model,
           usageCost: s.usageCost,
-        tokenUsage: mapTokenUsageForApi(s.tokenUsage),
-        messageCount: s.messageCount,
-        transcriptFileSizeBytes: s.transcriptFileSizeBytes,
+          tokenUsage: mapTokenUsageForApi(s.tokenUsage),
+          tokenUsageMeta: s.tokenUsageMeta,
+          messageCount: s.messageCount,
+          transcriptFileSizeBytes: s.transcriptFileSizeBytes,
+          ...(estimatedTokensFromLog != null ? { estimatedTokensFromLog } : {}),
         };
       });
     } catch (error) {
@@ -150,6 +164,8 @@ export class SessionsService {
     } else if (filter === 'archived') {
       const archiveMap = await this.metricsService.getArchivedCountBySessionKey();
       filtered = all.filter((s) => (archiveMap[s.sessionKey] ?? 0) > 0);
+    } else if (filter === 'stale_index') {
+      filtered = all.filter((s) => s.tokenUsageMeta?.totalTokensFresh === false);
     } else {
       filtered = all.filter((s) => s.status === filter);
     }
@@ -206,6 +222,19 @@ export class SessionsService {
         /* ignore */
       }
 
+      const detailForEstimate = {
+        ...detail,
+        transcriptFileSizeBytes: transcriptBytes ?? detail.transcriptFileSizeBytes,
+        tokenUsageMeta: tokenUsageMetaMerged ?? detail.tokenUsageMeta,
+      };
+      const divisor = this.configService.getConfig().tokenEstimateBytesDivisor;
+      const estimatedDetail = shouldOfferLogSizeTokenEstimate(detailForEstimate)
+        ? estimateTokensFromTranscriptBytes(
+            transcriptBytes ?? detail.transcriptFileSizeBytes,
+            divisor,
+          )
+        : undefined;
+
       return {
         sessionKey: detail.sessionKey,
         sessionId: detail.sessionId,
@@ -253,6 +282,7 @@ export class SessionsService {
           : {}),
         ...(detail.archiveEpochs?.length ? { archiveEpochs: detail.archiveEpochs } : {}),
         ...(detail.archiveResetTimestamp ? { archiveResetTimestamp: detail.archiveResetTimestamp } : {}),
+        ...(estimatedDetail != null ? { estimatedTokensFromLog: estimatedDetail } : {}),
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);
