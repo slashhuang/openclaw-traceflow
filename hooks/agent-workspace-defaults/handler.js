@@ -74,7 +74,9 @@ const handler = async (event) => {
       const fromDefaults = contentFromDefaults !== undefined;
       whitelistSeen.set(name, {
         ...item,
-        path: item.path,
+          path: contentFromDefaults !== undefined
+    ? path.join(workspaceDefaultsPath, name)
+    : item.path,,
         content: contentFromDefaults !== undefined ? contentFromDefaults : (item.content ?? ''),
       });
       if (fromDefaults) {
