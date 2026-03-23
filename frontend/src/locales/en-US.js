@@ -136,6 +136,33 @@ export default {
   'dashboard.tokenTotal': 'Total',
   'dashboard.tokenTotalDesc':
     'Input + Output. Same metrics pipeline as above; when totalTokensFresh:false, active totals may be untrustworthy—use session transcript for ground truth.',
+  'dashboard.tokenDualTrackRecordedCard': 'Token summary — recorded (metrics)',
+  'dashboard.tokenDualTrackRecordedDesc':
+    'Same as Token monitor: GET /api/metrics/token-summary for active/archived input, output, and totals in the time window.',
+  'dashboard.tokenDualTrackEstimatedCard': 'Token summary — log estimate (heuristic)',
+  'dashboard.tokenDualTrackEstimatedDesc':
+    'Aggregates stale-index sessions using live log-byte heuristics; with per-key metrics, estimates split into active/archived buckets like the chart below.',
+  'dashboard.tokenSummaryChartTitle': 'Token summary — recorded vs estimate (full range)',
+  'dashboard.tokenSummaryChartDesc':
+    'Time window = all rows in local metrics (same as GET /dashboard/overview with a very large timeRangeMs). X-axis: “Active” = SUM of latest token-% rows per session; “Archived” = SUM of archived-% rows from *.jsonl.reset.*. When archived is often zero, see the banner below and the second ℹ. Grouped bars: recorded total, In, Out, est.(log). Not a per-minute history chart.',
+  'dashboard.tokenMetricsTraceDoc':
+    '[Active]\nRecorded: token_usage rows with id LIKE \'token-%\', latest per session_id in the window, then SUM.\nCollection: ~30s snapshots for sessions from listSessions() that have tokenUsage.\n\n[Archived]\nRecorded: id LIKE \'archived-%\', parsed from reset JSONL (prior turn), SUM in window.\nIf you rarely /new, reset files lack usage lines, or no snapshot in the window, archived recorded = 0 and the right group looks empty.\n\n[Est.(log)]\nOnly sessions with totalTokensFresh:false; log-byte heuristic bucketed by token-usage-by-session-key active vs archived.\n\nWorked example + JSON: openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json.',
+  'dashboard.tokenArchivedZeroBannerTitle': 'Archived recorded totals are zero',
+  'dashboard.tokenArchivedZeroBannerDesc':
+    'Archived numbers come from archived-* rows fed by *.jsonl.reset.* (prior turn before a new chat), with snapshots in the time window. If you rarely start a new chat, reset files have no usage lines, or collection has not run, recorded archived stays 0 and the right-hand bars look empty.\n\nCurrent-turn usage is in “Active” on the left.\n\nArchived-side log estimate sum in this environment: {estArchived} (stale-index sessions only, bucketed per key); est.(log) bars can still be near zero.',
+  'dashboard.tokenFixtureDocLine':
+    'Reference sample: openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json',
+  'dashboard.tokenCategoryActive': 'Active',
+  'dashboard.tokenCategoryArchived': 'Archived',
+  'dashboard.tokenChartSeriesRecorded': 'Recorded total',
+  'dashboard.tokenChartSeriesRecordedIn': 'Recorded · In',
+  'dashboard.tokenChartSeriesRecordedOut': 'Recorded · Out',
+  'dashboard.tokenChartSeriesEstimated': 'Est.(log)',
+  'dashboard.tokenIoFootnote':
+    'Recorded In/Out — active: In {ai} / Out {ao}; archived: In {ri} / Out {ro} (same metrics pipeline).',
+  'dashboard.estimatedOrphanLabel': 'Estimate unbucketed',
+  'dashboard.estimatedOrphanHint':
+    'Sum of log estimates for stale-index sessions with no metrics row or zero active & archived—excluded from the two “Est.(log)” bars.',
   'metrics.tokenUsageSourceTitle': 'Token metrics: data source & trust',
   'metrics.tokenUsageSourceNote':
     'Figures for “active / archived” come from TraceFlow’s local data/metrics.db, table token_usage. Active: ~every 30s we snapshot each session’s tokenUsage from OpenClaw’s session list. Archived: parsed from *.jsonl.reset.* under the OpenClaw state directory.\n\nWhen OpenClaw marks totalTokensFresh:false in the index, context totals may not match the current turn—reported values can be 0 or too low. That does not mean no tokens were used. Check Session detail → transcript, or wait for the index/Gateway to refresh.',
@@ -198,7 +225,7 @@ export default {
   'dashboard.healthCpuDesc': 'Gateway process CPU usage',
   'dashboard.recentSessions': 'Recent sessions',
   'dashboard.recentSessionsDesc':
-    'Latest 10 sessions by last activity (same columns as Sessions). Hover the Status / Archived headers to see how they differ.',
+    'Latest 10 sessions by last activity. “Recorded” is merged usage + utilization; “Est.(log)” is a log-size heuristic. Hover Status / Archived headers for definitions.',
   'dashboard.viewAll': 'View all',
   'dashboard.health': 'Health',
   'dashboard.healthDesc': 'Gateway connection, memory, CPU usage',
@@ -225,7 +252,7 @@ export default {
   'dashboard.overviewRetry': 'Refresh',
   'sessions.title': 'Sessions',
   'sessions.pageScopeDesc':
-    'Data from GET /api/sessions (filter + paging match the request). Column meanings match the Dashboard “Recent sessions” table; hover column headers for status, archived counts, tokens, etc.',
+    'Data from GET /api/sessions (filter + paging match the request). “Recorded” and “Est.(log)” are separate columns; other columns align with Dashboard “Recent sessions”; hover headers for scope.',
   'sessions.sortHint': 'Click header to sort',
   'sessions.empty': 'No sessions',
   'sessions.filter.active': 'Active',
@@ -233,6 +260,11 @@ export default {
   'sessions.filter.completed': 'Ended',
   'sessions.filter.failed': 'Failed',
   'sessions.filter.archived': 'Archived',
+  'sessions.filter.staleIndex': 'Stale index',
+  'sessions.staleIndexBadge': 'Stale index',
+  'sessions.estimatedTokensFromLog': '≈ {n} (est.)',
+  'sessions.estimatedTokensDisclaimer':
+    'Heuristic: transcript .jsonl size ÷ divisor (default 4 bytes ≈ 1 token; override with TOKEN_ESTIMATE_BYTES_DIVISOR). Not billing-accurate or tokenizer-exact; use when totalTokensFresh:false or usage is zero.',
   'sessions.status.active': 'Active',
   'sessions.status.idle': 'Idle',
   'sessions.status.completed': 'Ended',
@@ -283,6 +315,11 @@ export default {
   'sessions.column.util': 'Utilization',
   'sessions.column.tokensUtilHint':
     'Tokens column shows the best-effort usage figure; utilization is “used / context limit”. If OpenClaw marks totalTokensFresh:false in sessions.json, the context total is not aligned with the latest run—TraceFlow hides a trustworthy utilization (shown as * or —).',
+  'sessions.column.recordedTokens': 'Recorded',
+  'sessions.column.recordedTokensTooltip':
+    'Merged totalTokens and utilization vs context limit; * when totalTokensFresh:false.',
+  'sessions.column.estimatedLog': 'Est.(log)',
+  'sessions.column.estimatedLogTooltip': 'Heuristic from live log bytes—not billing; only when stale index and estimate is shown.',
   'sessions.tokensTotalUnreliableHint':
     'This figure comes from transcript sums or partial fields; it is **not** OpenClaw’s confirmed “current context window” total when the index may be stale (totalTokensFresh:false).',
   'sessions.utilUnreliableHint':
@@ -294,8 +331,12 @@ export default {
   'session.transcriptPanelTitle': 'Transcript',
   'session.transcriptPanelScopeDesc':
     'Tabs (Messages / Tools / Events / Skills) all use the same transcript version, reverse-chronological (newest at top).',
+  'session.tokenCardTitleDual': 'Token (valid data / estimate)',
+  'session.tokenValidDataLabel': 'Valid data (recorded)',
+  'session.tokenEstimateLabel': 'Token estimate (log)',
+  'session.tokenInOutInline': 'In {inTok} · Out {outTok}',
   'session.tokenCardScopeDesc':
-    'Usage comes from merged tokenUsage in the session detail API. If totalTokensFresh:false, see the banner. The bar shows In vs Out composition.',
+    'Same dual-track as the session list: **valid data** = merged tokenUsage from the detail API (incl. In/Out); **estimate** = log-byte heuristic when the index is stale. The bar shows In vs Out composition.',
   'session.invokedSkillsCardScopeDesc':
     'Aggregated from read calls to skills/…/SKILL.md in this transcript (same inference as Skills page Calls).',
   'session.transcriptCurrent': 'Current conversation',
@@ -400,7 +441,36 @@ export default {
   'token.title': 'Token monitor',
   'token.subtitle': 'Session tokens & thresholds',
   'token.pageScopeDesc':
-    'Data from: session token usage (GET /api/sessions/token-usage), per–session-key metrics aggregates (24h window), and token alert history. Same local metrics pipeline as the Dashboard token summary. Use the ℹ on each block for scope.',
+    'Data from: session token usage (GET /api/sessions/token-usage), per–session-key metrics aggregates (24h window), and token alert history. Top overview is split: left = metrics “recorded”, right = log-size estimate. Same local metrics pipeline as the Dashboard token summary. Use the ℹ on each block for scope.',
+  'token.overviewEstimateSectionTitle': 'Stale index & log-size estimate (overview)',
+  'token.overviewStaleCount': 'Sessions with stale index',
+  'token.overviewStaleCountDesc':
+    'Count of sessions where sessions.json has totalTokensFresh:false (from the loaded session list). Different source from metrics “recorded” totals.',
+  'token.overviewStaleWithActive': 'Of those, with active usage (24h)',
+  'token.overviewStaleWithActiveDesc':
+    'Stale-index sessions that also appear in metrics with activeTokens>0 (matched by sessionKey).',
+  'token.overviewRecorded24h': 'Recorded · active (24h)',
+  'token.overviewRecorded24hDesc': 'activeTokens from GET /api/metrics/token-summary for the time window.',
+  'token.overviewRecordedArchived24h': 'Recorded · archived (24h)',
+  'token.overviewRecordedArchived24hDesc': 'archivedTokens from token-summary.',
+  'token.overviewEstimatedSum': 'Estimated sum (stale + zero usage)',
+  'token.overviewEstimatedSumDesc':
+    'Sum of log-size estimates for totalTokensFresh:false sessions with zero token totals; may diverge from recorded metrics.',
+  'token.columnStale': 'Index',
+  'token.columnEstimated': 'Est.(log)',
+  'token.columnRecorded': 'Recorded',
+  'token.columnEstimatedLog': 'Est.(log)',
+  'token.dualTrack.recordedTitle': 'Recorded (metrics)',
+  'token.dualTrack.recordedDesc':
+    'GET /api/metrics/token-summary: active/archived input, output, and totals in the time window; may diverge from the right-hand estimate.',
+  'token.dualTrack.estimatedTitle': 'Log estimate (heuristic)',
+  'token.dualTrack.estimatedDesc':
+    'Stale-index sessions (totalTokensFresh:false) with log-byte estimates; “with active metrics” needs rows matched by sessionKey.',
+  'token.dualTrack.activeBlock': 'Active (active + idle)',
+  'token.dualTrack.archivedBlock': 'Archived (*.jsonl.reset.*)',
+  'token.dualTrack.formulaHint':
+    'Estimate ≈ ceil(log bytes ÷ divisor); divisor comes from server config—reference only, not a vendor bill.',
+  'token.estimatedFromLogHint': 'Heuristic from log bytes; not official billing.',
   'token.kpiSectionTitle': 'Sessions by threshold',
   'token.kpiRowDesc':
     'Same source as the pie chart: counts from the current token-usage page, grouped by each session row’s threshold (normal / warning / serious / critical / limit). “Serious/Crit” sums serious + critical.',
@@ -425,8 +495,13 @@ export default {
     'Archived usage from *.jsonl.reset.* within 24h, grouped by session. Use the icon next to numbers for the data-source note.',
   'token.costHint': 'Cost estimate: Priority given to actual usage.cost from API; fallback to configured pricing when missing.',
   'token.chartTopRate': 'Top 10 by total tokens',
+  'token.chartTopRateDualLine': 'Top 10 — recorded vs log estimate',
+  'token.chartTopRateDualLineDesc':
+    'Two lines on the same sessions: blue = token-usage recorded total; green = log estimate (gaps when no estimate). Sort prefers recorded; falls back to estimate when zero.',
+  'token.chartSeriesRecorded': 'Recorded',
+  'token.chartSeriesEstimated': 'Est.(log)',
   'token.chartTopRateDesc':
-    'Sorted by total token usage in the current snapshot. Axis shows a sessionKey suffix in parens to disambiguate.',
+    'Sorted by total token usage in the current snapshot (GET /api/sessions/token-usage). Each totalTokens is merged live transcript usage and excludes archived reset-epoch totals. Covers all listSessions rows, not only active. Differs from the metrics active/archived tables on this page. Axis shows a sessionKey suffix in parens to disambiguate.',
   'token.chartTopUnit': 'tok',
   'session.tokenZeroTitle': 'Tokens showing 0 — Explanation and verification',
   'session.tokenZeroExpandLabel': 'Expand to read the explanation and verification steps; collapse again to save space',
@@ -439,6 +514,7 @@ export default {
   'session.tokenContextUnreliableTitle': 'Context utilization unconfirmed',
   'session.tokenContextUnreliableDesc':
     'OpenClaw marked <code>totalTokensFresh</code> as <code>false</code>: do not read “used / limit” here as an accurate context-window fill level. The In/Out bar below shows **composition** (input vs output share), not percent of the limit.',
+  'session.estimatedTokensFromLogLine': 'Log-size estimate: ≈ {n} tok (heuristic, not billing)',
   'session.tokenZeroPoint3Title': '3) How to verify locally (consistent with what the service reads)',
   'session.tokenZeroStateRootLabel': 'State root directory (current parsing result of this service, generally corresponds to environment variable <code>OPENCLAW_STATE_DIR</code> or the state path in settings):',
   'session.tokenZeroStateRootFallback': 'The state root directory is obtained from this service\'s OpenClaw path parsing (environment variable <code>OPENCLAW_STATE_DIR</code> or CLI/configuration inference); if there is no absolute path below, please confirm in \"Settings\" that the Gateway/state directory is consistent with the machine running OpenClaw.',

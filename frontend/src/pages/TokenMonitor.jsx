@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Card,
@@ -14,13 +14,14 @@ import {
   theme,
   message,
   Pagination,
+  Tooltip,
 } from 'antd';
 import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -31,6 +32,7 @@ import {
 import { useIntl } from 'react-intl';
 import { metricsApi } from '../api';
 import { inferSessionTypeLabel, formatSessionParticipantDisplay } from '../utils/session-user';
+import { aggregateStaleAndEstimated, buildTopNDualSeries } from '../utils/token-dual-track';
 import TokenMetricHint from '../components/TokenMetricHint';
 import SectionScopeHint from '../components/SectionScopeHint';
 
@@ -69,7 +71,21 @@ export default function TokenMonitor() {
   const [archivedPage, setArchivedPage] = useState(1);
   const [activeTotal, setActiveTotal] = useState(0);
   const [archivedTotal, setArchivedTotal] = useState(0);
+  const [tokenSummary, setTokenSummary] = useState(null);
+  const [tokenByKeyFull, setTokenByKeyFull] = useState([]);
   const timeRangeMs = 86400000; // 24h
+
+  const overviewStats = useMemo(
+    () =>
+      aggregateStaleAndEstimated({
+        sessionList,
+        tokenByKeyRows: tokenByKeyFull,
+        tokenSummary,
+      }),
+    [sessionList, tokenSummary, tokenByKeyFull],
+  );
+
+  const ts = tokenSummary || {};
 
   const fetchData = async (showToast = false) => {
     if (showToast) {
@@ -77,12 +93,22 @@ export default function TokenMonitor() {
       message.loading({ content: '正在刷新 Token 监控...', key: 'token-monitor-refresh', duration: 0 });
     }
     try {
-      const [usageRes, alertsRes, listRes, activeByKeyRes, archivedByKeyRes] = await Promise.allSettled([
+      const [
+        usageRes,
+        alertsRes,
+        listRes,
+        activeByKeyRes,
+        archivedByKeyRes,
+        tokenSummaryRes,
+        tokenByKeyFullRes,
+      ] = await Promise.allSettled([
         fetch('/api/sessions/token-usage?page=1&pageSize=200'),
         fetch('/api/sessions/token-alerts/history'),
         fetch('/api/sessions?page=1&pageSize=200'),
         metricsApi.getTokenUsageBySessionKeyPaged({ timeRangeMs, page: activePage, pageSize: 20 }),
         metricsApi.getTokenUsageBySessionKeyPaged({ timeRangeMs, page: archivedPage, pageSize: 20 }),
+        metricsApi.getTokenSummary(timeRangeMs),
+        metricsApi.getTokenUsageBySessionKey(timeRangeMs),
       ]);
       const usageData = usageRes.status === 'fulfilled' && usageRes.value?.ok ? await usageRes.value.json() : { items: [] };
       setSessions(Array.isArray(usageData?.items) ? usageData.items : []);
@@ -95,6 +121,12 @@ export default function TokenMonitor() {
       setBySessionKey(merged);
       setActiveTotal(activeByKey?.total || 0);
       setArchivedTotal(archivedByKey?.total || 0);
+      if (tokenSummaryRes.status === 'fulfilled' && tokenSummaryRes.value) {
+        setTokenSummary(tokenSummaryRes.value);
+      }
+      if (tokenByKeyFullRes.status === 'fulfilled' && Array.isArray(tokenByKeyFullRes.value)) {
+        setTokenByKeyFull(tokenByKeyFullRes.value);
+      }
       if (showToast) {
         message.success({ content: 'Token 监控已刷新', key: 'token-monitor-refresh' });
       }
@@ -129,20 +161,22 @@ export default function TokenMonitor() {
     { name: 'limit', value: sessions.filter((s) => s.threshold === 'limit').length, color: THRESHOLD_COLORS.limit },
   ];
 
-  const topTokenSessions = [...sessions]
-    .sort((a, b) => (b.totalTokens ?? 0) - (a.totalTokens ?? 0))
-    .slice(0, 10)
-    .map((s) => {
-      const label = userLabelForTokenRow(s, sessionList);
+  const topDualChartData = useMemo(() => {
+    const series = buildTopNDualSeries(sessions, sessionList, { topN: 10 });
+    return series.map((row) => {
+      const u = { sessionKey: row.sessionKey, sessionId: row.sessionId };
+      const label = userLabelForTokenRow(u, sessionList);
       const displayShort = label.length > 14 ? `${label.slice(0, 14)}…` : label;
-      const tail = (s.sessionKey || s.sessionId || '').replace(/.*\//, '').slice(-6);
+      const tail = (row.sessionKey || '').replace(/.*\//, '').slice(-6);
       const name = tail ? `${displayShort} (${tail})` : displayShort;
       return {
         name,
-        nameTip: s.sessionKey,
-        totalTokens: s.totalTokens ?? 0,
+        nameTip: row.sessionKey,
+        recordedTokens: row.recordedTokens,
+        estimatedTokens: row.estimatedTokens,
       };
     });
+  }, [sessions, sessionList]);
 
   const highUtil = sessions.filter((s) => s.utilization > 50);
 
@@ -167,6 +201,153 @@ export default function TokenMonitor() {
           <Button onClick={() => fetchData(true)} style={{ marginLeft: 8 }} loading={refreshing}>{intl.formatMessage({ id: 'common.refresh' })}</Button>
         </span>
       </div>
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24} lg={12}>
+          <Card
+            size="small"
+            title={intl.formatMessage({ id: 'token.dualTrack.recordedTitle' })}
+            extra={<SectionScopeHint intl={intl} messageId="token.dualTrack.recordedDesc" />}
+          >
+            <Row gutter={[8, 12]}>
+              <Col span={24}>
+                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                  {intl.formatMessage({ id: 'token.dualTrack.activeBlock' })}
+                </Typography.Text>
+                <Row gutter={[8, 0]}>
+                  <Col span={8}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'dashboard.tokenInput' })}
+                          <SectionScopeHint intl={intl} messageId="dashboard.tokenInputDesc" />
+                        </span>
+                      }
+                      value={ts.activeInput ?? 0}
+                      valueStyle={{ fontSize: 14 }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'dashboard.tokenOutput' })}
+                          <SectionScopeHint intl={intl} messageId="dashboard.tokenOutputDesc" />
+                        </span>
+                      }
+                      value={ts.activeOutput ?? 0}
+                      valueStyle={{ fontSize: 14 }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'dashboard.tokenTotal' })}
+                          <SectionScopeHint intl={intl} messageId="dashboard.tokenTotalDesc" />
+                        </span>
+                      }
+                      value={ts.activeTokens ?? 0}
+                      valueStyle={{ fontSize: 14 }}
+                    />
+                  </Col>
+                </Row>
+              </Col>
+              <Col span={24}>
+                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                  {intl.formatMessage({ id: 'token.dualTrack.archivedBlock' })}
+                </Typography.Text>
+                <Row gutter={[8, 0]}>
+                  <Col span={8}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'dashboard.tokenInput' })}
+                          <SectionScopeHint intl={intl} messageId="dashboard.tokenInputDesc" />
+                        </span>
+                      }
+                      value={ts.archivedInput ?? 0}
+                      valueStyle={{ fontSize: 14 }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'dashboard.tokenOutput' })}
+                          <SectionScopeHint intl={intl} messageId="dashboard.tokenOutputDesc" />
+                        </span>
+                      }
+                      value={ts.archivedOutput ?? 0}
+                      valueStyle={{ fontSize: 14 }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {intl.formatMessage({ id: 'dashboard.tokenTotal' })}
+                          <SectionScopeHint intl={intl} messageId="dashboard.tokenTotalDesc" />
+                        </span>
+                      }
+                      value={ts.archivedTokens ?? 0}
+                      valueStyle={{ fontSize: 14 }}
+                    />
+                  </Col>
+                </Row>
+              </Col>
+            </Row>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card
+            size="small"
+            title={intl.formatMessage({ id: 'token.dualTrack.estimatedTitle' })}
+            extra={<SectionScopeHint intl={intl} messageId="token.dualTrack.estimatedDesc" />}
+          >
+            <Row gutter={[8, 12]}>
+              <Col xs={12} sm={8}>
+                <Statistic
+                  title={
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {intl.formatMessage({ id: 'token.overviewStaleCount' })}
+                      <SectionScopeHint intl={intl} messageId="token.overviewStaleCountDesc" />
+                    </span>
+                  }
+                  value={overviewStats.staleCount}
+                />
+              </Col>
+              <Col xs={12} sm={8}>
+                <Statistic
+                  title={
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {intl.formatMessage({ id: 'token.overviewStaleWithActive' })}
+                      <SectionScopeHint intl={intl} messageId="token.overviewStaleWithActiveDesc" />
+                    </span>
+                  }
+                  value={overviewStats.staleWithActive}
+                />
+              </Col>
+              <Col xs={12} sm={8}>
+                <Statistic
+                  title={
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {intl.formatMessage({ id: 'token.overviewEstimatedSum' })}
+                      <SectionScopeHint intl={intl} messageId="token.overviewEstimatedSumDesc" />
+                    </span>
+                  }
+                  value={formatCompactRate(overviewStats.estimatedSum)}
+                />
+              </Col>
+              <Col span={24}>
+                <Typography.Paragraph type="secondary" style={{ marginBottom: 0, fontSize: 12 }}>
+                  {intl.formatMessage({ id: 'token.dualTrack.formulaHint' })}
+                </Typography.Paragraph>
+              </Col>
+            </Row>
+          </Card>
+        </Col>
+      </Row>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -232,17 +413,17 @@ export default function TokenMonitor() {
             </ResponsiveContainer>
           </Card>
         </Col>
-        {topTokenSessions.length > 0 && (
+        {topDualChartData.length > 0 && (
           <Col xs={24} lg={12}>
             <Card
-              title={intl.formatMessage({ id: 'token.chartTopRate' })}
+              title={intl.formatMessage({ id: 'token.chartTopRateDualLine' })}
               extra={<SectionScopeHint intl={intl} messageId="token.chartTopRateDesc" />}
             >
               <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
-                {intl.formatMessage({ id: 'token.chartTopRateDesc' })}
+                {intl.formatMessage({ id: 'token.chartTopRateDualLineDesc' })}
               </Typography.Text>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topTokenSessions} margin={{ top: 8, right: 12, left: 16, bottom: 8 }} barCategoryGap="18%">
+                <LineChart data={topDualChartData} margin={{ top: 8, right: 12, left: 16, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
                   <XAxis
                     dataKey="name"
@@ -260,14 +441,33 @@ export default function TokenMonitor() {
                   />
                   <RechartsTooltip
                     labelFormatter={(_, p) => p?.[0]?.payload?.nameTip || ''}
-                    formatter={(value) => [
-                      formatCompactRate(value),
-                      intl.formatMessage({ id: 'token.chartTopUnit' }),
+                    formatter={(value, name) => [
+                      value == null || (typeof value === 'number' && Number.isNaN(value))
+                        ? '—'
+                        : formatCompactRate(typeof value === 'number' ? value : Number(value)),
+                      name,
                     ]}
                     contentStyle={{ background: token.colorBgElevated }}
                   />
-                  <Bar dataKey="totalTokens" fill={token.colorPrimary} name="totalTokens" />
-                </BarChart>
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="recordedTokens"
+                    name={intl.formatMessage({ id: 'token.chartSeriesRecorded' })}
+                    stroke={token.colorPrimary}
+                    dot={{ r: 2 }}
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="estimatedTokens"
+                    name={intl.formatMessage({ id: 'token.chartSeriesEstimated' })}
+                    stroke={token.colorSuccess}
+                    dot={{ r: 2 }}
+                    strokeWidth={2}
+                    connectNulls
+                  />
+                </LineChart>
               </ResponsiveContainer>
             </Card>
           </Col>
@@ -286,14 +486,33 @@ export default function TokenMonitor() {
               size="small"
               scroll={{ x: true }}
               pagination={false}
-              dataSource={[...bySessionKey].filter((r) => (r.activeTokens || 0) > 0)}
+              dataSource={[...bySessionKey]
+                .filter((r) => (r.activeTokens || 0) > 0)
+                .map((r) => {
+                  const ls = sessionList.find((s) => s.sessionKey === r.sessionKey);
+                  return {
+                    ...r,
+                    staleIndex: ls?.tokenUsageMeta?.totalTokensFresh === false,
+                    estimatedTokensFromLog: ls?.estimatedTokensFromLog,
+                  };
+                })}
               columns={[
+                {
+                  title: intl.formatMessage({ id: 'token.columnStale' }),
+                  width: 88,
+                  render: (_, r) =>
+                    r.staleIndex ? (
+                      <Tag color="volcano">{intl.formatMessage({ id: 'sessions.staleIndexBadge' })}</Tag>
+                    ) : (
+                      '—'
+                    ),
+                },
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
                 {
                   title: (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      Token
+                      {intl.formatMessage({ id: 'token.columnRecorded' })}
                       <TokenMetricHint intl={intl} />
                     </span>
                   ),
@@ -306,6 +525,23 @@ export default function TokenMonitor() {
                     </span>
                   ),
                   sorter: (a, b) => (a.activeTokens ?? 0) - (b.activeTokens ?? 0),
+                },
+                {
+                  title: (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {intl.formatMessage({ id: 'token.columnEstimatedLog' })}
+                      <SectionScopeHint intl={intl} messageId="token.estimatedFromLogHint" />
+                    </span>
+                  ),
+                  width: 108,
+                  render: (_, r) =>
+                    r.estimatedTokensFromLog != null ? (
+                      <Tooltip title={intl.formatMessage({ id: 'token.estimatedFromLogHint' })}>
+                        {r.estimatedTokensFromLog.toLocaleString()}
+                      </Tooltip>
+                    ) : (
+                      '—'
+                    ),
                 },
                 { title: 'Cost', width: 90, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.model || ''}>{r.estimatedCost != null ? `$${r.estimatedCost.toFixed(4)}` : '-'}</Typography.Text> },
                 { title: '', width: 80, render: (_, r) => r.sessionId ? <Link to={`/sessions/${encodeURIComponent(r.sessionId)}`}>详情</Link> : null },
@@ -332,14 +568,33 @@ export default function TokenMonitor() {
               size="small"
               scroll={{ x: true }}
               pagination={false}
-              dataSource={[...bySessionKey].filter((r) => (r.archivedTokens || 0) > 0)}
+              dataSource={[...bySessionKey]
+                .filter((r) => (r.archivedTokens || 0) > 0)
+                .map((r) => {
+                  const ls = sessionList.find((s) => s.sessionKey === r.sessionKey);
+                  return {
+                    ...r,
+                    staleIndex: ls?.tokenUsageMeta?.totalTokensFresh === false,
+                    estimatedTokensFromLog: ls?.estimatedTokensFromLog,
+                  };
+                })}
               columns={[
+                {
+                  title: intl.formatMessage({ id: 'token.columnStale' }),
+                  width: 88,
+                  render: (_, r) =>
+                    r.staleIndex ? (
+                      <Tag color="volcano">{intl.formatMessage({ id: 'sessions.staleIndexBadge' })}</Tag>
+                    ) : (
+                      '—'
+                    ),
+                },
                 { title: 'Type', width: 90, render: (_, r) => <Tag>{sessionList.find((s) => s.sessionKey === r.sessionKey)?.typeLabel || inferSessionTypeLabel(r.sessionKey)}</Tag> },
                 { title: 'Session', width: 240, ellipsis: true, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.sessionKey}>{r.sessionKey?.length > 28 ? `${r.sessionKey.slice(0, 14)}…${r.sessionKey.slice(-12)}` : r.sessionKey}</Typography.Text> },
                 {
                   title: (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      Token
+                      {intl.formatMessage({ id: 'token.columnRecorded' })}
                       <TokenMetricHint intl={intl} />
                     </span>
                   ),
@@ -352,6 +607,23 @@ export default function TokenMonitor() {
                     </span>
                   ),
                   sorter: (a, b) => (a.archivedTokens ?? 0) - (b.archivedTokens ?? 0),
+                },
+                {
+                  title: (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {intl.formatMessage({ id: 'token.columnEstimatedLog' })}
+                      <SectionScopeHint intl={intl} messageId="token.estimatedFromLogHint" />
+                    </span>
+                  ),
+                  width: 108,
+                  render: (_, r) =>
+                    r.estimatedTokensFromLog != null ? (
+                      <Tooltip title={intl.formatMessage({ id: 'token.estimatedFromLogHint' })}>
+                        {r.estimatedTokensFromLog.toLocaleString()}
+                      </Tooltip>
+                    ) : (
+                      '—'
+                    ),
                 },
                 { title: 'Cost', width: 80, render: (_, r) => <Typography.Text code style={{ fontSize: 12 }} title={r.model || ''}>{r.estimatedCost != null ? `$${r.estimatedCost.toFixed(4)}` : '-'}</Typography.Text> },
                 { title: '次', dataIndex: 'archivedCount', width: 60, render: (v) => v ?? 0 },

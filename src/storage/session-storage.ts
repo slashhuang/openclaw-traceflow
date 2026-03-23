@@ -20,7 +20,7 @@ const TRANSCRIPT_PARTICIPANT_SCAN_VERSION = 3;
 /**
  * 会话数据接口（KV 存储的 value）
  */
-export interface SessionData extends Omit<OpenClawSession, 'tokenUsageMeta'> {
+export interface SessionData extends OpenClawSession {
   /** 文件元数据（用于增量扫描） */
   fileMeta?: {
     size: number;
@@ -448,6 +448,55 @@ export class FileSystemSessionStorage implements SessionStorage {
       const sessionKey = meta?.storeKey ?? `${agent}/${sessionId}`;
       const actualStats = stats || await fs.promises.stat(filePath);
 
+      let transcriptUsageObserved = false;
+      for (const line of allLines) {
+        if (!line.includes('"usage"') && !line.includes('tokenUsage')) continue;
+        try {
+          const entry = JSON.parse(line) as { message?: { usage?: { totalTokens?: number } }; tokenUsage?: { totalTokens?: number } };
+          const u = entry?.message?.usage ?? entry?.tokenUsage;
+          if (u && typeof u.totalTokens === 'number') {
+            transcriptUsageObserved = true;
+            break;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const storeTokenFieldsPresent =
+        typeof meta?.totalTokens === 'number' ||
+        typeof meta?.inputTokens === 'number' ||
+        typeof meta?.outputTokens === 'number';
+
+      let tokenUsageSource: NonNullable<OpenClawSession['tokenUsageMeta']>['source'] = 'unknown';
+      if (firstLineHasTotals && storeTokenFieldsPresent) {
+        tokenUsageSource = 'mixed';
+      } else if (firstLineHasTotals) {
+        tokenUsageSource = 'transcript';
+      } else if (storeTokenFieldsPresent) {
+        tokenUsageSource = 'sessions.json';
+      }
+
+      const transcriptPathForMeta =
+        this.stateDir && filePath.startsWith(this.stateDir)
+          ? filePath.slice(this.stateDir.length + 1).replace(/\\/g, '/')
+          : filePath;
+
+      const tokenUsageMeta: OpenClawSession['tokenUsageMeta'] = {
+        source: tokenUsageSource,
+        transcriptUsageObserved,
+        storeTokenFieldsPresent,
+        totalTokensFresh: meta?.totalTokensFresh,
+        transcriptPath: transcriptPathForMeta,
+        stateRootAbsolute: this.stateDir || undefined,
+        sessionLogAbsolutePath: filePath,
+        sessionsIndexRelativePath:
+          this.stateDir && agent
+            ? path.join('agents', agent, 'sessions', 'sessions.json').replace(/\\/g, '/')
+            : undefined,
+        sessionLogFileSizeBytes: actualStats.size,
+      };
+
       return {
         sessionKey,
         sessionId,
@@ -463,6 +512,7 @@ export class FileSystemSessionStorage implements SessionStorage {
         usageCost,
         messageCount,
         transcriptFileSizeBytes: actualStats.size,
+        tokenUsageMeta,
         transcriptParticipantScanVersion: TRANSCRIPT_PARTICIPANT_SCAN_VERSION,
         ...(humanSenders.length > 0 ? { participantIds: humanSenders } : {}),
         ...(participantSummary ? { participantSummary } : {}),
