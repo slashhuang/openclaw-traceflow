@@ -81,13 +81,14 @@ def sync_main_repo(repo_root):
     
     if success:
         print(f"[code-sync] ✅ 主仓库同步成功：{before_commit} → {after_commit}")
-        if stdout.strip():
-            print(f"[code-sync] {stdout.strip()}")
+        msg = (stdout or "").strip()
+        if msg:
+            print(f"[code-sync] {msg}")
         return {
             "success": True,
             "beforeCommit": before_commit,
             "afterCommit": after_commit,
-            "message": stdout.strip() or "Fast-forward"
+            "message": msg or "Fast-forward"
         }
     else:
         print(f"[code-sync] ❌ 主仓库同步失败：{stderr}")
@@ -95,7 +96,7 @@ def sync_main_repo(repo_root):
             "success": False,
             "beforeCommit": before_commit,
             "afterCommit": after_commit,
-            "message": stderr.strip() or "git pull failed"
+            "message": (stderr or "git pull failed").strip()
         }
 
 
@@ -129,7 +130,7 @@ def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     if success:
         print(f"[code-sync]   ✅ 同步成功：{before_commit} → {after_commit}")
         # 提取 squash commit 信息
-        message = stdout.strip().split('\n')[-1][:100] if stdout.strip() else "Squashed update"
+        message = (stdout or "").strip().split('\n')[-1][:100] or "Squashed update"
         print(f"[code-sync]   {message}")
         return {
             "success": True,
@@ -141,7 +142,7 @@ def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
         }
     else:
         # 检查是否是无更新的情况
-        error_msg = stderr.strip() if stderr.strip() else stdout.strip()
+        error_msg = (stderr or "").strip() or (stdout or "").strip()
         if "already up-to-date" in error_msg.lower() or "can't squash-merge a fast-forward" in error_msg.lower():
             print(f"[code-sync]   ⏭️  无需更新（已是最新）")
             return {
@@ -207,7 +208,7 @@ def restart_gateway(repo_root):
     
     if not success:
         print(f"[code-sync] ❌ PM2 操作失败：{stderr}")
-        return {"success": False, "action": action, "message": stderr.strip()}
+        return {"success": False, "action": action, "message": (stderr or "PM2 operation failed").strip()}
     
     print(f"[code-sync] ✅ Gateway 已 {action}")
     return {"success": True, "action": action, "message": f"Gateway {action} successfully"}
