@@ -1904,6 +1904,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       version?: number;
       injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
     }) | undefined;
+    let sessionMeta: Record<string, unknown> | undefined;
 
     // 1. 优先从本地 sessions.json 读取（无需 Gateway、更快）
     const dir = await this.stateDir();
@@ -1923,6 +1924,33 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
             injectedWorkspaceFiles: local.injectedWorkspaceFiles,
           };
         }
+        
+        // 读取 transcript 首行获取 session 元数据
+        if (chosen.sessionId) {
+          try {
+            const sessionFile = await this.findSessionFile(chosen.sessionId);
+            if (sessionFile) {
+              const fd = await fs.promises.open(sessionFile.filePath, 'r');
+              try {
+                const headBuffer = Buffer.alloc(8192);
+                await fd.read(headBuffer, 0, 8192, 0);
+                const firstLine = headBuffer.toString('utf-8').split('\n')[0];
+                if (firstLine) {
+                  try {
+                    sessionMeta = JSON.parse(firstLine);
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              } finally {
+                await fd.close();
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        
         this.logger.debug(`probeSystemPrompt: 使用本地 sessions.json (${chosen.key})`);
       }
     }
@@ -2093,6 +2121,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       systemPromptSource,
       sections,
       skillsSnapshot,
+      sessionMeta,
     };
   }
 }

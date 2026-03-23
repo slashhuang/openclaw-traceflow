@@ -75,6 +75,8 @@ export type SystemPromptProbeResult = {
     prompt?: string;
     skills?: Array<{ name: string; primaryEnv?: string; requiredEnv?: string[] }>;
   };
+  /** Session 元数据（来自 transcript 首行） */
+  sessionMeta?: Record<string, unknown>;
 };
 
 function charsToTok(c: number): number {
