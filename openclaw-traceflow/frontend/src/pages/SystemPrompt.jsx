@@ -222,6 +222,20 @@ export default function SystemPromptPage() {
       } else if (isWorkspace) {
         children = (
           <div>
+            {probe.injectedWorkspaceFiles && probe.injectedWorkspaceFiles.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <Typography.Text strong>injectedWorkspaceFiles (from sessions.json):</Typography.Text>
+                <Table
+                  size="small"
+                  pagination={false}
+                  dataSource={probe.injectedWorkspaceFiles.map((f, i) => ({ ...f, key: i }))}
+                  columns={[
+                    { title: 'Name', dataIndex: 'name', render: (_, r) => r.name || r.path },
+                    { title: 'Path', dataIndex: 'path', ellipsis: true },
+                  ]}
+                />
+              </div>
+            )}
             {workspaceFileContents.map((wf, i) => (
               <Collapse
                 key={i}
@@ -599,7 +613,7 @@ export default function SystemPromptPage() {
                       border: `1px solid ${token.colorBorder}`,
                       background: token.colorFillQuaternary,
                     }}>
-                      {JSON.stringify({
+                      {JSON.stringify(probe.sessionsJsonEntry || {
                         sessionKey: probe.sessionKey,
                         sessionId: probe.sessionId,
                         agentId: probe.agentId,

@@ -757,7 +757,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private loadSystemPromptFromSessionsJson(
     dir: string,
   ): {
-    chosen: { key: string; sessionId?: string; agentId?: string };
+    chosen: { key: string; sessionId?: string; agentId?: string; entry?: Record<string, unknown> };
     report: Record<string, unknown>;
     resolvedSkills?: Array<{ name: string; filePath?: string; description?: string }>;
     /** OpenClaw 实际注入的 skills 文本（name+description+location，非全文） */
@@ -781,6 +781,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         skillsPrompt?: string;
         skillsSnapshot?: SkillsSnapshotData;
         injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
+        entry?: Record<string, unknown>;
       }> = [];
       for (const agent of agentDirs) {
         const storePath = path.join(agentsDir, agent, 'sessions', 'sessions.json');
@@ -830,6 +831,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
               skillsPrompt,
               skillsSnapshot,
               injectedWorkspaceFiles,
+              entry: entry as Record<string, unknown>,
             });
           }
         }
@@ -838,7 +840,12 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const preferred = candidates.find((c) => c.key === 'agent:main:main');
       const chosen = preferred ?? [...candidates].sort((a, b) => b.updatedAt - a.updatedAt)[0];
       return {
-        chosen: { key: chosen.key, sessionId: chosen.sessionId, agentId: chosen.agentId },
+        chosen: { 
+          key: chosen.key, 
+          sessionId: chosen.sessionId, 
+          agentId: chosen.agentId,
+          entry: chosen.entry,
+        },
         report: chosen.report,
         resolvedSkills: chosen.resolvedSkills,
         skillsPrompt: chosen.skillsPrompt,
@@ -1895,7 +1902,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       },
     };
 
-    let chosen: { key: string; sessionId?: string; agentId?: string } | null = null;
+    let chosen: { key: string; sessionId?: string; agentId?: string; entry?: Record<string, unknown> } | null = null;
     let report: Record<string, unknown> | null = null;
     let resolvedSkills: Array<{ name: string; filePath?: string; description?: string }> | undefined;
     let skillsPrompt: string | undefined;
@@ -1905,6 +1912,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
     }) | undefined;
     let sessionMeta: Record<string, unknown> | undefined;
+    let sessionsJsonEntry: Record<string, unknown> | undefined;
 
     // 1. 优先从本地 sessions.json 读取（无需 Gateway、更快）
     const dir = await this.stateDir();
@@ -1915,6 +1923,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         report = local.report;
         resolvedSkills = local.resolvedSkills;
         skillsPrompt = local.skillsPrompt;
+        sessionsJsonEntry = chosen.entry;
         if (local.skillsSnapshot) {
           skillsSnapshot = {
             prompt: local.skillsSnapshot.prompt,
@@ -2122,6 +2131,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       sections,
       skillsSnapshot,
       sessionMeta,
+      sessionsJsonEntry,
     };
   }
 }
