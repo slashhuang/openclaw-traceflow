@@ -368,6 +368,18 @@ export default function SystemPromptPage() {
     });
   };
 
+  const sessionsJsonSummary = useMemo(() => {
+    if (!probe) return null;
+    const parts = [];
+    if (probe.sessionKey) parts.push(`sessionKey: ${probe.sessionKey}`);
+    if (probe.sessionId) parts.push(`sessionId: ${probe.sessionId}`);
+    if (probe.agentId) parts.push(`agentId: ${probe.agentId}`);
+    if (probe.workspaceFileContents?.length) parts.push(`workspaceFiles: ${probe.workspaceFileContents.length}`);
+    if (probe.skillsDetail?.length) parts.push(`skills: ${probe.skillsDetail.length}`);
+    if (probe.toolsDetail?.length) parts.push(`tools: ${probe.toolsDetail.length}`);
+    return parts.join(' · ');
+  }, [probe]);
+
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -495,6 +507,97 @@ export default function SystemPromptPage() {
                     )}
                   </div>
                 </>
+              ),
+            },
+          ]}
+          defaultActiveKey={[]}
+        />
+      )}
+
+      {/* sessions.json 详情 */}
+      {probe?.ok && (
+        <Collapse
+          style={{ marginBottom: 16 }}
+          items={[
+            {
+              key: 'sessions-json',
+              label: (
+                <Space>
+                  <Typography.Text strong>sessions.json Summary</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>{sessionsJsonSummary}</Typography.Text>
+                </Space>
+              ),
+              children: (
+                <div style={{ fontSize: 12 }}>
+                  {probe.injectedWorkspaceFiles && probe.injectedWorkspaceFiles.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Typography.Text strong>injectedWorkspaceFiles:</Typography.Text>
+                      <Table
+                        size="small"
+                        pagination={false}
+                        dataSource={probe.injectedWorkspaceFiles.map((f, i) => ({ ...f, key: i }))}
+                        columns={[
+                          { title: 'Name', dataIndex: 'name', render: (_, r) => r.name || r.path },
+                          { title: 'Path', dataIndex: 'path', ellipsis: true },
+                        ]}
+                      />
+                    </div>
+                  )}
+                  {skillsSnapshot && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Typography.Text strong>skillsSnapshot:</Typography.Text>
+                      <pre style={{
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        maxHeight: 300,
+                        overflow: 'auto',
+                        padding: 8,
+                        borderRadius: token.borderRadius,
+                        border: `1px solid ${token.colorBorder}`,
+                        background: token.colorFillQuaternary,
+                      }}>
+                        {JSON.stringify({
+                          prompt: skillsSnapshot.prompt?.substring(0, 500) + (skillsSnapshot.prompt?.length > 500 ? '...' : ''),
+                          skills: skillsSnapshot.skills?.length,
+                          resolvedSkills: skillsSnapshot.resolvedSkills?.length,
+                          injectedWorkspaceFiles: skillsSnapshot.injectedWorkspaceFiles?.length,
+                          version: skillsSnapshot.version,
+                        }, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  <div>
+                    <Typography.Text strong>Full sessions.json entry:</Typography.Text>
+                    <pre style={{
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxHeight: 400,
+                      overflow: 'auto',
+                      padding: 8,
+                      borderRadius: token.borderRadius,
+                      border: `1px solid ${token.colorBorder}`,
+                      background: token.colorFillQuaternary,
+                    }}>
+                      {JSON.stringify({
+                        sessionKey: probe.sessionKey,
+                        sessionId: probe.sessionId,
+                        agentId: probe.agentId,
+                        reportSource: probe.reportSource,
+                        reportGeneratedAt: probe.reportGeneratedAt,
+                        model: probe.model,
+                        provider: probe.provider,
+                        workspaceDir: probe.workspaceDir,
+                        workspaceFilesCount: probe.workspaceFiles?.length,
+                        skillsDetailCount: probe.skillsDetail?.length,
+                        toolsDetailCount: probe.toolsDetail?.length,
+                      }, null, 2)}
+                    </pre>
+                  </div>
+                </div>
               ),
             },
           ]}
