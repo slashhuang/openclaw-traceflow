@@ -177,6 +177,7 @@ export interface SkillsSnapshotData {
   skillFilter?: string[];
   resolvedSkills?: Array<{ name?: string; description?: string; location?: string }>;
   version?: number;
+  injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
 }
 
 export interface OpenClawSessionDetail extends OpenClawSession {
@@ -841,7 +842,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         report: chosen.report,
         resolvedSkills: chosen.resolvedSkills,
         skillsPrompt: chosen.skillsPrompt,
-        skillsSnapshot: chosen.skillsSnapshot,
+        skillsSnapshot: chosen.skillsSnapshot ? {
+          ...chosen.skillsSnapshot,
+          injectedWorkspaceFiles: chosen.injectedWorkspaceFiles,
+        } : undefined,
         injectedWorkspaceFiles: chosen.injectedWorkspaceFiles,
       };
     } catch {
@@ -1895,7 +1899,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     let report: Record<string, unknown> | null = null;
     let resolvedSkills: Array<{ name: string; filePath?: string; description?: string }> | undefined;
     let skillsPrompt: string | undefined;
-    let skillsSnapshot: SystemPromptProbeResult['skillsSnapshot'];
+    let skillsSnapshot: (SystemPromptProbeResult['skillsSnapshot'] & {
+      resolvedSkills?: Array<{ name?: string; description?: string; location?: string }>;
+      version?: number;
+      injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
+    }) | undefined;
 
     // 1. 优先从本地 sessions.json 读取（无需 Gateway、更快）
     const dir = await this.stateDir();
@@ -1910,6 +1918,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           skillsSnapshot = {
             prompt: local.skillsSnapshot.prompt,
             skills: local.skillsSnapshot.skills,
+            resolvedSkills: local.skillsSnapshot.resolvedSkills,
+            version: local.skillsSnapshot.version,
+            injectedWorkspaceFiles: local.injectedWorkspaceFiles,
           };
         }
         this.logger.debug(`probeSystemPrompt: 使用本地 sessions.json (${chosen.key})`);
