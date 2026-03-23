@@ -389,12 +389,14 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private static readonly SYNC_INTERVAL_MS = 10_000;
   /** 缓存 TTL（毫秒） */
   private static readonly CACHE_TTL_MS = 10_000;
-  /** 小于此大小的 .jsonl 一次性读入并全量解析 */
-  private static readonly SESSION_JSONL_FULL_SCAN_MAX_BYTES = 500 * 1024; // 500KB (优化前 2MB)
+  /** 小于此行数的 .jsonl 一次性读入并全量解析（主要判断依据） */
+  private static readonly SESSION_JSONL_MAX_LINES_FOR_FULL = 500; // 500 行 (超过则用 head_tail)
+  /** 小于此大小的 .jsonl 可考虑全量解析（辅助判断） */
+  private static readonly SESSION_JSONL_FULL_SCAN_MAX_BYTES = 500 * 1024; // 500KB
   /** 大文件时读取文件头部字节数（用于首条 user / 元信息） */
   private static readonly SESSION_JSONL_HEAD_MAX_BYTES = 64 * 1024; // 64KB ≈ 20-25 行
   /** 大文件时读取文件尾部字节数（近期消息、usage 多在尾部） */
-  private static readonly SESSION_JSONL_TAIL_MAX_BYTES = 64 * 1024; // 64KB ≈ 20-25 行 (优化前 2MB)
+  private static readonly SESSION_JSONL_TAIL_MAX_BYTES = 64 * 1024; // 64KB ≈ 20-25 行
   /** Promise 级别缓存（防并发重复） */
   private pendingRefresh: Promise<void> | null = null;
 
@@ -1337,7 +1339,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const stats = fs.statSync(sessionFile.filePath);
       /** JSON 序列化不支持 bigint；统一为 number */
       const size = Number(stats.size);
-      const FULL = OpenClawService.SESSION_JSONL_FULL_SCAN_MAX_BYTES;
+      const MAX_LINES = OpenClawService.SESSION_JSONL_MAX_LINES_FOR_FULL;
 
       let transcriptParseMode: 'full' | 'head_tail' = 'full';
       let transcriptJsonlLineCount: number | undefined;
@@ -1345,9 +1347,15 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       let transcriptTailJsonlLineCount: number | undefined;
       let scan: SessionJsonlScan;
 
-      // 使用流式读取器处理大文件
-      if (size <= FULL) {
-        // 小文件：全量读取
+      // 先快速估算行数（通过读取文件头部 64KB）
+      const headBuffer = this.readFileUtf8Slice(sessionFile.filePath, 0, 64 * 1024);
+      const headLines = headBuffer.split('\n').filter((l) => l.trim());
+      const avgLineSize = headBuffer.length / (headLines.length || 1);
+      const estimatedTotalLines = Math.round(size / avgLineSize);
+
+      // 根据行数决定是否用 head_tail（而不是文件大小）
+      if (estimatedTotalLines <= MAX_LINES) {
+        // 行数少：全量读取
         const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
         const lines = content.split('\n').filter((line) => line.trim());
         if (lines.length === 0) {
@@ -1356,7 +1364,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         scan = this.scanSessionJsonlLines(lines);
         transcriptJsonlLineCount = lines.length;
       } else {
-        // 大文件：使用流式首尾分片读取
+        // 行数多：使用流式首尾分片读取
         transcriptParseMode = 'head_tail';
         
         try {
