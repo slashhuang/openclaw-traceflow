@@ -295,6 +295,7 @@ export class FileSystemSessionStorage implements SessionStorage {
       let sessionData: Record<string, unknown> | null = null;
       let messageCount: number | undefined;
       let distinctSenders: string[] = [];
+      let scanResult: Awaited<ReturnType<typeof scanJsonlForMetadata>> | undefined;
       
       try {
         // 只读首行获取 userId
@@ -318,7 +319,7 @@ export class FileSystemSessionStorage implements SessionStorage {
         // 如果 sessions.json 有 messageCount，直接用（避免扫描）
         // 否则使用流式扫描获取（最多扫 1000 行）
         if (stats) {
-          const scanResult = await scanJsonlForMetadata(filePath, 1000);
+          scanResult = await scanJsonlForMetadata(filePath, 1000);
           if (scanResult.userId) {
             userId = scanResult.userId;
           }
@@ -364,8 +365,6 @@ export class FileSystemSessionStorage implements SessionStorage {
 
       // 解析 token usage（列表口径：首行 tokenUsage + sessions.json 元数据）
       const parsedFromTranscript = this.parseTokenUsage(sessionData?.tokenUsage);
-      const indexTotal = meta?.totalTokens;
-      const indexTotalUsable = isIndexTotalTokensUsableForContext(indexTotal, meta?.totalTokensFresh);
       const contextTokens = meta?.contextTokens;
       const model = meta?.model;
 
@@ -438,67 +437,17 @@ export class FileSystemSessionStorage implements SessionStorage {
             ? resolvedTotal
             : undefined;
 
-      // 扫描 usage.cost
-      let hasCostField = false;
-      let sumCostInput = 0;
-      let sumCostOutput = 0;
-      let sumCostCacheRead = 0;
-      let sumCostCacheWrite = 0;
-      let sumCostTotal = 0;
+      // 扫描 usage.cost（流式扫描结果中已包含）
+      const usageCost = scanResult?.usageCost || undefined;
 
-      for (const line of allLines) {
-        if (!line.includes('"cost"')) continue;
-        try {
-          const entry = JSON.parse(line) as any;
-          const usage = entry?.message?.usage ?? entry?.tokenUsage;
-          if (!usage || typeof usage.totalTokens !== 'number') continue;
-          const cost = usage?.cost;
-          if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
-            hasCostField = true;
-            sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
-            sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
-            sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
-            sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
-            sumCostTotal += cost.total;
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-
-      const usageCost = hasCostField
-        ? {
-            input: sumCostInput,
-            output: sumCostOutput,
-            cacheRead: sumCostCacheRead,
-            cacheWrite: sumCostCacheWrite,
-            total: sumCostTotal,
-          }
-        : undefined;
-
-      // 推断 systemSent
+      // 推断 systemSent（流式扫描无法获取，设为 undefined）
       let systemSent = meta?.systemSent;
-      if (systemSent === undefined && userId === 'unknown' && allLines.length > 1) {
-        systemSent = this.inferSystemSentFromTranscript(allLines);
-      }
 
       const sessionKey = meta?.storeKey ?? `${agent}/${sessionId}`;
       const actualStats = stats || await fs.promises.stat(filePath);
 
-      let transcriptUsageObserved = false;
-      for (const line of allLines) {
-        if (!line.includes('"usage"') && !line.includes('tokenUsage')) continue;
-        try {
-          const entry = JSON.parse(line) as { message?: { usage?: { totalTokens?: number } }; tokenUsage?: { totalTokens?: number } };
-          const u = entry?.message?.usage ?? entry?.tokenUsage;
-          if (u && typeof u.totalTokens === 'number') {
-            transcriptUsageObserved = true;
-            break;
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      // transcriptUsageObserved 从 scanResult 获取
+      const transcriptUsageObserved = scanResult?.totalTokens != null;
 
       const storeTokenFieldsPresent =
         typeof meta?.totalTokens === 'number' ||
