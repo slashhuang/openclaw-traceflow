@@ -815,8 +815,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
               typeof entry?.skillsSnapshot?.prompt === 'string' ? entry.skillsSnapshot.prompt : undefined;
             const skillsSnapshot =
               entry?.skillsSnapshot && typeof entry.skillsSnapshot === 'object' ? entry.skillsSnapshot : undefined;
-            const injectedWorkspaceFiles = Array.isArray(entry?.skillsSnapshot?.injectedWorkspaceFiles)
-              ? entry.skillsSnapshot.injectedWorkspaceFiles
+            // injectedWorkspaceFiles 来自 systemPromptReport，不是 skillsSnapshot
+            const injectedWorkspaceFiles = Array.isArray((report as any)?.injectedWorkspaceFiles)
+              ? (report as any).injectedWorkspaceFiles
               : undefined;
             candidates.push({
               key,

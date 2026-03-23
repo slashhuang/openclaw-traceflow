@@ -102,9 +102,10 @@ export async function readJsonlHeadTail(
       };
     }
 
-    // 4. 如果需要扫描 user 信息且头部没找到，继续扫描
+    // 4. 如果需要扫描 user 信息且头部没找到，继续扫描（但不影响尾部读取）
     let extraLines: string[] = [];
     let extraObjects: any[] = [];
+    let scanForUserResult: { lines: string[]; objects: any[] } | null = null;
     
     if (scanForUser > 0 && headLines < scanForUser) {
       let foundUser = headObjects.some((obj) => 
@@ -127,16 +128,7 @@ export async function readJsonlHeadTail(
           }
         }).filter(Boolean);
 
-        // 合并到 head
-        const combinedLines = [...head, ...extraLines].slice(0, scanForUser);
-        return {
-          headLines: combinedLines,
-          tailLines: [],
-          totalLines: estimatedTotalLines,
-          isPartial: true,
-          headObjects: [...headObjects, ...extraObjects].slice(0, scanForUser),
-          tailObjects: [],
-        };
+        scanForUserResult = { lines: extraLines, objects: extraObjects };
       }
     }
 
@@ -156,12 +148,16 @@ export async function readJsonlHeadTail(
       }
     }).filter(Boolean);
 
+    // 6. 合并 scanForUser 结果到头部
+    const finalHeadLines = scanForUserResult ? [...head, ...scanForUserResult.lines].slice(0, scanForUser) : head;
+    const finalHeadObjects = scanForUserResult ? [...headObjects, ...scanForUserResult.objects].slice(0, scanForUser) : headObjects;
+
     return {
-      headLines: head,
+      headLines: finalHeadLines,
       tailLines: tail,
       totalLines: estimatedTotalLines,
       isPartial: true,
-      headObjects,
+      headObjects: finalHeadObjects,
       tailObjects,
     };
   } catch (error) {
