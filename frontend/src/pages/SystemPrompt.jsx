@@ -205,6 +205,38 @@ export default function SystemPromptPage() {
     [probe?.systemPromptMarkdown],
   );
 
+  // 合并 injectedWorkspaceFiles 和 workspaceFiles：优先使用 injectedWorkspaceFiles
+  const mergedWorkspaceFiles = useMemo(() => {
+    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
+      return workspaceFiles;
+    }
+    // 用 injectedWorkspaceFiles override 同名文件
+    const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
+    return workspaceFiles.map(f => {
+      const injected = injectedMap.get(f.name || f.path);
+      return injected ? { ...f, ...injected, injected: true } : f;
+    });
+  }, [probe?.injectedWorkspaceFiles, workspaceFiles]);
+  
+  // 合并 workspaceFileContents：优先使用 injectedWorkspaceFiles 的内容
+  const mergedWorkspaceFileContents = useMemo(() => {
+    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
+      return workspaceFileContents;
+    }
+    const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
+    return workspaceFileContents.map(wf => {
+      const injected = injectedMap.get(wf.name || wf.path);
+      if (injected) {
+        return {
+          ...wf,
+          content: `// 来自 sessions.json injectedWorkspaceFiles\n// Path: ${injected.path || wf.path}\n\n${wf.content}`,
+          injected: true,
+        };
+      }
+      return wf;
+    });
+  }, [probe?.injectedWorkspaceFiles, workspaceFileContents]);
+
   const collapseItems = useMemo(() => {
     if (!probe?.ok) return [];
     return breakdownItems.map((b) => {
@@ -220,38 +252,6 @@ export default function SystemPromptPage() {
       } else if (b.id === 'tools_list') {
         children = <PreBlock text={sections.toolsListText} token={token} />;
       } else if (isWorkspace) {
-        // 合并 injectedWorkspaceFiles 和 workspaceFiles：优先使用 injectedWorkspaceFiles
-        const mergedWorkspaceFiles = useMemo(() => {
-          if (!probe.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
-            return workspaceFiles;
-          }
-          // 用 injectedWorkspaceFiles override 同名文件
-          const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
-          return workspaceFiles.map(f => {
-            const injected = injectedMap.get(f.name || f.path);
-            return injected ? { ...f, ...injected, injected: true } : f;
-          });
-        }, [probe.injectedWorkspaceFiles, workspaceFiles]);
-        
-        // 合并 workspaceFileContents：优先使用 injectedWorkspaceFiles 的内容
-        const mergedWorkspaceFileContents = useMemo(() => {
-          if (!probe.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
-            return workspaceFileContents;
-          }
-          const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
-          return workspaceFileContents.map(wf => {
-            const injected = injectedMap.get(wf.name || wf.path);
-            if (injected) {
-              return {
-                ...wf,
-                content: `// 来自 sessions.json injectedWorkspaceFiles\n// Path: ${injected.path || wf.path}\n\n${wf.content}`,
-                injected: true,
-              };
-            }
-            return wf;
-          });
-        }, [probe.injectedWorkspaceFiles, workspaceFileContents]);
-        
         children = (
           <div>
             {probe.injectedWorkspaceFiles && probe.injectedWorkspaceFiles.length > 0 && (
