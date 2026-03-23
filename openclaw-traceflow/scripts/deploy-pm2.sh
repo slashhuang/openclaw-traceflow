@@ -72,7 +72,18 @@ wait_health() {
 }
 
 target_port="${DEFAULT_PORT}"
-if is_port_in_use "${target_port}"; then
+service_alive=false
+
+# 检查服务是否存活
+if pm2_is_online; then
+  service_alive=true
+  echo "[deploy:pm2] Service ${APP_NAME} is already online, will build and restart."
+else
+  echo "[deploy:pm2] Service ${APP_NAME} is not running, will do full deployment."
+fi
+
+# 端口检查（仅服务不存活时严格检查）
+if [ "${service_alive}" = false ] && is_port_in_use "${target_port}"; then
   port_pid="$(port_owner_pid "${target_port}")"
   app_pid="$(pm2_pid_for_app)"
   if [ -n "${port_pid}" ] && [ "${port_pid}" = "${app_pid}" ]; then
@@ -96,8 +107,11 @@ pnpm install
 echo "[deploy:pm2] Building backend + frontend..."
 pnpm run build:all
 
-if pm2 describe "${APP_NAME}" >/dev/null 2>&1; then
+if [ "${service_alive}" = true ]; then
   echo "[deploy:pm2] Restarting existing pm2 app ${APP_NAME}..."
+  pm2 restart "${APP_NAME}" --update-env
+elif pm2 describe "${APP_NAME}" >/dev/null 2>&1; then
+  echo "[deploy:pm2] PM2 app exists but not online, restarting ${APP_NAME}..."
   pm2 restart "${APP_NAME}" --update-env
 else
   echo "[deploy:pm2] Starting new pm2 app ${APP_NAME}..."
