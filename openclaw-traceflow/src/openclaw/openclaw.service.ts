@@ -1515,7 +1515,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const userId = firstUserData?.user || 'unknown';
       // 若 store 无 systemSent 且 userId 仍 unknown，从 transcript 推断 greeting
       let systemSent = storeEntry?.systemSent;
-      if (systemSent === undefined && userId === 'unknown' && linesForInfer.length > 1) {
+      if (systemSent === undefined && userId === 'unknown' && transcriptParseMode === 'full' && transcriptJsonlLineCount != null && transcriptJsonlLineCount > 1) {
+        // 仅在 full 模式下推断 systemSent（head_tail 模式跳过）
+        const headText = this.readFileUtf8Slice(sessionFile.filePath, 0, 8192);
+        const linesForInfer = headText.split('\n').filter((l) => l.trim()).slice(0, 20);
         systemSent = inferSystemSentFromTranscript(linesForInfer);
       }
 
