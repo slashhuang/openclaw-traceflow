@@ -14,7 +14,7 @@ import {
 } from 'antd';
 import { useIntl } from 'react-intl';
 import { ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined } from '@ant-design/icons';
-import { sessionsApi, metricsApi } from '../api';
+import { sessionsApi } from '../api';
 import {
   inferSessionTypeLabel,
   inferSessionChatKind,
@@ -66,7 +66,6 @@ function SortableTitle({ label, active, order, onClick }) {
 export default function Sessions() {
   const intl = useIntl();
   const [sessions, setSessions] = useState([]);
-  const [archiveCountMap, setArchiveCountMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [sortKey, setSortKey] = useState('lastActive');
@@ -78,18 +77,11 @@ export default function Sessions() {
   const fetchSessions = async (nextPage = page, nextFilter = filter) => {
     setLoading(true);
     try {
-      const [sessionsResult, archiveResult] = await Promise.allSettled([
-        sessionsApi.list({ page: nextPage, pageSize, filter: nextFilter }),
-        metricsApi.getArchiveCountBySessionKey(),
-      ]);
-      const data = sessionsResult.status === 'fulfilled' ? sessionsResult.value : { items: [], total: 0 };
-      const archiveMap = archiveResult.status === 'fulfilled' && archiveResult.value && typeof archiveResult.value === 'object'
-        ? archiveResult.value
-        : {};
+      const sessionsResult = await sessionsApi.list({ page: nextPage, pageSize, filter: nextFilter });
+      const data = sessionsResult || { items: [], total: 0 };
       const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
       setSessions(items);
       setTotal(Number(data?.total || items.length || 0));
-      setArchiveCountMap(archiveMap);
     } catch (e) {
       message.error(e?.message || 'Failed');
     } finally {
@@ -174,7 +166,7 @@ export default function Sessions() {
     { value: 'idle', label: intl.formatMessage({ id: 'sessions.filter.idle' }) },
     { value: 'completed', label: intl.formatMessage({ id: 'sessions.filter.completed' }) },
     { value: 'failed', label: intl.formatMessage({ id: 'sessions.filter.failed' }) },
-    { value: 'archived', label: intl.formatMessage({ id: 'sessions.filter.archived' }) },
+
     { value: 'stale_index', label: intl.formatMessage({ id: 'sessions.filter.staleIndex' }) },
   ];
 
@@ -422,31 +414,7 @@ export default function Sessions() {
       align: 'right',
       render: (_, r) => formatBytes(r.transcriptFileSizeBytes),
     },
-    {
-      title: (
-        <Tooltip title={intl.formatMessage({ id: 'sessions.column.archivedTooltip' })}>
-          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.archived' })}</span>
-        </Tooltip>
-      ),
-      key: 'archived',
-      width: 90,
-      render: (_, r) => {
-        const count = archiveCountMap[r.sessionKey] ?? 0;
-        const sid = r?.sessionId ?? r?.sessionKey ?? '';
-        if (count === 0 || !sid) return '—';
-        return (
-          <Tooltip title={intl.formatMessage({ id: 'sessions.archivedCellTooltip' })}>
-            <Link
-              to={`/sessions/${encodeURIComponent(sid)}/archives`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-            >
-              <HistoryOutlined />
-              <span>{intl.formatMessage({ id: 'sessions.archivedCountFmt' }, { count })}</span>
-            </Link>
-          </Tooltip>
-        );
-      },
-    },
+
     {
       title: intl.formatMessage({ id: 'sessions.column.actions' }) || '操作',
       key: 'actions',
