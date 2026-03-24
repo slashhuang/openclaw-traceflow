@@ -7,7 +7,7 @@ import { Socket } from 'socket.io';
  * 功能：
  * - 记录连接建立/断开
  * - 记录消息收发时间、大小
- * - 监控心跳延迟（ping/pong）
+ * - 心跳检测
  * - 慢事件警告（>500ms）
  * 
  * @see PRD: docs/prd-traceflow-logging-2026-03-24.md
@@ -32,15 +32,59 @@ export class WsPerformanceMiddleware {
       }),
     );
 
-    // 拦截 emit（服务器→客户端）
+    // 拦截 emit（服务器→客户端）— 支持异步处理
     const originalEmit = socket.emit.bind(socket);
     socket.emit = function (event: string, ...args: any[]) {
       const emitStart = Date.now();
       const result = originalEmit(event, ...args);
+      
+      // 处理 Promise 情况（异步 emit）
+      if (result instanceof Promise) {
+        return result.then(res => {
+          const durationMs = Date.now() - emitStart;
+          const dataSize = JSON.stringify(args).length;
+          
+          const logData = {
+            timestamp: new Date().toISOString(),
+            level: durationMs > 500 ? 'WARN' : 'DEBUG',
+            module: 'WsPerformanceMiddleware',
+            operation: 'ws_emit',
+            clientId,
+            event,
+            durationMs,
+            dataSize,
+          };
+
+          // 慢事件警告
+          if (durationMs > 500) {
+            this.logger.warn(
+              `Slow WS emit "${event}" to ${clientId}: ${durationMs}ms, ${dataSize}bytes`,
+            );
+          }
+
+          this.logger.debug(JSON.stringify(logData));
+          return res;
+        }).catch(err => {
+          this.logger.error(
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'ERROR',
+              module: 'WsPerformanceMiddleware',
+              operation: 'ws_emit_error',
+              clientId,
+              event,
+              error: err.message,
+            }),
+          );
+          throw err;
+        });
+      }
+      
+      // 同步情况
       const durationMs = Date.now() - emitStart;
       const dataSize = JSON.stringify(args).length;
 
-      const logData: any = {
+      const logData = {
         timestamp: new Date().toISOString(),
         level: durationMs > 500 ? 'WARN' : 'DEBUG',
         module: 'WsPerformanceMiddleware',
@@ -53,13 +97,12 @@ export class WsPerformanceMiddleware {
 
       // 慢事件警告
       if (durationMs > 500) {
-        Logger.warn(
-          `WsPerformanceMiddleware`,
+        this.logger.warn(
           `Slow WS emit "${event}" to ${clientId}: ${durationMs}ms, ${dataSize}bytes`,
         );
       }
 
-      Logger.debug(`WsPerformanceMiddleware`, JSON.stringify(logData));
+      this.logger.debug(JSON.stringify(logData));
       return result;
     };
 
@@ -75,23 +118,19 @@ export class WsPerformanceMiddleware {
         event,
         dataSize,
       };
-      Logger.debug(`WsPerformanceMiddleware`, JSON.stringify(logData));
+      this.logger.debug(JSON.stringify(logData));
     });
 
-    // 心跳检测
-    let lastPingTime = Date.now();
+    // 心跳检测（仅记录收到 ping 事件，不计算 latency）
     socket.on('ping', () => {
-      const latency = Date.now() - lastPingTime;
       const logData = {
         timestamp: new Date().toISOString(),
         level: 'DEBUG',
         module: 'WsPerformanceMiddleware',
         operation: 'ws_ping',
         clientId,
-        latencyMs: latency,
       };
-      Logger.debug(`WsPerformanceMiddleware`, JSON.stringify(logData));
-      lastPingTime = Date.now();
+      this.logger.debug(JSON.stringify(logData));
     });
 
     // 断开连接
@@ -106,7 +145,7 @@ export class WsPerformanceMiddleware {
         reason,
         sessionDurationMs: sessionDuration,
       };
-      Logger.log(`WsPerformanceMiddleware`, JSON.stringify(logData));
+      this.logger.log(JSON.stringify(logData));
     });
 
     // 错误处理
@@ -120,7 +159,7 @@ export class WsPerformanceMiddleware {
         error: error.message,
         stack: error.stack,
       };
-      Logger.error(`WsPerformanceMiddleware`, JSON.stringify(logData));
+      this.logger.error(JSON.stringify(logData));
     });
 
     next();
