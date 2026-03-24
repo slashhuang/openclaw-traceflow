@@ -248,6 +248,20 @@ type SessionJsonlScan = {
   sumCostTotal: number;
 };
 
+type ArchivedResetUsage = {
+  sessionId: string;
+  resetTimestamp: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+type ArchivedResetFileCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  usage: ArchivedResetUsage;
+};
+
 export interface OpenClawHealth {
   status: 'healthy' | 'degraded' | 'unhealthy';
   version: string;
@@ -400,6 +414,24 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private static readonly SESSION_JSONL_TAIL_MAX_BYTES = 64 * 1024; // 64KB ≈ 20-25 行
   /** Promise 级别缓存（防并发重复） */
   private pendingRefresh: Promise<void> | null = null;
+  /** 归档 reset 文件快照缓存（增量复用：仅变更文件重读） */
+  private archivedResetSnapshot:
+    | {
+        stateDir: string;
+        scannedAt: number;
+        byFile: Map<string, ArchivedResetFileCacheEntry>;
+        all: ArchivedResetUsage[];
+      }
+    | null = null;
+  private pendingArchivedResetSnapshotRefresh:
+    | Promise<{
+        stateDir: string;
+        scannedAt: number;
+        byFile: Map<string, ArchivedResetFileCacheEntry>;
+        all: ArchivedResetUsage[];
+      }>
+    | null = null;
+  private static readonly ARCHIVE_RESET_SNAPSHOT_TTL_MS = 10_000;
 
   constructor(
     private configService: ConfigService,
@@ -469,6 +501,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   /** 清除路径缓存（配置更新后调用） */
   clearPathsCache(): void {
     this.pathsCache = null;
+    this.archivedResetSnapshot = null;
   }
 
   /**
@@ -1010,68 +1043,13 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   async getArchivedTokenUsageFromResetFiles(): Promise<
     Array<{ sessionId: string; resetTimestamp: string; inputTokens: number; outputTokens: number; totalTokens: number }>
   > {
-    const dir = await this.stateDir();
-    if (!dir) return [];
-
-    const result: Array<{
-      sessionId: string;
-      resetTimestamp: string;
-      inputTokens: number;
-      outputTokens: number;
-      totalTokens: number;
-    }> = [];
-
     try {
-      const agentsDir = path.join(dir, 'agents');
-      if (!fs.existsSync(agentsDir)) return [];
-
-      for (const agent of fs.readdirSync(agentsDir)) {
-        const sessionsDir = path.join(agentsDir, agent, 'sessions');
-        if (!fs.existsSync(sessionsDir)) continue;
-
-        for (const file of fs.readdirSync(sessionsDir)) {
-          const m = file.match(/^(.+?)\.jsonl\.reset\.(.+)$/);
-          if (!m) continue;
-          const [, sessionId, resetTimestamp] = m;
-
-          try {
-            const content = fs.readFileSync(path.join(sessionsDir, file), 'utf-8');
-            const lines = content.split('\n').filter((l) => l.trim());
-            let lastUsage: { input: number; output: number; total: number } | null = null;
-
-            for (const line of lines) {
-              try {
-                const entry = JSON.parse(line) as Record<string, unknown>;
-                const usage = (entry?.message as any)?.usage ?? (entry as any).usage;
-                if (usage && typeof usage.totalTokens === 'number') {
-                  lastUsage = {
-                    input: typeof usage.input === 'number' ? usage.input : 0,
-                    output: typeof usage.output === 'number' ? usage.output : 0,
-                    total: usage.totalTokens,
-                  };
-                }
-              } catch {
-                /* skip bad line */
-              }
-            }
-
-            result.push({
-              sessionId,
-              resetTimestamp,
-              inputTokens: lastUsage?.input ?? 0,
-              outputTokens: lastUsage?.output ?? 0,
-              totalTokens: lastUsage?.total ?? 0,
-            });
-          } catch {
-            /* skip unparseable */
-          }
-        }
-      }
+      const snapshot = await this.getArchivedResetSnapshot();
+      return snapshot.all;
     } catch (error) {
       this.logger.error('Failed to get archived token usage from reset files', error);
+      return [];
     }
-
-    return result;
   }
 
   /**
@@ -1092,6 +1070,143 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         outputTokens: a.outputTokens,
       }))
       .sort((a, b) => b.resetTimestamp.localeCompare(a.resetTimestamp));
+  }
+
+  private async getArchivedResetSnapshot(forceRefresh = false): Promise<{
+    stateDir: string;
+    scannedAt: number;
+    byFile: Map<string, ArchivedResetFileCacheEntry>;
+    all: ArchivedResetUsage[];
+  }> {
+    const dir = await this.stateDir();
+    if (!dir) {
+      return {
+        stateDir: '',
+        scannedAt: Date.now(),
+        byFile: new Map(),
+        all: [],
+      };
+    }
+
+    const cached = this.archivedResetSnapshot;
+    if (
+      !forceRefresh &&
+      cached &&
+      cached.stateDir === dir &&
+      Date.now() - cached.scannedAt < OpenClawService.ARCHIVE_RESET_SNAPSHOT_TTL_MS
+    ) {
+      return cached;
+    }
+
+    if (this.pendingArchivedResetSnapshotRefresh) {
+      return this.pendingArchivedResetSnapshotRefresh;
+    }
+
+    this.pendingArchivedResetSnapshotRefresh = (async () => {
+      const prevByFile = cached?.stateDir === dir ? cached.byFile : new Map<string, ArchivedResetFileCacheEntry>();
+      const nextByFile = new Map<string, ArchivedResetFileCacheEntry>();
+      const agentsDir = path.join(dir, 'agents');
+
+      if (!fs.existsSync(agentsDir)) {
+        const emptySnapshot = {
+          stateDir: dir,
+          scannedAt: Date.now(),
+          byFile: nextByFile,
+          all: [],
+        };
+        this.archivedResetSnapshot = emptySnapshot;
+        return emptySnapshot;
+      }
+
+      for (const agent of fs.readdirSync(agentsDir)) {
+        const sessionsDir = path.join(agentsDir, agent, 'sessions');
+        if (!fs.existsSync(sessionsDir)) continue;
+
+        for (const file of fs.readdirSync(sessionsDir)) {
+          const m = file.match(/^(.+?)\.jsonl\.reset\.(.+)$/);
+          if (!m) continue;
+          const [, sessionId, resetTimestamp] = m;
+          const filePath = path.join(sessionsDir, file);
+          let stats: fs.Stats;
+          try {
+            stats = fs.statSync(filePath);
+          } catch {
+            continue;
+          }
+
+          const prev = prevByFile.get(filePath);
+          if (prev && prev.mtimeMs === stats.mtimeMs && prev.size === stats.size) {
+            nextByFile.set(filePath, prev);
+            continue;
+          }
+
+          const usage = this.parseArchivedResetUsage(filePath, sessionId, resetTimestamp);
+          if (!usage) continue;
+          nextByFile.set(filePath, {
+            mtimeMs: stats.mtimeMs,
+            size: stats.size,
+            usage,
+          });
+        }
+      }
+
+      const all = Array.from(nextByFile.values(), (v) => v.usage).sort((a, b) => {
+        if (a.sessionId === b.sessionId) return b.resetTimestamp.localeCompare(a.resetTimestamp);
+        return a.sessionId.localeCompare(b.sessionId);
+      });
+      const snapshot = {
+        stateDir: dir,
+        scannedAt: Date.now(),
+        byFile: nextByFile,
+        all,
+      };
+      this.archivedResetSnapshot = snapshot;
+      return snapshot;
+    })();
+
+    try {
+      return await this.pendingArchivedResetSnapshotRefresh;
+    } finally {
+      this.pendingArchivedResetSnapshotRefresh = null;
+    }
+  }
+
+  private parseArchivedResetUsage(
+    filePath: string,
+    sessionId: string,
+    resetTimestamp: string,
+  ): ArchivedResetUsage | null {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n').filter((l) => l.trim());
+      let lastUsage: { input: number; output: number; total: number } | null = null;
+
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line) as Record<string, unknown>;
+          const usage = (entry?.message as any)?.usage ?? (entry as any).usage;
+          if (usage && typeof usage.totalTokens === 'number') {
+            lastUsage = {
+              input: typeof usage.input === 'number' ? usage.input : 0,
+              output: typeof usage.output === 'number' ? usage.output : 0,
+              total: usage.totalTokens,
+            };
+          }
+        } catch {
+          // skip bad line
+        }
+      }
+
+      return {
+        sessionId,
+        resetTimestamp,
+        inputTokens: lastUsage?.input ?? 0,
+        outputTokens: lastUsage?.output ?? 0,
+        totalTokens: lastUsage?.total ?? 0,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private readFileUtf8Slice(filePath: string, position: number, length: number): string {
