@@ -100,12 +100,138 @@ def sync_main_repo(repo_root):
         }
 
 
-# Subtree 配置：目录 -> remote 名
-# 只有 openclaw-traceflow 是真正的 git subtree
-# 其他目录（claw-family, futu-openD, external-refs/openclaw）是普通目录，不是 subtree
+# Subtree 配置：目录 -> remote 名 -> 上游 URL
+# 说明：若 remote 不存在，会按 expected_url 自动创建。
 SUBTREE_CONFIG = [
-    {"dir": "openclaw-traceflow", "remote": "openclaw-traceflow"},
+    {
+        "dir": "claw-family",
+        "remote": "claw-family-upstream",
+        "expected_url": "git@github.com:slashhuang/claw-family.git",
+        "branch": "main",
+    },
+    {
+        "dir": "futu-openD",
+        "remote": "futu-openD-upstream",
+        "expected_url": "git@github.com:slashhuang/futu-openD.git",
+        "branch": "main",
+    },
+    {
+        "dir": "openclaw-traceflow",
+        "remote": "openclaw-traceflow",
+        "expected_url": "git@github.com:slashhuang/openclaw-traceflow.git",
+        "branch": "main",
+    },
 ]
+
+
+def normalize_git_url(url):
+    """规范化 git URL，便于比较"""
+    if not url:
+        return ""
+    u = url.strip()
+    if u.endswith(".git"):
+        u = u[:-4]
+    return u.lower()
+
+
+def get_remote_url(repo_root, remote_name):
+    success, stdout, _ = run_command(
+        f"git remote get-url {remote_name}",
+        cwd=repo_root,
+        capture_output=True,
+    )
+    return stdout.strip() if success else None
+
+
+def ensure_remote(repo_root, remote_name, expected_url):
+    """
+    确保 remote 存在且 URL 正确。
+    - 不存在：自动 add
+    - 存在但 URL 不一致：自动 set-url
+    """
+    if not expected_url:
+        return {
+            "success": False,
+            "remote": remote_name,
+            "message": f"missing expected_url for {remote_name}",
+        }
+
+    current_url = get_remote_url(repo_root, remote_name)
+    if current_url is None:
+        ok, _, err = run_command(
+            f"git remote add {remote_name} {expected_url}",
+            cwd=repo_root,
+            capture_output=True,
+        )
+        if not ok:
+            return {
+                "success": False,
+                "remote": remote_name,
+                "message": (err or "git remote add failed").strip(),
+            }
+        return {
+            "success": True,
+            "remote": remote_name,
+            "message": f"added remote {remote_name} -> {expected_url}",
+        }
+
+    if normalize_git_url(current_url) == normalize_git_url(expected_url):
+        return {
+            "success": True,
+            "remote": remote_name,
+            "message": f"remote {remote_name} already configured",
+        }
+
+    ok, _, err = run_command(
+        f"git remote set-url {remote_name} {expected_url}",
+        cwd=repo_root,
+        capture_output=True,
+    )
+    if not ok:
+        return {
+            "success": False,
+            "remote": remote_name,
+            "message": (err or "git remote set-url failed").strip(),
+        }
+    return {
+        "success": True,
+        "remote": remote_name,
+        "message": f"updated remote {remote_name}: {current_url} -> {expected_url}",
+    }
+
+
+def ensure_subtree_remotes(repo_root):
+    """
+    为所有 subtree 校准 upstream remotes。
+    返回：[{dir, remote, success, message}, ...]
+    """
+    print("[code-sync] === 校准 Subtree upstream remotes ===")
+    results = []
+    for config in SUBTREE_CONFIG:
+        remote_name = config["remote"]
+        expected_url = config.get("expected_url", "").strip()
+        expected_url_env = config.get("expected_url_env", "").strip()
+        if expected_url_env:
+            expected_url = os.environ.get(expected_url_env, "").strip() or expected_url
+
+        # 若未给默认 URL，但本地已配置 remote，则沿用本地配置（避免阻断同步流程）。
+        if not expected_url:
+            existing_url = get_remote_url(repo_root, remote_name)
+            if existing_url:
+                expected_url = existing_url
+
+        result = ensure_remote(repo_root, remote_name, expected_url)
+        row = {
+            "dir": config["dir"],
+            "remote": remote_name,
+            "success": result["success"],
+            "message": result["message"],
+        }
+        results.append(row)
+        icon = "✅" if row["success"] else "❌"
+        print(f"[code-sync] {icon} {config['dir']} -> {remote_name}: {row['message']}")
+    print("")
+    return results
 
 
 def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
@@ -173,18 +299,23 @@ def sync_all_subtrees(repo_root):
     results = []
     
     for config in SUBTREE_CONFIG:
-        result = sync_subtree(repo_root, config["dir"], config["remote"])
+        result = sync_subtree(
+            repo_root,
+            config["dir"],
+            config["remote"],
+            config.get("branch", "main"),
+        )
         results.append(result)
         print("")  # 空行分隔
     
     return results
 
 
-def has_unpushed_commits(repo_root, subtree_dir, remote_name):
+def has_unpushed_commits(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     """检查 subtree 目录是否有未推送的提交（对比 subtree 远端）"""
     # 检查是否有针对该目录的未推送提交
     success, stdout, _ = run_command(
-        f"git log {remote_name}/main..main --pretty=format:'%h' -- {subtree_dir}",
+        f"git log {remote_name}/{upstream_branch}..main --pretty=format:'%h' -- {subtree_dir}",
         cwd=repo_root,
         capture_output=True
     )
@@ -199,7 +330,7 @@ def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     print(f"[code-sync] 🔄 推送 subtree: {subtree_dir} (to {remote_name}/{upstream_branch})")
     
     # 检查是否有未推送的提交
-    if not has_unpushed_commits(repo_root, subtree_dir, remote_name):
+    if not has_unpushed_commits(repo_root, subtree_dir, remote_name, upstream_branch):
         print(f"[code-sync]   ⏭️  无需推送（无本地修改）")
         return {
             "success": True,
@@ -245,7 +376,12 @@ def push_all_subtrees(repo_root):
     results = []
     
     for config in SUBTREE_CONFIG:
-        result = push_subtree(repo_root, config["dir"], config["remote"])
+        result = push_subtree(
+            repo_root,
+            config["dir"],
+            config["remote"],
+            config.get("branch", "main"),
+        )
         results.append(result)
         print("")  # 空行分隔
     
@@ -335,13 +471,14 @@ def cleanup_worktrees(repo_root):
     return None
 
 
-def generate_report(main_result, subtree_results, gateway_result, cleanup_result, push_results=None):
+def generate_report(main_result, subtree_results, gateway_result, cleanup_result, push_results=None, remote_results=None):
     """生成同步报告"""
     report = {
         "timestamp": datetime.now().astimezone().isoformat(),
         "mainRepo": main_result,
         "subtrees": subtree_results,
         "subtreesPush": push_results or [],  # push 结果
+        "subtreeRemotes": remote_results or [],  # remote 校准结果
         "gatewayRestart": gateway_result,  # None 表示未重启
         "worktreeCleanup": cleanup_result
     }
@@ -426,23 +563,34 @@ def main():
     print("")
     
     # 2. 同步所有 subtree（pull）
+    remote_results = ensure_subtree_remotes(repo_root)
+    if any(not r["success"] for r in remote_results):
+        print("[code-sync] ❌ 部分 subtree remote 校准失败，跳过 subtree pull/push，请先修复 remote 配置。")
+        report = generate_report(main_result, [], None, None, [], remote_results)
+        save_report(repo_root, report)
+        print_summary(report)
+        print("")
+        print(f"[SYNC_REPORT] {json.dumps(report, ensure_ascii=False)}")
+        sys.exit(1)
+
+    # 3. 同步所有 subtree（pull）
     subtree_results = sync_all_subtrees(repo_root)
     
-    # 3. 推送本地修改到上游 subtree（push）
+    # 4. 推送本地修改到上游 subtree（push）
     push_results = push_all_subtrees(repo_root)
     
-    # 4. 清理已合并的 worktree
+    # 5. 清理已合并的 worktree
     cleanup_result = cleanup_worktrees(repo_root)
     print("")
     
-    # 5. 生成并保存报告（不再重启 Gateway）
-    report = generate_report(main_result, subtree_results, None, cleanup_result, push_results)
+    # 6. 生成并保存报告（不再重启 Gateway）
+    report = generate_report(main_result, subtree_results, None, cleanup_result, push_results, remote_results)
     save_report(repo_root, report)
     
-    # 6. 打印摘要
+    # 7. 打印摘要
     print_summary(report)
     
-    # 7. 输出完整报告（供 OpenClaw 检测并发送通知）
+    # 8. 输出完整报告（供 OpenClaw 检测并发送通知）
     print("")
     print(f"[SYNC_REPORT] {json.dumps(report, ensure_ascii=False)}")
     

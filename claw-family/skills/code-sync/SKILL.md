@@ -26,7 +26,7 @@ metadata:
 **仅执行代码同步，不重启 Gateway**：
 
 1. **同步主仓库**：`git pull --ff-only`
-2. **同步所有 Subtree**：`git subtree pull`（claw-family、futu-openD、openclaw-traceflow、external-refs/openclaw）
+2. **校准并同步所有 Subtree**：先确保 upstream remote 完整，再执行 `git subtree pull`（claw-family、futu-openD、openclaw-traceflow）
 3. **推送本地修改**：`git subtree push`（如有未推送的提交）
 4. **清理 worktree**：运行 `cleanup_worktree.py` 删除已合并的 worktree
 5. **保存报告**：写入 `.workspace/.sync_report.json`
@@ -37,9 +37,6 @@ metadata:
 # 推荐：使用 Python 脚本（唯一入口）
 python3 skills/code-sync/scripts/sync.py
 ```
-
-**注意**：`sync.sh` 是旧脚本，已废弃，**只用 sync.py**。
-
 ## 输出示例
 
 ```
