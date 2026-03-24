@@ -4,8 +4,11 @@
  */
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
+import { Logger } from '@nestjs/common';
 import { buildStatusOverviewFromHealth } from './gateway-overview-health';
 import { gatewayHttpUrlToWs } from './gateway-ws-paths';
+
+const rpcLogger = new Logger('GatewayRpc');
 
 const GATEWAY_PROTOCOL_VERSION = 3;
 
@@ -40,6 +43,21 @@ export async function fetchStatusOverview(params: {
   password?: string;
   timeoutMs?: number;
 }): Promise<GatewayRpcResult<StatusOverviewResult>> {
+  const startTime = Date.now();
+  const requestId = `rpc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  
+  rpcLogger.debug(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'DEBUG',
+      module: 'GatewayRpc',
+      operation: 'fetchStatusOverview_start',
+      requestId,
+      gatewayHttpUrl: params.gatewayHttpUrl,
+      timeoutMs: params.timeoutMs,
+    }),
+  );
+
   const wsUrl = gatewayHttpUrlToWs(params.gatewayHttpUrl);
   const timeoutMs = Math.max(3000, params.timeoutMs ?? 15_000);
   const token = params.token?.trim();
@@ -187,6 +205,22 @@ export async function callGatewayRpc<T = unknown>(params: {
    */
   scopes?: string[];
 }): Promise<GatewayRpcResult<T>> {
+  const startTime = Date.now();
+  const requestId = `rpc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  
+  rpcLogger.debug(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'DEBUG',
+      module: 'GatewayRpc',
+      operation: 'callGatewayRpc_start',
+      requestId,
+      method: params.method,
+      gatewayHttpUrl: params.gatewayHttpUrl,
+      timeoutMs: params.timeoutMs,
+    }),
+  );
+
   const wsUrl = gatewayHttpUrlToWs(params.gatewayHttpUrl);
   const timeoutMs = Math.max(2000, params.timeoutMs ?? 12_000);
   const token = params.token?.trim();
@@ -207,7 +241,22 @@ export async function callGatewayRpc<T = unknown>(params: {
     };
 
     const timer = setTimeout(
-      () => done({ ok: false, error: `WebSocket timeout (${timeoutMs}ms)` }),
+      () => {
+        const durationMs = Date.now() - startTime;
+        rpcLogger.warn(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'WARN',
+            module: 'GatewayRpc',
+            operation: 'callGatewayRpc_timeout',
+            requestId,
+            method: params.method,
+            durationMs,
+            timeoutMs,
+          }),
+        );
+        done({ ok: false, error: `WebSocket timeout (${timeoutMs}ms)` });
+      },
       timeoutMs,
     );
 
@@ -287,14 +336,51 @@ export async function callGatewayRpc<T = unknown>(params: {
         }
 
         if (msg.type === 'res' && msg.id === methodReqId) {
+          const durationMs = Date.now() - startTime;
+          
           if (!msg.ok) {
             const err = msg.error as { message?: string } | undefined;
+            rpcLogger.error(
+              JSON.stringify({
+                timestamp: new Date().toISOString(),
+                level: 'ERROR',
+                module: 'GatewayRpc',
+                operation: 'callGatewayRpc_error',
+                requestId,
+                method: params.method,
+                durationMs,
+                error: err?.message || 'RPC failed',
+              }),
+            );
             done({
               ok: false,
               error: err?.message || 'RPC failed',
             });
             return;
           }
+          
+          // 成功响应
+          const payloadSize = JSON.stringify(msg.payload).length;
+          rpcLogger.debug(
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'DEBUG',
+              module: 'GatewayRpc',
+              operation: 'callGatewayRpc_success',
+              requestId,
+              method: params.method,
+              durationMs,
+              payloadSize,
+            }),
+          );
+          
+          // 慢 RPC 警告
+          if (durationMs > 1000) {
+            rpcLogger.warn(
+              `Slow RPC: ${params.method} took ${durationMs}ms, payload: ${payloadSize}bytes`,
+            );
+          }
+          
           done({
             ok: true,
             payload: msg.payload as T,

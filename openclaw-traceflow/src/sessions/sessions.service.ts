@@ -117,8 +117,14 @@ export class SessionsService {
   ) {}
 
   async listSessions(): Promise<Session[]> {
+    const startTime = Date.now();
+    this.logger.debug(`[listSessions] Start`);
+    
     try {
+      const serviceStart = Date.now();
       const sessions = await this.openclawService.listSessions();
+      const serviceDuration = Date.now() - serviceStart;
+      this.logger.debug(`[listSessions] OpenClawService.listSessions: ${serviceDuration}ms, ${sessions.length} sessions`);
 
       const divisor = this.configService.getConfig().tokenEstimateBytesDivisor;
       return sessions.map((s) => {
@@ -147,8 +153,16 @@ export class SessionsService {
         };
       });
     } catch (error) {
-      this.logger.error('Failed to list sessions:', error);
+      this.logger.error(`[listSessions] Error: ${error.message}`, error.stack);
       return [];
+    } finally {
+      const totalDuration = Date.now() - startTime;
+      this.logger.debug(`[listSessions] Total: ${totalDuration}ms`);
+      
+      // 慢查询警告
+      if (totalDuration > 1000) {
+        this.logger.warn(`[listSessions] Slow query: ${totalDuration}ms`);
+      }
     }
   }
 
@@ -179,11 +193,17 @@ export class SessionsService {
   }
 
   async getSessionById(id: string, resetTimestamp?: string): Promise<SessionDetail | null> {
+    const startTime = Date.now();
+    this.logger.debug(`[getSessionById] Start for ${id}`);
+    
     try {
+      const detailStart = Date.now();
       const detail = await this.openclawService.getSessionDetail(
         id,
         resetTimestamp?.trim() ? { resetTimestamp: resetTimestamp.trim() } : undefined,
       );
+      const detailDuration = Date.now() - detailStart;
+      this.logger.debug(`[getSessionById] getSessionDetail: ${detailDuration}ms`);
 
       if (!detail) {
         return null;
@@ -285,8 +305,16 @@ export class SessionsService {
         ...(estimatedDetail != null ? { estimatedTokensFromLog: estimatedDetail } : {}),
       };
     } catch (error) {
-      this.logger.error('Failed to get session detail:', error);
+      this.logger.error(`[getSessionById] Error for ${id}: ${error.message}`, error.stack);
       return null;
+    } finally {
+      const totalDuration = Date.now() - startTime;
+      this.logger.debug(`[getSessionById] Total for ${id}: ${totalDuration}ms`);
+      
+      // 慢查询警告
+      if (totalDuration > 2000) {
+        this.logger.warn(`[getSessionById] Slow query for ${id}: ${totalDuration}ms`);
+      }
     }
   }
 
