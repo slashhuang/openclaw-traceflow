@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
 import { LogsService } from './logs/logs.service';
+import { PerformanceLoggingInterceptor } from './common/performance-logging.interceptor';
+import { WsPerformanceMiddleware } from './common/ws-performance.middleware';
 import * as express from 'express';
 import * as path from 'path';
 
@@ -55,6 +57,22 @@ async function listenWithDevRetry(
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
+
+  // ========== 性能日志拦截器（100% 覆盖所有 HTTP API）==========
+  app.useGlobalInterceptors(new PerformanceLoggingInterceptor());
+  console.log('[bootstrap] PerformanceLoggingInterceptor enabled (HTTP API logging)');
+
+  // ========== WebSocket 性能监控中间件 ==========
+  const wsAdapter = app.getWebSocketAdapter();
+  if (wsAdapter && 'addMiddleware' in wsAdapter) {
+    // @ts-ignore - Socket.IO adapter supports middleware
+    wsAdapter.addMiddleware((socket, next) => {
+      new WsPerformanceMiddleware().use(socket, next);
+    });
+    console.log('[bootstrap] WsPerformanceMiddleware enabled (WebSocket logging)');
+  } else {
+    console.warn('[bootstrap] WebSocket adapter does not support middleware, skipping WsPerformanceMiddleware');
+  }
 
   // 启用 CORS
   app.enableCors({
