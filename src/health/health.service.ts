@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenClawService } from '../openclaw/openclaw.service';
-import { SkillsService } from '../skills/skills.service';
 
 export interface HealthStatus {
   status: 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY' | 'CRITICAL';
@@ -33,7 +32,6 @@ export class HealthService {
 
   constructor(
     private openclawService: OpenClawService,
-    private skillsService: SkillsService,
   ) {}
 
   private async collectLocalRuntimeStats(): Promise<{
@@ -99,9 +97,8 @@ export class HealthService {
       return status;
     }
 
-    // 2. Gateway 已连接，设置 running 为 true，并触发 systemPrompt 缓存刷新
+    // 2. Gateway 已连接，设置 running 为 true
     status.gateway.running = true;
-    void this.skillsService.refreshCache();
 
     // 3. 尝试从 OpenClaw 获取更多信息（可选）
     try {

@@ -4,7 +4,6 @@ import { ProLayout } from '@ant-design/pro-layout';
 import {
   DashboardOutlined,
   MessageOutlined,
-  ToolOutlined,
   FileTextOutlined,
   DollarOutlined,
   UnorderedListOutlined,
@@ -28,8 +27,10 @@ export default function BasicLayout() {
   const { locale, setLocale, themeMode, setThemeMode, isDark } = useLocaleTheme();
   const [health, setHealth] = useState(null);
   const didNotifyHealthErrorRef = useRef(false);
+  const shouldPollHeaderHealth = location.pathname !== '/';
 
   useEffect(() => {
+    if (!shouldPollHeaderHealth) return undefined;
     const fetchHealth = async () => {
       try {
         const data = await healthApi.getHealth();
@@ -45,7 +46,7 @@ export default function BasicLayout() {
     fetchHealth();
     const t = setInterval(fetchHealth, HEADER_HEALTH_POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, []);
+  }, [intl, shouldPollHeaderHealth]);
 
   const gatewayDisconnected = health && !health.openclawConnected;
   const gatewayError = health?.gatewayError;
@@ -53,7 +54,6 @@ export default function BasicLayout() {
   const menuData = [
     { path: '/', key: '/', name: intl.formatMessage({ id: 'menu.dashboard' }), icon: <DashboardOutlined /> },
     { path: '/sessions', key: '/sessions', name: intl.formatMessage({ id: 'menu.sessions' }), icon: <MessageOutlined /> },
-    { path: '/skills', key: '/skills', name: intl.formatMessage({ id: 'menu.skills' }), icon: <ToolOutlined /> },
     { path: '/system-prompt', key: '/system-prompt', name: intl.formatMessage({ id: 'menu.systemPrompt' }), icon: <FileTextOutlined /> },
 
     { path: '/pricing', key: '/pricing', name: intl.formatMessage({ id: 'menu.pricing' }), icon: <DollarOutlined /> },

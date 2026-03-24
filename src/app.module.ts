@@ -9,7 +9,6 @@ import { LogsModule } from './logs/logs.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { ActionsModule } from './actions/actions.module';
 import { SetupModule } from './setup/setup.module';
-import { SkillsModule } from './skills/skills.module';
 import { PricingConfigModule } from './config/pricing-config.module';
 import { StorageModule } from './storage/storage.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -24,7 +23,6 @@ import { DashboardModule } from './dashboard/dashboard.module';
     MetricsModule,
     ActionsModule,
     SetupModule,
-    SkillsModule,
     PricingConfigModule,
     StorageModule,
     DashboardModule,

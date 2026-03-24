@@ -25,6 +25,7 @@ export class LogsService {
   private gatewayPollOptions: { limit: number; pollIntervalMs: number; maxBytes: number } | null = null;
   private gatewayCurrentPollMs = 1500;
   private gatewayFailureCount = 0;
+  private gatewayNoNewDataCount = 0;
   private gatewayDedupeOrder: string[] = [];
   private gatewayDedupeSet: Set<string> = new Set();
   private readonly gatewayDedupeMax = 1000;
@@ -128,6 +129,7 @@ export class LogsService {
       this.gatewayPollOptions = { limit, pollIntervalMs, maxBytes };
       this.gatewayCurrentPollMs = pollIntervalMs;
       this.gatewayFailureCount = 0;
+      this.gatewayNoNewDataCount = 0;
       this.gatewaySuppressNextEmit = this.gatewayCursor == null;
       this.scheduleGatewayPoll();
 
@@ -154,6 +156,13 @@ export class LogsService {
     this.gatewayTimer = setInterval(() => {
       void this.pollGatewayTailOnce();
     }, this.gatewayCurrentPollMs);
+  }
+
+  private updateGatewayPollInterval(nextMs: number): void {
+    const normalized = Math.max(500, Math.floor(nextMs));
+    if (normalized === this.gatewayCurrentPollMs) return;
+    this.gatewayCurrentPollMs = normalized;
+    this.scheduleGatewayPoll();
   }
 
   /**
@@ -268,15 +277,16 @@ export class LogsService {
 
       if (!res.ok || !res.payload) {
         this.gatewayFailureCount += 1;
+        this.gatewayNoNewDataCount = 0;
         const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
-        this.gatewayCurrentPollMs = Math.min(15_000, base * (2 ** Math.min(this.gatewayFailureCount, 4)));
-        this.scheduleGatewayPoll();
+        // 连续失败时使用更激进冷却，避免无效 logs.tail 高频重试。
+        this.updateGatewayPollInterval(Math.min(60_000, base * (2 ** Math.min(this.gatewayFailureCount, 6))));
         return;
       }
-      if (this.gatewayFailureCount > 0) {
+      if (this.gatewayFailureCount > 0 || this.gatewayNoNewDataCount > 0) {
         this.gatewayFailureCount = 0;
-        this.gatewayCurrentPollMs = this.gatewayPollOptions?.pollIntervalMs || 1500;
-        this.scheduleGatewayPoll();
+        this.gatewayNoNewDataCount = 0;
+        this.updateGatewayPollInterval(this.gatewayPollOptions?.pollIntervalMs || 1500);
       }
 
       if (typeof res.payload.cursor === 'number') {
@@ -286,6 +296,16 @@ export class LogsService {
       const rawLines = Array.isArray(res.payload.lines)
         ? res.payload.lines.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
         : [];
+
+      if (rawLines.length === 0) {
+        this.gatewayNoNewDataCount += 1;
+        const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
+        // 无增量日志时渐进拉长轮询，降低空转 I/O 与 CPU。
+        this.updateGatewayPollInterval(Math.min(60_000, base * (2 ** Math.min(this.gatewayNoNewDataCount, 5))));
+      } else if (this.gatewayNoNewDataCount > 0) {
+        this.gatewayNoNewDataCount = 0;
+        this.updateGatewayPollInterval(this.gatewayPollOptions?.pollIntervalMs || 1500);
+      }
 
       const resetOrTruncated = Boolean(res.payload.reset || res.payload.truncated);
       if (resetOrTruncated) {
