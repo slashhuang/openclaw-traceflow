@@ -24,14 +24,7 @@
 - 命令：`python3 skills/code-sync/scripts/sync.py`
 - 详见 `skills/code-sync/SKILL.md`
 
-### 3. PR 合并后流程
-```bash
-./skills/git-workflow/scripts/merge_pr.sh <PR 号> merge
-python3 skills/code-sync/scripts/sync.py
-pm2 restart claw-gateway
-```
-
-### 4. 禁止行为
+### 3. 禁止行为
 - ❌ `gh pr merge`（必须用 `merge_pr.sh`）
 - ❌ `./bootstrap.sh`（必须用 code-sync）
 - ❌ 在 main 上直接 commit
