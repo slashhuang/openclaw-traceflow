@@ -102,12 +102,11 @@ def sync_main_repo(repo_root):
 
 # Subtree 配置：目录 -> remote 名
 # pushEnabled: 是否允许推送到上游（默认 True）
-#   - claw-family/futu-openD: 只拉取不推送（upstream 是只读的）
+#   - claw-family/futu-openD/openclaw-traceflow: 双向同步
 #   - external-refs/openclaw: 只拉取不推送（没有写入权限）
-#   - openclaw-traceflow: 双向同步
 SUBTREE_CONFIG = [
-    {"dir": "claw-family", "remote": "claw-family-upstream", "pushEnabled": False},
-    {"dir": "futu-openD", "remote": "futu-openD-upstream", "pushEnabled": False},
+    {"dir": "claw-family", "remote": "claw-family-upstream", "pushEnabled": True},
+    {"dir": "futu-openD", "remote": "futu-openD-upstream", "pushEnabled": True},
     {"dir": "openclaw-traceflow", "remote": "openclaw-traceflow", "pushEnabled": True},
     {"dir": "external-refs/openclaw", "remote": "openclaw-upstream", "pushEnabled": False},
 ]
