@@ -181,11 +181,11 @@ def sync_all_subtrees(repo_root):
     return results
 
 
-def has_unpushed_commits(repo_root, subtree_dir):
-    """检查 subtree 目录是否有未推送的提交"""
+def has_unpushed_commits(repo_root, subtree_dir, remote_name):
+    """检查 subtree 目录是否有未推送的提交（对比 subtree 远端）"""
     # 检查是否有针对该目录的未推送提交
     success, stdout, _ = run_command(
-        f"git log origin/main..main --pretty=format:'%h' -- {subtree_dir}",
+        f"git log {remote_name}/main..main --pretty=format:'%h' -- {subtree_dir}",
         cwd=repo_root,
         capture_output=True
     )
@@ -200,7 +200,7 @@ def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     print(f"[code-sync] 🔄 推送 subtree: {subtree_dir} (to {remote_name}/{upstream_branch})")
     
     # 检查是否有未推送的提交
-    if not has_unpushed_commits(repo_root, subtree_dir):
+    if not has_unpushed_commits(repo_root, subtree_dir, remote_name):
         print(f"[code-sync]   ⏭️  无需推送（无本地修改）")
         return {
             "success": True,
