@@ -562,8 +562,6 @@ export default function Dashboard() {
   /** 与 Token 监控同源：用于估算按进行中/归档分桶 */
   const [metrics, setMetrics] = useState({
     latency: null,
-    tools: [],
-    skills: [],
   });
   const [loading, setLoading] = useState(true);
   /** 是否已成功拉取过至少一次 overview，用于失败时保留上次数据而非整页清空 */
@@ -601,22 +599,6 @@ export default function Dashboard() {
           setTokenByKeyFull([]);
           setMetrics({
             latency: { p50: 0, p95: 0, p99: 0, count: 0 },
-            tools: [],
-            skills: [],
-              totalInput: 0,
-              totalOutput: 0,
-              totalTokens: 0,
-              activeInput: 0,
-              activeOutput: 0,
-              activeTokens: 0,
-              archivedInput: 0,
-              archivedOutput: 0,
-              archivedTokens: 0,
-              nearLimitCount: 0,
-              limitReachedCount: 0,
-              sessionCount: 0,
-            },
-            archiveCount: 0,
           });
         }
         return;
@@ -663,19 +645,9 @@ export default function Dashboard() {
       setStatusOverview(statusData);
       setSessions(sessionsData);
       setRecentLogs(logsData);
-      setArchiveCountMap(acMap);
       setMetrics({
         latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
-        tools: toolsData.tools,
-        archiveCount: Object.values(acMap).reduce((s, n) => s + (Number(n) || 0), 0),
       });
-
-      try {
-        const rows = await metricsApi.getTokenUsageBySessionKey(DASHBOARD_METRICS_TIME_RANGE_MS);
-        setTokenByKeyFull(Array.isArray(rows) ? rows : []);
-      } catch {
-        setTokenByKeyFull([]);
-      }
     } catch (e) {
       console.error(e);
     } finally {
