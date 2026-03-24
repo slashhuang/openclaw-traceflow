@@ -155,10 +155,9 @@ claw-sources/  ← git 仓库根目录（worktree 基于这里创建）
 
 当用户说「同步代码」、「更新代码」、「拉代码」时：
 
-1. **严格优先执行 skill**：`python3 skills/code-sync/scripts/sync.py`
-2. 等待完成（自动 git pull + subtree 同步 + worktree 清理，**不重启 Gateway**）
-3. 如需重启 Gateway：`pm2 restart claw-gateway`
-4. 用 message 工具告诉用户同步完成 + 当前 commit
+**严格优先执行 skill**：`python3 skills/code-sync/scripts/sync.py`
+
+详见 `skills/code-sync/SKILL.md`。
 
 ---
 
@@ -166,25 +165,15 @@ claw-sources/  ← git 仓库根目录（worktree 基于这里创建）
 
 **合并 PR 后必须严格按 skill 流程执行**：
 
-```bash
-# 1. 合并 PR（git-workflow skill）
-./skills/git-workflow/scripts/merge_pr.sh <PR 号> merge
+1. `./skills/git-workflow/scripts/merge_pr.sh <PR 号> merge`
+2. `python3 skills/code-sync/scripts/sync.py`
+3. `pm2 restart claw-gateway`
 
-# 2. 同步代码（code-sync skill）
-python3 skills/code-sync/scripts/sync.py
-
-# 3. 重启 Gateway（PM2）
-pm2 restart claw-gateway
-```
-
-**详细说明见 skills**：
-- `skills/git-workflow/SKILL.md` — PR 创建、合并流程
-- `skills/code-sync/SKILL.md` — 代码同步、worktree 清理
+详见 `skills/git-workflow/SKILL.md` 和 `skills/code-sync/SKILL.md`。
 
 **禁止行为**：
 - ❌ `gh pr merge`（必须用 `merge_pr.sh`）
-- ❌ `./bootstrap.sh | tail`（会导致 SIGINT 杀死进程）
-- ❌ 直接用 `bootstrap.sh`（必须用 code-sync）
+- ❌ `./bootstrap.sh`（必须用 code-sync）
 
 ---
 
