@@ -595,8 +595,6 @@ export default function Dashboard() {
           setStatusOverview({ error: errDetail });
           setSessions([]);
           setRecentLogs([]);
-          setArchiveCountMap({});
-          setTokenByKeyFull([]);
           setMetrics({
             latency: { p50: 0, p95: 0, p99: 0, count: 0 },
           });
