@@ -25,11 +25,13 @@ metadata:
 
 **仅执行代码同步，不重启 Gateway**：
 
-1. **同步主仓库**：`git pull --ff-only`
-2. **校准并同步所有 Subtree**：先确保 upstream remote 完整，再执行 `git subtree pull`（claw-family、futu-openD、openclaw-traceflow）
-3. **推送本地修改**：`git subtree push`（如有未推送的提交）
-4. **清理 worktree**：运行 `cleanup_worktree.py` 删除已合并的 worktree
-5. **保存报告**：写入 `.workspace/.sync_report.json`
+1. **前置检查**：必须在 `main` 分支、工作区干净（无未提交改动）
+2. **刷新远端状态**：`git fetch --all --prune`
+3. **同步主仓库**：`git pull --ff-only`
+4. **校准并同步所有 Subtree**：先确保 upstream remote 完整，再执行 `git subtree pull`（claw-family、futu-openD、openclaw-traceflow）
+5. **安全推送本地修改**：`git subtree push` 前先做上游祖先预检查；检测到上游领先时先自动 `subtree pull --squash` 再推
+6. **清理 worktree**：运行 `cleanup_worktree.py` 删除已合并的 worktree
+7. **保存报告**：写入 `.workspace/.sync_report.json`
 
 ## 手动执行
 

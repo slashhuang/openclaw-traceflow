@@ -19,6 +19,28 @@ SUBTREE_REMOTES=("claw-family-upstream" "futu-openD-upstream" "openclaw-traceflo
 UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-main}"
 LOCAL_BRANCH="${LOCAL_BRANCH:-main}"
 
+ensure_on_main() {
+    local branch
+    branch="$(git rev-parse --abbrev-ref HEAD)"
+    if [[ "$branch" != "main" ]]; then
+        echo "❌ 当前分支为 $branch，请切换到 main 后再执行"
+        exit 1
+    fi
+}
+
+ensure_clean_worktree() {
+    if [[ -n "$(git status --porcelain)" ]]; then
+        echo "❌ 工作区不干净，请先提交或暂存变更"
+        exit 1
+    fi
+}
+
+fetch_all() {
+    echo "=== 拉取远端引用（fetch --all --prune）==="
+    git fetch --all --prune
+    echo ""
+}
+
 get_remote() {
     local dir="$1"
     for i in "${!SUBTREE_DIRS[@]}"; do
@@ -55,7 +77,51 @@ show_status() {
     done
 }
 
+subtree_publish_precheck() {
+    local dir="$1"
+    local remote="$2"
+    local upstream="${3:-$UPSTREAM_BRANCH}"
+    local remote_ref="$remote/$upstream"
+
+    if ! git rev-parse "$remote_ref" >/dev/null 2>&1; then
+        # 远端分支不存在，允许首次推送
+        return 0
+    fi
+
+    local split_sha
+    if ! split_sha="$(git subtree split --prefix "$dir" HEAD)"; then
+        echo "❌ $dir split 失败，无法进行推送预检查"
+        return 2
+    fi
+
+    if git merge-base --is-ancestor "$remote_ref" "$split_sha"; then
+        return 0
+    fi
+
+    return 1
+}
+
+sync_before_push_if_needed() {
+    local dir="$1"
+    local remote="$2"
+    local upstream="${3:-$UPSTREAM_BRANCH}"
+    if subtree_publish_precheck "$dir" "$remote" "$upstream"; then
+        return 0
+    fi
+
+    local rc=$?
+    if [[ $rc -eq 2 ]]; then
+        return 1
+    fi
+
+    echo "⚠️  检测到 $dir 上游领先/分叉，先执行 subtree pull --squash"
+    git subtree pull --prefix "$dir" "$remote" "$upstream" --squash
+}
+
 pull_all() {
+    ensure_on_main
+    ensure_clean_worktree
+    fetch_all
     echo "=== 从上游拉取所有 subtree ==="
     echo ""
     for i in "${!SUBTREE_DIRS[@]}"; do
@@ -71,6 +137,9 @@ pull_all() {
 }
 
 push_all() {
+    ensure_on_main
+    ensure_clean_worktree
+    fetch_all
     echo "=== 推送所有 subtree 到上游 ==="
     echo ""
     echo "⚠️  警告：这将推送所有有变更的 subtree 到各自的上游仓库"
@@ -84,6 +153,10 @@ push_all() {
     for i in "${!SUBTREE_DIRS[@]}"; do
         dir="${SUBTREE_DIRS[$i]}"
         remote="${SUBTREE_REMOTES[$i]}"
+        sync_before_push_if_needed "$dir" "$remote" "$UPSTREAM_BRANCH" || {
+            echo "⚠️  $dir 预同步失败，继续下一个..."
+            continue
+        }
         # 检查是否有未推送的变更
         if git log "origin/$LOCAL_BRANCH".."$LOCAL_BRANCH" -- "$dir" --quiet 2>/dev/null; then
             echo "🔄 推送 $dir 到 $remote..."
@@ -108,11 +181,15 @@ sync_one() {
     fi
 
     remote=$(get_remote "$dir")
+    ensure_on_main
+    ensure_clean_worktree
+    fetch_all
 
     if [[ "$action" == "pull" ]]; then
         echo "🔄 拉取 $dir 从 $remote..."
         git subtree pull --prefix "$dir" "$remote" "$UPSTREAM_BRANCH" --squash
     else
+        sync_before_push_if_needed "$dir" "$remote" "$UPSTREAM_BRANCH"
         echo "🔄 推送 $dir 到 $remote..."
         git subtree push --prefix "$dir" "$remote" "$UPSTREAM_BRANCH"
     fi

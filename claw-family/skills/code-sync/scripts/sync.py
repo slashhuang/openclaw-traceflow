@@ -54,6 +54,58 @@ def run_command(cmd, cwd=None, capture_output=False, timeout=120):
         return False, "", str(e)
 
 
+def get_current_branch(repo_root):
+    success, stdout, _ = run_command(
+        "git rev-parse --abbrev-ref HEAD",
+        cwd=repo_root,
+        capture_output=True,
+    )
+    return stdout.strip() if success else "unknown"
+
+
+def ensure_clean_worktree(repo_root):
+    """确保工作区干净，避免同步过程中混入未提交修改"""
+    success, stdout, stderr = run_command(
+        "git status --porcelain",
+        cwd=repo_root,
+        capture_output=True,
+    )
+    if not success:
+        return {
+            "success": False,
+            "message": (stderr or "failed to inspect working tree").strip(),
+        }
+    if stdout.strip():
+        return {
+            "success": False,
+            "message": "working tree is not clean; please commit/stash changes first",
+        }
+    return {"success": True, "message": "working tree clean"}
+
+
+def fetch_all_remotes(repo_root):
+    """同步所有远端引用，保证双机/多端场景的判断基于最新远端状态"""
+    print("[code-sync] === 拉取远端引用（fetch --all --prune） ===")
+    success, stdout, stderr = run_command(
+        "git fetch --all --prune",
+        cwd=repo_root,
+        capture_output=True,
+        timeout=300,
+    )
+    if success:
+        msg = (stdout or "").strip()
+        print("[code-sync] ✅ fetch 完成")
+        if msg:
+            print(f"[code-sync] {msg}")
+        print("")
+        return {"success": True, "message": msg or "fetch --all --prune done"}
+
+    err = (stderr or stdout or "git fetch failed").strip()
+    print(f"[code-sync] ❌ fetch 失败：{err}")
+    print("")
+    return {"success": False, "message": err}
+
+
 def get_commit_short(repo_root, ref="HEAD"):
     """获取短 commit hash"""
     success, stdout, _ = run_command(f"git rev-parse --short {ref}", cwd=repo_root, capture_output=True)
@@ -234,6 +286,69 @@ def ensure_subtree_remotes(repo_root):
     return results
 
 
+def get_ref_sha(repo_root, ref):
+    success, stdout, _ = run_command(
+        f"git rev-parse {ref}",
+        cwd=repo_root,
+        capture_output=True,
+    )
+    return stdout.strip() if success else None
+
+
+def get_subtree_split_sha(repo_root, subtree_dir):
+    success, stdout, stderr = run_command(
+        f"git subtree split --prefix {subtree_dir} HEAD",
+        cwd=repo_root,
+        capture_output=True,
+        timeout=300,
+    )
+    if success:
+        return stdout.strip(), None
+    return None, (stderr or "subtree split failed").strip()
+
+
+def subtree_publish_precheck(repo_root, subtree_dir, remote_name, upstream_branch):
+    """
+    检查 remote/<branch> 是否为本地 subtree split 的祖先。
+    若不是，说明上游领先或发生分叉，直接 push 大概率被拒绝。
+    """
+    remote_ref = f"{remote_name}/{upstream_branch}"
+    remote_sha = get_ref_sha(repo_root, remote_ref)
+    if not remote_sha:
+        return {
+            "success": True,
+            "safe_to_push": True,
+            "message": f"{remote_ref} missing; first push is allowed",
+        }
+
+    split_sha, split_err = get_subtree_split_sha(repo_root, subtree_dir)
+    if not split_sha:
+        return {
+            "success": False,
+            "safe_to_push": False,
+            "message": f"failed to split {subtree_dir}: {split_err}",
+        }
+
+    # merge-base --is-ancestor A B: A 是否是 B 的祖先
+    ok, _, _ = run_command(
+        f"git merge-base --is-ancestor {remote_sha} {split_sha}",
+        cwd=repo_root,
+        capture_output=True,
+    )
+    if ok:
+        return {
+            "success": True,
+            "safe_to_push": True,
+            "message": f"{remote_ref} is ancestor of local split",
+        }
+
+    return {
+        "success": True,
+        "safe_to_push": False,
+        "message": f"{remote_ref} is ahead/diverged from local split",
+    }
+
+
 def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     """
     同步单个 subtree
@@ -329,6 +444,32 @@ def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     """
     print(f"[code-sync] 🔄 推送 subtree: {subtree_dir} (to {remote_name}/{upstream_branch})")
     
+    precheck = subtree_publish_precheck(repo_root, subtree_dir, remote_name, upstream_branch)
+    if not precheck["success"]:
+        print(f"[code-sync]   ❌ 预检查失败：{precheck['message']}")
+        return {
+            "success": False,
+            "dir": subtree_dir,
+            "remote": remote_name,
+            "pushed": False,
+            "message": precheck["message"][:200],
+        }
+    if not precheck["safe_to_push"]:
+        print(f"[code-sync]   ⚠️  检测到上游领先，先执行 subtree pull --squash: {precheck['message']}")
+        pull_cmd = f"git subtree pull --prefix {subtree_dir} {remote_name} {upstream_branch} --squash"
+        pull_ok, pull_out, pull_err = run_command(pull_cmd, cwd=repo_root, timeout=300)
+        if not pull_ok:
+            pull_msg = (pull_err or pull_out or "subtree pull before push failed").strip()
+            print(f"[code-sync]   ❌ 预同步失败：{pull_msg}")
+            return {
+                "success": False,
+                "dir": subtree_dir,
+                "remote": remote_name,
+                "pushed": False,
+                "message": f"pre-push subtree pull failed: {pull_msg[:160]}",
+            }
+        print(f"[code-sync]   ✅ 预同步完成，继续推送")
+
     # 检查是否有未推送的提交
     if not has_unpushed_commits(repo_root, subtree_dir, remote_name, upstream_branch):
         print(f"[code-sync]   ⏭️  无需推送（无本地修改）")
@@ -557,6 +698,20 @@ def main():
     if dry_run:
         print("[code-sync] 干跑模式，不执行实际操作")
         return
+
+    branch = get_current_branch(repo_root)
+    if branch != "main":
+        print(f"[code-sync] ❌ 当前分支为 {branch}，请切换到 main 后再执行。")
+        sys.exit(1)
+
+    clean_check = ensure_clean_worktree(repo_root)
+    if not clean_check["success"]:
+        print(f"[code-sync] ❌ {clean_check['message']}")
+        sys.exit(1)
+
+    fetch_result = fetch_all_remotes(repo_root)
+    if not fetch_result["success"]:
+        sys.exit(1)
     
     # 1. 同步主仓库
     main_result = sync_main_repo(repo_root)
