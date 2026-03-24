@@ -35,11 +35,9 @@ import {
   inferSessionChatKind,
   formatSessionParticipantDisplay,
 } from '../utils/session-user';
-import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
 import TokenMetricHint from '../components/TokenMetricHint';
 import SectionScopeHint from '../components/SectionScopeHint';
-import { aggregateStaleAndEstimated } from '../utils/token-dual-track';
 
 /** 仪表盘整页轮询（含系统健康）；仅在前台标签页触发 */
 const DASHBOARD_POLL_INTERVAL_MS = 10000;
@@ -128,8 +126,6 @@ function formatBuildTimeDisplay(iso, intl) {
 }
 
 /** 与会话列表页列展示一致（无排序交互） */
-function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
-  const am = archiveCountMap && typeof archiveCountMap === 'object' ? archiveCountMap : {};
   return [
     {
       title: intl.formatMessage({ id: 'sessions.column.session' }),
@@ -329,7 +325,6 @@ function buildDashboardRecentSessionColumns(intl, archiveCountMap) {
       onCell: () => ({ style: { minWidth: 140, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
-        const unreliable = r.tokenUsage?.contextUtilizationReliable === false;
         return (
           <div
             style={{
@@ -564,14 +559,9 @@ export default function Dashboard() {
   const [statusOverview, setStatusOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
-  const [archiveCountMap, setArchiveCountMap] = useState({});
   /** 与 Token 监控同源：用于估算按进行中/归档分桶 */
-  const [tokenByKeyFull, setTokenByKeyFull] = useState([]);
   const [metrics, setMetrics] = useState({
     latency: null,
-    tools: [],
-    skills: [],
-    tokenSummary: null,
   });
   const [loading, setLoading] = useState(true);
   /** 是否已成功拉取过至少一次 overview，用于失败时保留上次数据而非整页清空 */
@@ -605,27 +595,8 @@ export default function Dashboard() {
           setStatusOverview({ error: errDetail });
           setSessions([]);
           setRecentLogs([]);
-          setArchiveCountMap({});
-          setTokenByKeyFull([]);
           setMetrics({
             latency: { p50: 0, p95: 0, p99: 0, count: 0 },
-            tools: [],
-            skills: [],
-            tokenSummary: {
-              totalInput: 0,
-              totalOutput: 0,
-              totalTokens: 0,
-              activeInput: 0,
-              activeOutput: 0,
-              activeTokens: 0,
-              archivedInput: 0,
-              archivedOutput: 0,
-              archivedTokens: 0,
-              nearLimitCount: 0,
-              limitReachedCount: 0,
-              sessionCount: 0,
-            },
-            archiveCount: 0,
           });
         }
         return;
@@ -653,7 +624,6 @@ export default function Dashboard() {
               tools: Array.isArray(rawToolStats) ? rawToolStats : [],
               skills: [],
             };
-      const tokenSummaryData = data?.metrics?.tokenSummary ?? {
         totalInput: 0,
         totalOutput: 0,
         totalTokens: 0,
@@ -668,28 +638,14 @@ export default function Dashboard() {
         sessionCount: 0,
       };
       const acMap =
-        data?.metrics?.archiveCountMap && typeof data.metrics.archiveCountMap === 'object'
-          ? data.metrics.archiveCountMap
           : {};
       setHealth(healthData);
       setStatusOverview(statusData);
       setSessions(sessionsData);
       setRecentLogs(logsData);
-      setArchiveCountMap(acMap);
       setMetrics({
         latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
-        tools: toolsData.tools,
-        skills: toolsData.skills,
-        tokenSummary: tokenSummaryData || {},
-        archiveCount: Object.values(acMap).reduce((s, n) => s + (Number(n) || 0), 0),
       });
-
-      try {
-        const rows = await metricsApi.getTokenUsageBySessionKey(DASHBOARD_METRICS_TIME_RANGE_MS);
-        setTokenByKeyFull(Array.isArray(rows) ? rows : []);
-      } catch {
-        setTokenByKeyFull([]);
-      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -726,18 +682,6 @@ export default function Dashboard() {
   );
 
   const recentSessionColumns = useMemo(
-    () => buildDashboardRecentSessionColumns(intl, archiveCountMap),
-    [intl, archiveCountMap],
-  );
-
-  const dashboardDualStats = useMemo(
-    () =>
-      aggregateStaleAndEstimated({
-        sessionList: sessions,
-        tokenByKeyRows: tokenByKeyFull,
-        tokenSummary: metrics.tokenSummary,
-      }),
-    [sessions, metrics.tokenSummary, tokenByKeyFull],
   );
 
   if (loading) {
@@ -752,11 +696,9 @@ export default function Dashboard() {
   const idleSessions = sessions.filter((s) => s.status === 'idle').length;
   const totalSessions = sessions.length;
 
-  const skillChartData = (metrics.skills || []).slice(0, 5).map((s) => ({
     name: s.skill?.length > 15 ? `${s.skill.slice(0, 15)}…` : s.skill,
     count: s.count,
   }));
-  const toolChartData = (metrics.tools || []).slice(0, 5).map((t) => ({
     name: t.tool?.length > 15 ? `${t.tool.slice(0, 15)}…` : t.tool,
     count: t.count,
   }));
@@ -888,7 +830,6 @@ export default function Dashboard() {
                   <SectionScopeHint intl={intl} messageId="dashboard.archivedDesc" />
                 </span>
               }
-              value={metrics.archiveCount ?? 0}
               valueStyle={{ color: token.colorTextSecondary, fontSize: 14 }}
             />
           </Card>
@@ -1019,8 +960,6 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      {metrics.tokenSummary && (() => {
-        const ts = metrics.tokenSummary;
         const d = dashboardDualStats;
         const chartData = [
           {
@@ -1042,10 +981,8 @@ export default function Dashboard() {
           <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
             <Col xs={24}>
               <Card
-                title={intl.formatMessage({ id: 'dashboard.tokenSummaryChartTitle' })}
                 extra={
                   <Space wrap size={4}>
-                    <SectionScopeHint intl={intl} messageId="dashboard.tokenSummaryChartDesc" />
                     <SectionScopeHint intl={intl} messageId="dashboard.tokenMetricsTraceDoc" overlayMaxWidth={520} />
                   </Space>
                 }
@@ -1208,9 +1145,7 @@ export default function Dashboard() {
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
           >
-            {skillChartData.length ? (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={skillChartData}>
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} />
                   <YAxis tick={{ fill: token.colorTextSecondary }} />
                   <RechartsTooltip contentStyle={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorder}` }} />
@@ -1238,9 +1173,7 @@ export default function Dashboard() {
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
           >
-            {toolChartData.length ? (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={toolChartData}>
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} />
                   <YAxis tick={{ fill: token.colorTextSecondary }} />
                   <RechartsTooltip contentStyle={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorder}` }} />
