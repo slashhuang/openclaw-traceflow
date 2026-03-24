@@ -22,14 +22,19 @@
 - **skill 文档**：实现细节（怎么做）
 - 不在 AGENTS.md 重复 skill 流程
 
-### 2. 改代码必须 worktree + PR
+### 2. 理解流程适用场景，禁止机械执行
+- **BOOT.md**：仅在 Gateway **实际重启后**由系统自动执行
+- **禁止主动检查** `.last_boot_commit` 并触发重启通知
+- **配置/文档修改**：不需要重启，不触发 BOOT.md，不发重启通知
+
+### 3. 改代码必须 worktree + PR
 - 详见 `skills/git-workflow/SKILL.md`
 
-### 3. 代码同步必须用 skill
+### 4. 代码同步必须用 skill
 - 命令：`python3 skills/code-sync/scripts/sync.py`
 - 详见 `skills/code-sync/SKILL.md`
 
-### 4. 禁止行为
+### 5. 禁止行为
 - ❌ `gh pr merge`（必须用 `merge_pr.sh`）
 - ❌ `./bootstrap.sh`（必须用 code-sync）
 - ❌ 在 main 上直接 commit
