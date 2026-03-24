@@ -55,7 +55,7 @@ export default function BasicLayout() {
     { path: '/sessions', key: '/sessions', name: intl.formatMessage({ id: 'menu.sessions' }), icon: <MessageOutlined /> },
     { path: '/skills', key: '/skills', name: intl.formatMessage({ id: 'menu.skills' }), icon: <ToolOutlined /> },
     { path: '/system-prompt', key: '/system-prompt', name: intl.formatMessage({ id: 'menu.systemPrompt' }), icon: <FileTextOutlined /> },
-    { path: '/tokens', key: '/tokens', name: intl.formatMessage({ id: 'menu.tokens' }), icon: <DollarOutlined /> },
+
     { path: '/pricing', key: '/pricing', name: intl.formatMessage({ id: 'menu.pricing' }), icon: <DollarOutlined /> },
     { path: '/logs', key: '/logs', name: intl.formatMessage({ id: 'menu.logs' }), icon: <UnorderedListOutlined /> },
     { path: '/settings', key: '/settings', name: intl.formatMessage({ id: 'menu.settings' }), icon: <SettingOutlined /> },
