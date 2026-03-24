@@ -73,11 +73,14 @@ if [[ "$OPENCLAW_STATE_DIR" != /* ]]; then
 fi
 mkdir -p "$OPENCLAW_WORKSPACE_DIR" "$OPENCLAW_STATE_DIR"
 
-# BOOT.md 每次启动用仓库默认覆盖到 openClawRuntime/.workspace
+# BOOT.md、HEARTBEAT.md 每次启动用仓库默认覆盖到 openClawRuntime/.workspace
 # 注意：其他文件（AGENTS.md、SOUL.md、USER.md 等）由 agent-workspace-defaults hook 在运行时从 workspace-defaults/ 注入
 # 因此 .workspace/ 下的内容与 workspace-defaults/ 不一致是正常的，不影响实际运行
 if [[ -f "$REPO_ROOT/workspace-defaults/BOOT.md" ]]; then
   cp "$REPO_ROOT/workspace-defaults/BOOT.md" "$OPENCLAW_WORKSPACE_DIR/BOOT.md"
+fi
+if [[ -f "$REPO_ROOT/workspace-defaults/HEARTBEAT.md" ]]; then
+  cp "$REPO_ROOT/workspace-defaults/HEARTBEAT.md" "$OPENCLAW_WORKSPACE_DIR/HEARTBEAT.md"
 fi
 
 # 使 workspace 内可访问 skills：符号链接到仓库 skills，便于工具读取 skills/xxx/config/... 等路径
