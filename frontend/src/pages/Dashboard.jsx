@@ -684,13 +684,6 @@ export default function Dashboard() {
   const recentSessionColumns = useMemo(
   );
 
-  const dashboardDualStats = useMemo(
-    () =>
-      aggregateStaleAndEstimated({
-        sessionList: sessions,
-      }),
-  );
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 48 }}>
