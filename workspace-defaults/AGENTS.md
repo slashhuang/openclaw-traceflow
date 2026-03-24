@@ -17,14 +17,19 @@
 
 ## 核心原则
 
-### 1. 改代码必须 worktree + PR
+### 1. Single Source of Truth
+- **AGENTS.md**：约束行为（做什么）
+- **skill 文档**：实现细节（怎么做）
+- 不在 AGENTS.md 重复 skill 流程
+
+### 2. 改代码必须 worktree + PR
 - 详见 `skills/git-workflow/SKILL.md`
 
-### 2. 代码同步必须用 skill
+### 3. 代码同步必须用 skill
 - 命令：`python3 skills/code-sync/scripts/sync.py`
 - 详见 `skills/code-sync/SKILL.md`
 
-### 3. 禁止行为
+### 4. 禁止行为
 - ❌ `gh pr merge`（必须用 `merge_pr.sh`）
 - ❌ `./bootstrap.sh`（必须用 code-sync）
 - ❌ 在 main 上直接 commit
