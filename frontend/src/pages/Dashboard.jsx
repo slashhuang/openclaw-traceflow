@@ -35,6 +35,7 @@ import {
   inferSessionChatKind,
   formatSessionParticipantDisplay,
 } from '../utils/session-user';
+import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
 import TokenMetricHint from '../components/TokenMetricHint';
 import SectionScopeHint from '../components/SectionScopeHint';
@@ -126,7 +127,7 @@ function formatBuildTimeDisplay(iso, intl) {
 }
 
 /** 与会话列表页列展示一致（无排序交互） */
-function buildRecentSessionColumns(intl) {
+function buildRecentSessionColumns(intl, archiveCountMap = {}) {
   return [
     {
       title: intl.formatMessage({ id: 'sessions.column.session' }),
@@ -275,7 +276,7 @@ function buildRecentSessionColumns(intl) {
       key: 'archived',
       width: 90,
       render: (_, r) => {
-        const count = am[r.sessionKey] ?? 0;
+        const count = archiveCountMap?.[r.sessionKey] ?? 0;
         const sid = r?.sessionId ?? r?.sessionKey ?? '';
         if (count === 0 || !sid) return '—';
         return (
@@ -326,6 +327,7 @@ function buildRecentSessionColumns(intl) {
       onCell: () => ({ style: { minWidth: 140, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
+        const unreliable = r.tokenUsage?.contextUtilizationReliable === false;
         return (
           <div
             style={{
@@ -560,6 +562,7 @@ export default function Dashboard() {
   const [statusOverview, setStatusOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
+  const [archiveCountMap, setArchiveCountMap] = useState({});
   /** 与 Token 监控同源：用于估算按进行中/归档分桶 */
   const [metrics, setMetrics] = useState({
     latency: null,
@@ -611,20 +614,6 @@ export default function Dashboard() {
       const sessionsData = Array.isArray(data?.sessions) ? data.sessions : [];
       const logsData = Array.isArray(data?.recentLogs) ? data.recentLogs : [];
       const latencyData = data?.metrics?.latency ?? { p50: 0, p95: 0, p99: 0, count: 0 };
-      const rawToolStats = data?.metrics?.tools;
-      const toolsData =
-        rawToolStats &&
-        typeof rawToolStats === 'object' &&
-        !Array.isArray(rawToolStats) &&
-        Array.isArray(rawToolStats.tools)
-          ? {
-              tools: rawToolStats.tools,
-              skills: Array.isArray(rawToolStats.skills) ? rawToolStats.skills : [],
-            }
-          : {
-              tools: Array.isArray(rawToolStats) ? rawToolStats : [],
-              skills: [],
-            };
       const tokenSummaryData = data?.metrics?.tokenSummary ?? {
         totalInput: 0,
         totalOutput: 0,
@@ -647,6 +636,7 @@ export default function Dashboard() {
       setStatusOverview(statusData);
       setSessions(sessionsData);
       setRecentLogs(logsData);
+      setArchiveCountMap(acMap);
       setMetrics({
         latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
       });
@@ -685,7 +675,7 @@ export default function Dashboard() {
     [sessions],
   );
 
-  const recentSessionColumns = buildRecentSessionColumns(intl);
+  const recentSessionColumns = buildRecentSessionColumns(intl, archiveCountMap);
 
   if (loading) {
     return (
@@ -698,15 +688,6 @@ export default function Dashboard() {
   const activeSessions = sessions.filter((s) => s.status === 'active').length;
   const idleSessions = sessions.filter((s) => s.status === 'idle').length;
   const totalSessions = sessions.length;
-
-  const skillChartData = (metrics.skills || []).slice(0, 5).map((s) => ({
-    name: s.skill?.length > 15 ? `${s.skill.slice(0, 15)}…` : s.skill,
-    count: s.count,
-  }));
-  const toolChartData = (metrics.tools || []).slice(0, 5).map((t) => ({
-    name: t.tool?.length > 15 ? `${t.tool.slice(0, 15)}…` : t.tool,
-    count: t.count,
-  }));
 
   const buildTimeText = formatBuildTimeDisplay(APP_BUILD_TIME_ISO, intl);
   const gitShort = typeof APP_GIT_SHA === 'string' && APP_GIT_SHA.length >= 7 ? APP_GIT_SHA.slice(0, 7) : '';
@@ -1134,69 +1115,6 @@ export default function Dashboard() {
           </Row>
         );
       })()}
-
-      <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
-        <Col xs={24} md={12}>
-          <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, width: '100%' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div>{intl.formatMessage({ id: 'dashboard.skillsTop' })}</div>
-                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', lineHeight: 1.4, marginTop: 2 }}>
-                    {intl.formatMessage({ id: 'dashboard.skillsToolsScopeHint' })}
-                  </Typography.Text>
-                </div>
-                <SectionScopeHint intl={intl} messageId="dashboard.skillsTopDesc" />
-              </div>
-            }
-            size="small"
-            bodyStyle={{ padding: '12px 16px' }}
-          >
-            {skillChartData.length ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={skillChartData}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} />
-                  <YAxis tick={{ fill: token.colorTextSecondary }} />
-                  <RechartsTooltip contentStyle={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorder}` }} />
-                  <Bar dataKey="count" fill={token.colorSuccess} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <Typography.Text type="secondary">—</Typography.Text>
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} md={12}>
-          <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, width: '100%' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div>{intl.formatMessage({ id: 'dashboard.toolsTop' })}</div>
-                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', lineHeight: 1.4, marginTop: 2 }}>
-                    {intl.formatMessage({ id: 'dashboard.skillsToolsScopeHint' })}
-                  </Typography.Text>
-                </div>
-                <SectionScopeHint intl={intl} messageId="dashboard.toolsTopDesc" />
-              </div>
-            }
-            size="small"
-            bodyStyle={{ padding: '12px 16px' }}
-          >
-            {toolChartData.length ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={toolChartData}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} />
-                  <YAxis tick={{ fill: token.colorTextSecondary }} />
-                  <RechartsTooltip contentStyle={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorder}` }} />
-                  <Bar dataKey="count" fill={token.colorPrimary} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <Typography.Text type="secondary">—</Typography.Text>
-            )}
-          </Card>
-        </Col>
-      </Row>
 
       <Card
         title={intl.formatMessage({ id: 'dashboard.recentLogs' })}

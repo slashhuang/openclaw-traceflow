@@ -9,8 +9,6 @@ import Dashboard from './pages/Dashboard';
 import Sessions from './pages/Sessions';
 import SessionDetail from './pages/SessionDetail';
 import SessionArchiveList from './pages/SessionArchiveList';
-
-import Skills from './pages/Skills';
 import SystemPrompt from './pages/SystemPrompt';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
@@ -53,7 +51,6 @@ function AppInner() {
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/sessions/:id/archives" element={<SessionArchiveList />} />
           <Route path="/sessions/:id" element={<SessionDetail />} />
-          <Route path="/skills" element={<Skills />} />
           <Route path="/system-prompt" element={<SystemPrompt />} />
 
           <Route path="/pricing" element={<Pricing />} />
