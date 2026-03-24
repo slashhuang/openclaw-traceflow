@@ -147,15 +147,68 @@ git push -u origin {分支名}
 
 ### 5. 用户确认后合并 PR
 
+**必须用 merge_pr.sh 脚本**（不要直接用 `gh pr merge`）：
+
 ```bash
 ./skills/git-workflow/scripts/merge_pr.sh {PR 号} merge
 ```
 
-### 6. 清理 worktree（可选）
+**为什么必须用 merge_pr.sh**：
+- ✅ 自动删除远程分支
+- ✅ 调用 GitHub API 正确合并
+- ❌ `gh pr merge` 不会清理分支
+
+### 6. 合并后同步代码（必须步骤）
+
+**合并后必须执行 code-sync**（不要直接用 `bootstrap.sh`）：
+
+```bash
+python3 skills/code-sync/scripts/sync.py
+```
+
+**为什么必须用 code-sync**：
+- ✅ 同步主仓库 + 所有 subtree
+- ✅ 自动清理已合并的 worktree
+- ✅ 保存同步报告
+- ❌ `bootstrap.sh | tail` 会导致 SIGINT 信号杀死进程
+
+### 7. 重启 Gateway（用 PM2）
+
+```bash
+pm2 restart claw-gateway
+```
+
+**为什么用 PM2**：
+- ✅ PM2 管理进程，安全重启
+- ❌ `bootstrap.sh` 用 `exec` 替换进程，不适合管道操作
+
+### 8. 清理 worktree（可选）
 
 ```bash
 git worktree remove ../claw-sources--{分支名}
 ```
+
+**注意**：code-sync 已自动清理，此步骤通常不需要。
+
+---
+
+## 合并 PR 后的完整流程（重要！）
+
+```bash
+# 1. 合并 PR（必须用 merge_pr.sh）
+./skills/git-workflow/scripts/merge_pr.sh 34 merge
+
+# 2. 同步代码（必须用 code-sync）
+python3 skills/code-sync/scripts/sync.py
+
+# 3. 重启 Gateway（用 PM2）
+pm2 restart claw-gateway
+```
+
+**禁止行为**：
+- ❌ `gh pr merge`（不用 merge_pr.sh）
+- ❌ `./bootstrap.sh | tail -30`（管道会导致 SIGINT）
+- ❌ `cd xxx && ./bootstrap.sh`（应该用 code-sync）
 
 ## 分支命名规范
 

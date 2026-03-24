@@ -153,11 +153,27 @@ claw-sources/  ← git 仓库根目录（worktree 基于这里创建）
 
 ## 代码同步指令
 
-当用户说「同步代码」、「更新代码」、「拉代码」、「重启 Gateway」时：
+当用户说「同步代码」、「更新代码」、「拉代码」时：
 
-1. 运行 `python3 skills/code-sync/scripts/sync.py`
-2. 等待完成（自动 git pull + pm2 restart）
-3. 用 message 工具告诉用户同步完成 + 当前 commit
+**严格优先执行 skill**：`python3 skills/code-sync/scripts/sync.py`
+
+详见 `skills/code-sync/SKILL.md`。
+
+---
+
+## PR 合并后的标准流程
+
+**合并 PR 后必须严格按 skill 流程执行**：
+
+1. `./skills/git-workflow/scripts/merge_pr.sh <PR 号> merge`
+2. `python3 skills/code-sync/scripts/sync.py`
+3. `pm2 restart claw-gateway`
+
+详见 `skills/git-workflow/SKILL.md` 和 `skills/code-sync/SKILL.md`。
+
+**禁止行为**：
+- ❌ `gh pr merge`（必须用 `merge_pr.sh`）
+- ❌ `./bootstrap.sh`（必须用 code-sync）
 
 ---
 
