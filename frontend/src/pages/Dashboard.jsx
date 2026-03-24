@@ -35,6 +35,7 @@ import {
   inferSessionChatKind,
   formatSessionParticipantDisplay,
 } from '../utils/session-user';
+import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
 import TokenMetricHint from '../components/TokenMetricHint';
 import SectionScopeHint from '../components/SectionScopeHint';
@@ -126,7 +127,7 @@ function formatBuildTimeDisplay(iso, intl) {
 }
 
 /** 与会话列表页列展示一致（无排序交互） */
-function buildRecentSessionColumns(intl) {
+function buildRecentSessionColumns(intl, archiveCountMap = {}) {
   return [
     {
       title: intl.formatMessage({ id: 'sessions.column.session' }),
@@ -275,7 +276,7 @@ function buildRecentSessionColumns(intl) {
       key: 'archived',
       width: 90,
       render: (_, r) => {
-        const count = am[r.sessionKey] ?? 0;
+        const count = archiveCountMap?.[r.sessionKey] ?? 0;
         const sid = r?.sessionId ?? r?.sessionKey ?? '';
         if (count === 0 || !sid) return '—';
         return (
@@ -326,6 +327,7 @@ function buildRecentSessionColumns(intl) {
       onCell: () => ({ style: { minWidth: 140, verticalAlign: 'middle' } }),
       render: (_, r) => {
         const pct = utilizationFor(r);
+        const unreliable = r.tokenUsage?.contextUtilizationReliable === false;
         return (
           <div
             style={{
@@ -560,6 +562,7 @@ export default function Dashboard() {
   const [statusOverview, setStatusOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
+  const [archiveCountMap, setArchiveCountMap] = useState({});
   /** 与 Token 监控同源：用于估算按进行中/归档分桶 */
   const [metrics, setMetrics] = useState({
     latency: null,
@@ -647,6 +650,7 @@ export default function Dashboard() {
       setStatusOverview(statusData);
       setSessions(sessionsData);
       setRecentLogs(logsData);
+      setArchiveCountMap(acMap);
       setMetrics({
         latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
       });
@@ -685,7 +689,7 @@ export default function Dashboard() {
     [sessions],
   );
 
-  const recentSessionColumns = buildRecentSessionColumns(intl);
+  const recentSessionColumns = buildRecentSessionColumns(intl, archiveCountMap);
 
   if (loading) {
     return (
