@@ -9,7 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Sessions from './pages/Sessions';
 import SessionDetail from './pages/SessionDetail';
 import SessionArchiveList from './pages/SessionArchiveList';
-import TokenMonitor from './pages/TokenMonitor';
+
 import Skills from './pages/Skills';
 import SystemPrompt from './pages/SystemPrompt';
 import Logs from './pages/Logs';
@@ -55,7 +55,7 @@ function AppInner() {
           <Route path="/sessions/:id" element={<SessionDetail />} />
           <Route path="/skills" element={<Skills />} />
           <Route path="/system-prompt" element={<SystemPrompt />} />
-          <Route path="/tokens" element={<TokenMonitor />} />
+
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
