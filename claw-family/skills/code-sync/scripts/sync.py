@@ -101,14 +101,10 @@ def sync_main_repo(repo_root):
 
 
 # Subtree 配置：目录 -> remote 名
-# pushEnabled: 是否允许推送到上游（默认 True）
-#   - claw-family/futu-openD/openclaw-traceflow: 双向同步
-#   - external-refs/openclaw: 只拉取不推送（没有写入权限）
+# 只有 openclaw-traceflow 是真正的 git subtree
+# 其他目录（claw-family, futu-openD, external-refs/openclaw）是普通目录，不是 subtree
 SUBTREE_CONFIG = [
-    {"dir": "claw-family", "remote": "claw-family-upstream", "pushEnabled": True},
-    {"dir": "futu-openD", "remote": "futu-openD-upstream", "pushEnabled": True},
-    {"dir": "openclaw-traceflow", "remote": "openclaw-traceflow", "pushEnabled": True},
-    {"dir": "external-refs/openclaw", "remote": "openclaw-upstream", "pushEnabled": False},
+    {"dir": "openclaw-traceflow", "remote": "openclaw-traceflow"},
 ]
 
 
@@ -195,22 +191,11 @@ def has_unpushed_commits(repo_root, subtree_dir, remote_name):
     return success and bool(stdout.strip())
 
 
-def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main", push_enabled=True):
+def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     """
     推送 subtree 到上游
     返回：{success, message}
     """
-    # 检查是否允许推送
-    if not push_enabled:
-        print(f"[code-sync] ⏭️  跳过推送：{subtree_dir} (配置为只拉取不推送)")
-        return {
-            "success": True,
-            "dir": subtree_dir,
-            "remote": remote_name,
-            "pushed": False,
-            "message": "Push disabled by config"
-        }
-    
     print(f"[code-sync] 🔄 推送 subtree: {subtree_dir} (to {remote_name}/{upstream_branch})")
     
     # 检查是否有未推送的提交
@@ -260,8 +245,7 @@ def push_all_subtrees(repo_root):
     results = []
     
     for config in SUBTREE_CONFIG:
-        push_enabled = config.get("pushEnabled", True)
-        result = push_subtree(repo_root, config["dir"], config["remote"], push_enabled=push_enabled)
+        result = push_subtree(repo_root, config["dir"], config["remote"])
         results.append(result)
         print("")  # 空行分隔
     
