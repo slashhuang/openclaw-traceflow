@@ -296,6 +296,10 @@ def get_ref_sha(repo_root, ref):
 
 
 def get_subtree_split_sha(repo_root, subtree_dir):
+    """
+    用于预检的 subtree split。若历史中重复出现带相同 git-subtree-mainline 的 Split 提交，
+    默认 split 会报「cache for … already exists」；此时回退到 --ignore-joins。
+    """
     success, stdout, stderr = run_command(
         f"git subtree split --prefix {subtree_dir} HEAD",
         cwd=repo_root,
@@ -303,8 +307,25 @@ def get_subtree_split_sha(repo_root, subtree_dir):
         timeout=300,
     )
     if success:
-        return stdout.strip(), None
-    return None, (stderr or "subtree split failed").strip()
+        out = (stdout or "").strip().split()
+        if out:
+            return out[-1], None
+        return None, "subtree split returned empty"
+    err = (stderr or "").strip() or (stdout or "").strip()
+    if "already exists" in err:
+        success2, stdout2, stderr2 = run_command(
+            f"git subtree split --ignore-joins --prefix {subtree_dir} HEAD",
+            cwd=repo_root,
+            capture_output=True,
+            timeout=600,
+        )
+        if success2:
+            out = (stdout2 or "").strip().split()
+            if out:
+                return out[-1], None
+            return None, "subtree split --ignore-joins returned empty"
+        return None, (stderr2 or "subtree split --ignore-joins failed").strip()
+    return None, err or "subtree split failed"
 
 
 def subtree_publish_precheck(repo_root, subtree_dir, remote_name, upstream_branch):
@@ -347,6 +368,68 @@ def subtree_publish_precheck(repo_root, subtree_dir, remote_name, upstream_branc
         "safe_to_push": False,
         "message": f"{remote_ref} is ahead/diverged from local split",
     }
+
+
+def _tmp_push_branch_name(subtree_dir):
+    return "tmp-cs-push-" + subtree_dir.replace("/", "-").replace("\\", "-")
+
+
+def push_subtree_ignore_joins_fallback(repo_root, subtree_dir, remote_name, upstream_branch):
+    """
+    git subtree push 在「重复 Split 元数据」等情况下会报 cache already exists。
+    使用 split --ignore-joins 生成分支，merge 远端后用 -X ours 保留 monorepo 侧树，再推送。
+    """
+    branch = _tmp_push_branch_name(subtree_dir)
+    prev = get_current_branch(repo_root)
+    remote_ref = f"{remote_name}/{upstream_branch}"
+    try:
+        run_command(
+            f"git fetch {remote_name} {upstream_branch}",
+            cwd=repo_root,
+            capture_output=True,
+            timeout=120,
+        )
+        run_command(f"git branch -D {branch}", cwd=repo_root, capture_output=True)
+        ok, _, err = run_command(
+            f"git subtree split --ignore-joins --prefix {subtree_dir} -b {branch} HEAD",
+            cwd=repo_root,
+            capture_output=True,
+            timeout=600,
+        )
+        if not ok:
+            return False, (err or "subtree split --ignore-joins failed").strip()
+
+        ok2, _, err2 = run_command(
+            f"git checkout {branch}",
+            cwd=repo_root,
+            capture_output=True,
+        )
+        if not ok2:
+            return False, (err2 or "checkout split branch failed").strip()
+
+        ok3, _, err3 = run_command(
+            f'git merge -X ours {remote_ref} -m "merge: align with {remote_ref} (code-sync ignore-joins push)"',
+            cwd=repo_root,
+            capture_output=True,
+            timeout=120,
+        )
+        if not ok3:
+            run_command("git merge --abort", cwd=repo_root, capture_output=True)
+            return False, (err3 or "merge before push failed").strip()
+
+        ok4, out4, err4 = run_command(
+            f"git push {remote_name} {branch}:{upstream_branch}",
+            cwd=repo_root,
+            capture_output=True,
+            timeout=300,
+        )
+        if ok4:
+            msg = (out4 or "").strip().split("\n")[-1][:120] or "pushed via ignore-joins fallback"
+            return True, msg
+        return False, (err4 or out4 or "git push failed").strip()
+    finally:
+        run_command(f"git checkout {prev}", cwd=repo_root, capture_output=True)
+        run_command(f"git branch -D {branch}", cwd=repo_root, capture_output=True)
 
 
 def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
@@ -498,6 +581,25 @@ def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
         }
     else:
         error_msg = (stderr or "").strip() or (stdout or "").strip()
+        if "already exists" in error_msg or "cache for" in error_msg:
+            print(
+                "[code-sync]   ⚠️  subtree push 报 cache 冲突（多为重复 Split 元数据），"
+                "尝试 ignore-joins + merge 后推送…"
+            )
+            fb_ok, fb_msg = push_subtree_ignore_joins_fallback(
+                repo_root, subtree_dir, remote_name, upstream_branch
+            )
+            if fb_ok:
+                print("[code-sync]   ✅ 推送成功（ignore-joins fallback）")
+                print(f"[code-sync]   {fb_msg[:200]}")
+                return {
+                    "success": True,
+                    "dir": subtree_dir,
+                    "remote": remote_name,
+                    "pushed": True,
+                    "message": fb_msg[:200],
+                }
+            print(f"[code-sync]   ❌ fallback 仍失败：{fb_msg[:300]}")
         print(f"[code-sync]   ❌ 推送失败：{error_msg}")
         return {
             "success": False,
