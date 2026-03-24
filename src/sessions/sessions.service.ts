@@ -21,8 +21,8 @@ export interface Session {
 export interface SessionDetail extends Session {
   tokenUsage?: OpenClawSession['tokenUsage'];
   tokenUsageMeta?: OpenClawSession['tokenUsageMeta'];
-  messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: number; sender?: string }>;
-  toolCalls: Array<{ name: string; input?: any; output?: any; duration: number; success: boolean; error?: string; timestamp?: number }>;
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string; timestamp: number; sender?: string }>;
+  toolCalls: Array<{ name: string; input?: any; output?: any; duration?: number; durationMs?: number; success: boolean; error?: string; timestamp?: number }>;
   invokedSkills?: Array<{ skillName: string; readCount: number }>;
   events: Array<{ type: string; timestamp: number; payload: any }>;
   transcriptFileSizeBytes?: number;
@@ -87,7 +87,10 @@ export class SessionsService {
       tokenUsage: detail.tokenUsage,
       tokenUsageMeta: detail.tokenUsageMeta,
       messages: detail.messages || [],
-      toolCalls: detail.toolCalls || [],
+      toolCalls: (detail.toolCalls || []).map((tc) => ({
+        ...tc,
+        duration: tc.duration ?? tc.durationMs,
+      })),
       invokedSkills: detail.invokedSkills || [],
       events: detail.events || [],
       transcriptFileSizeBytes: detail.transcriptFileSizeBytes,

@@ -18,15 +18,15 @@ export class DashboardController {
 
   @Get('overview')
   async getOverview() {
-    const bundle = await this.openclawService.getDashboardGatewayBundle(10).catch(() => ({ ok: false, error: 'bundle failed' }));
+    const bundleResult = await this.openclawService.getDashboardGatewayBundle(10).catch(() => ({ ok: false as const, error: 'bundle failed' }));
 
     let statusOverview: StatusOverviewResult | null;
     let logs: Awaited<ReturnType<LogsService['getRecentLogs']>>;
     let connectionOverride: { connected: boolean; error?: string } | undefined;
 
-    if (bundle.ok) {
-      statusOverview = bundle.statusOverview;
-      logs = this.logsService.mapGatewayTailPayloadToEntries(bundle.logsTail);
+    if (bundleResult.ok) {
+      statusOverview = bundleResult.statusOverview;
+      logs = this.logsService.mapGatewayTailPayloadToEntries(bundleResult.logsTail);
       connectionOverride = { connected: true };
     } else {
       const [statusO, recentLogs, chk] = await Promise.all([
