@@ -64,10 +64,11 @@ async function bootstrap() {
 
   // ========== WebSocket 性能监控中间件 ==========
   const wsAdapter = app.getWebSocketAdapter();
+  const wsMiddleware = new WsPerformanceMiddleware();
   if (wsAdapter && 'addMiddleware' in wsAdapter) {
     // @ts-ignore - Socket.IO adapter supports middleware
     wsAdapter.addMiddleware((socket, next) => {
-      new WsPerformanceMiddleware().use(socket, next);
+      wsMiddleware.use(socket, next);
     });
     console.log('[bootstrap] WsPerformanceMiddleware enabled (WebSocket logging)');
   } else {
