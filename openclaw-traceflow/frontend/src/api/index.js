@@ -75,16 +75,6 @@ export const setupApi = {
 
 export const metricsApi = {
   getLatency: () => api.get('/metrics/latency').then(res => res.data),
-  getTools: () => api.get('/metrics/tools').then(res => res.data),
-  getTokenSummary: (timeRangeMs = 86400000) =>
-    api.get('/metrics/token-summary', { params: { timeRangeMs } }).then(res => res.data),
-  getTokenUsage: (params) => api.get('/metrics/token-usage', { params }).then(res => res.data),
-  getTokenUsageBySessionKey: (timeRangeMs = 86400000) =>
-    api.get('/metrics/token-usage-by-session-key', { params: { timeRangeMs } }).then(res => res.data),
-  getTokenUsageBySessionKeyPaged: (params) =>
-    api.get('/metrics/token-usage-by-session-key', { params }).then(res => res.data),
-  getArchiveCountBySessionKey: () =>
-    api.get('/metrics/archive-count-by-session-key').then(res => res.data),
 };
 
 export const dashboardApi = {
