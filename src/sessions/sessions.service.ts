@@ -118,13 +118,13 @@ export class SessionsService {
 
   async listSessions(): Promise<Session[]> {
     const startTime = Date.now();
-    this.logger.debug(`[listSessions] Start`, 'SessionsService');
+    this.logger.debug(`[listSessions] Start`);
     
     try {
       const serviceStart = Date.now();
       const sessions = await this.openclawService.listSessions();
       const serviceDuration = Date.now() - serviceStart;
-      this.logger.debug(`[listSessions] OpenClawService.listSessions: ${serviceDuration}ms, ${sessions.length} sessions`, 'SessionsService');
+      this.logger.debug(`[listSessions] OpenClawService.listSessions: ${serviceDuration}ms, ${sessions.length} sessions`);
 
       const divisor = this.configService.getConfig().tokenEstimateBytesDivisor;
       return sessions.map((s) => {
@@ -153,15 +153,15 @@ export class SessionsService {
         };
       });
     } catch (error) {
-      this.logger.error(`[listSessions] Error: ${error.message}`, 'SessionsService');
+      this.logger.error(`[listSessions] Error: ${error.message}`);
       return [];
     } finally {
       const totalDuration = Date.now() - startTime;
-      this.logger.debug(`[listSessions] Total: ${totalDuration}ms`, 'SessionsService');
+      this.logger.debug(`[listSessions] Total: ${totalDuration}ms`);
       
       // 慢查询警告
       if (totalDuration > 1000) {
-        this.logger.warn(`[listSessions] Slow query: ${totalDuration}ms`, 'SessionsService');
+        this.logger.warn(`[listSessions] Slow query: ${totalDuration}ms`);
       }
     }
   }
@@ -194,7 +194,7 @@ export class SessionsService {
 
   async getSessionById(id: string, resetTimestamp?: string): Promise<SessionDetail | null> {
     const startTime = Date.now();
-    this.logger.debug(`[getSessionById] Start for ${id}`, 'SessionsService');
+    this.logger.debug(`[getSessionById] Start for ${id}`);
     
     try {
       const detailStart = Date.now();
@@ -203,7 +203,7 @@ export class SessionsService {
         resetTimestamp?.trim() ? { resetTimestamp: resetTimestamp.trim() } : undefined,
       );
       const detailDuration = Date.now() - detailStart;
-      this.logger.debug(`[getSessionById] getSessionDetail: ${detailDuration}ms`, 'SessionsService');
+      this.logger.debug(`[getSessionById] getSessionDetail: ${detailDuration}ms`);
 
       if (!detail) {
         return null;
@@ -305,15 +305,15 @@ export class SessionsService {
         ...(estimatedDetail != null ? { estimatedTokensFromLog: estimatedDetail } : {}),
       };
     } catch (error) {
-      this.logger.error(`[getSessionById] Error for ${id}: ${error.message}`, 'SessionsService');
+      this.logger.error(`[getSessionById] Error for ${id}: ${error.message}`);
       return null;
     } finally {
       const totalDuration = Date.now() - startTime;
-      this.logger.debug(`[getSessionById] Total for ${id}: ${totalDuration}ms`, 'SessionsService');
+      this.logger.debug(`[getSessionById] Total for ${id}: ${totalDuration}ms`);
       
       // 慢查询警告
       if (totalDuration > 2000) {
-        this.logger.warn(`[getSessionById] Slow query for ${id}: ${totalDuration}ms`, 'SessionsService');
+        this.logger.warn(`[getSessionById] Slow query for ${id}: ${totalDuration}ms`);
       }
     }
   }
