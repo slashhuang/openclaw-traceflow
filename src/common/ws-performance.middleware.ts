@@ -34,6 +34,8 @@ export class WsPerformanceMiddleware {
 
     // 拦截 emit（服务器→客户端）— 支持异步处理
     const originalEmit = socket.emit.bind(socket);
+    const self = this; // 保存 this 引用，避免 Promise 回调中丢失上下文
+    
     socket.emit = function (event: string, ...args: any[]) {
       const emitStart = Date.now();
       const result = originalEmit(event, ...args);
@@ -57,15 +59,15 @@ export class WsPerformanceMiddleware {
 
           // 慢事件警告
           if (durationMs > 500) {
-            this.logger.warn(
+            self.logger.warn(
               `Slow WS emit "${event}" to ${clientId}: ${durationMs}ms, ${dataSize}bytes`,
             );
           }
 
-          this.logger.debug(JSON.stringify(logData));
+          self.logger.debug(JSON.stringify(logData));
           return res;
         }).catch(err => {
-          this.logger.error(
+          self.logger.error(
             JSON.stringify({
               timestamp: new Date().toISOString(),
               level: 'ERROR',
@@ -97,12 +99,12 @@ export class WsPerformanceMiddleware {
 
       // 慢事件警告
       if (durationMs > 500) {
-        this.logger.warn(
+        self.logger.warn(
           `Slow WS emit "${event}" to ${clientId}: ${durationMs}ms, ${dataSize}bytes`,
         );
       }
 
-      this.logger.debug(JSON.stringify(logData));
+      self.logger.debug(JSON.stringify(logData));
       return result;
     };
 

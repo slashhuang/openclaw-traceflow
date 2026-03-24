@@ -360,6 +360,7 @@ export async function callGatewayRpc<T = unknown>(params: {
           }
           
           // 成功响应
+          const payloadSize = JSON.stringify(msg.payload).length;
           rpcLogger.debug(
             JSON.stringify({
               timestamp: new Date().toISOString(),
@@ -369,13 +370,14 @@ export async function callGatewayRpc<T = unknown>(params: {
               requestId,
               method: params.method,
               durationMs,
+              payloadSize,
             }),
           );
           
           // 慢 RPC 警告
           if (durationMs > 1000) {
             rpcLogger.warn(
-              `Slow RPC: ${params.method} took ${durationMs}ms`,
+              `Slow RPC: ${params.method} took ${durationMs}ms, payload: ${payloadSize}bytes`,
             );
           }
           
