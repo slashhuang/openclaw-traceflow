@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { tap, finalize } from 'rxjs/operators';
 
 /**
  * 性能日志拦截器 — 统一拦截所有 HTTP REST API
@@ -44,6 +44,7 @@ export class PerformanceLoggingInterceptor implements NestInterceptor {
     );
 
     return next.handle().pipe(
+      // 成功响应
       tap(() => {
         const durationMs = Date.now() - startTime;
         const statusCode = response.statusCode;
@@ -70,7 +71,7 @@ export class PerformanceLoggingInterceptor implements NestInterceptor {
 
         this.logger.debug(JSON.stringify(logData));
       }),
-      // 错误处理
+      // 错误处理（用 finalize 统一清理，避免重复触发）
       tap({
         error: (error) => {
           const durationMs = Date.now() - startTime;
