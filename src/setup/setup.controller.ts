@@ -2,7 +2,6 @@ import { Controller, Get, Post, Body, UseGuards, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
-import { SkillsService } from '../skills/skills.service';
 import { AuthGuard } from '../auth/auth.guard';
 
 export interface SetupRequest {
@@ -29,7 +28,6 @@ export class SetupController {
   constructor(
     private configService: ConfigService,
     private openclawService: OpenClawService,
-    private skillsService: SkillsService,
   ) {}
 
   /**
@@ -164,7 +162,6 @@ export class SetupController {
         openclawGatewayPassword: body.openclawGatewayPassword ?? cfg.openclawGatewayPassword,
       });
       this.openclawService.clearPathsCache();
-      void this.skillsService.refreshCache();
     }
 
     return {
