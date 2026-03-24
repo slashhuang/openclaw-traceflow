@@ -43,7 +43,7 @@ python3 skills/code-sync/scripts/sync.py
 ## 输出示例
 
 ```
-[code-sync] 仓库根目录：/root/githubRepo/claw-sources
+[code-sync] 仓库根目录：<动态获取，基于脚本路径>
 [code-sync] 开始同步代码...
 [code-sync] === 同步主仓库 ===
 [code-sync] 同步前 commit: abc1234

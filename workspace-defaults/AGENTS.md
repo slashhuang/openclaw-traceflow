@@ -153,70 +153,38 @@ claw-sources/  ← git 仓库根目录（worktree 基于这里创建）
 
 ## 代码同步指令
 
-当用户说「同步代码」、「更新代码」、「拉代码」、「重启 Gateway」时：
+当用户说「同步代码」、「更新代码」、「拉代码」时：
 
-1. 运行 `python3 skills/code-sync/scripts/sync.py`
+1. **严格优先执行 skill**：`python3 skills/code-sync/scripts/sync.py`
 2. 等待完成（自动 git pull + subtree 同步 + worktree 清理，**不重启 Gateway**）
 3. 如需重启 Gateway：`pm2 restart claw-gateway`
 4. 用 message 工具告诉用户同步完成 + 当前 commit
 
 ---
 
-## PR 合并后的标准流程（重要！）
+## PR 合并后的标准流程
 
-**合并 PR 后必须按以下顺序执行**：
-
-### 步骤 1：用 merge_pr.sh 合并（不要直接用 gh pr merge）
+**合并 PR 后必须严格按 skill 流程执行**：
 
 ```bash
+# 1. 合并 PR（git-workflow skill）
 ./skills/git-workflow/scripts/merge_pr.sh <PR 号> merge
-```
 
-**为什么**：
-- ✅ 自动删除远程分支
-- ✅ 调用 GitHub API 正确合并
-- ❌ `gh pr merge` 不会清理分支
-
-### 步骤 2：用 code-sync 同步代码（不要直接用 bootstrap.sh）
-
-```bash
+# 2. 同步代码（code-sync skill）
 python3 skills/code-sync/scripts/sync.py
-```
 
-**为什么**：
-- ✅ 同步主仓库 + 所有 subtree
-- ✅ 清理已合并的 worktree
-- ✅ 保存同步报告
-- ❌ `bootstrap.sh | tail` 会导致 SIGINT 信号杀死进程
-
-### 步骤 3：重启 Gateway（用 PM2，不要 exec）
-
-```bash
+# 3. 重启 Gateway（PM2）
 pm2 restart claw-gateway
 ```
 
-**为什么**：
-- ✅ PM2 管理进程，安全重启
-- ❌ `bootstrap.sh` 用 `exec` 替换进程，不适合管道操作
-- ❌ `bootstrap.sh | tail` 会导致 SIGINT
-
-### 完整流程示例
-
-```bash
-# 1. 合并 PR
-./skills/git-workflow/scripts/merge_pr.sh 34 merge
-
-# 2. 同步代码
-python3 skills/code-sync/scripts/sync.py
-
-# 3. 重启 Gateway
-pm2 restart claw-gateway
-```
+**详细说明见 skills**：
+- `skills/git-workflow/SKILL.md` — PR 创建、合并流程
+- `skills/code-sync/SKILL.md` — 代码同步、worktree 清理
 
 **禁止行为**：
-- ❌ `gh pr merge`（不用 merge_pr.sh）
-- ❌ `./bootstrap.sh | tail -30`（管道会导致 SIGINT）
-- ❌ `cd xxx && ./bootstrap.sh`（应该用 code-sync）
+- ❌ `gh pr merge`（必须用 `merge_pr.sh`）
+- ❌ `./bootstrap.sh | tail`（会导致 SIGINT 杀死进程）
+- ❌ 直接用 `bootstrap.sh`（必须用 code-sync）
 
 ---
 
