@@ -126,6 +126,7 @@ function formatBuildTimeDisplay(iso, intl) {
 }
 
 /** 与会话列表页列展示一致（无排序交互） */
+function buildRecentSessionColumns(intl) {
   return [
     {
       title: intl.formatMessage({ id: 'sessions.column.session' }),
@@ -624,6 +625,7 @@ export default function Dashboard() {
               tools: Array.isArray(rawToolStats) ? rawToolStats : [],
               skills: [],
             };
+      const tokenSummaryData = data?.metrics?.tokenSummary ?? {
         totalInput: 0,
         totalOutput: 0,
         totalTokens: 0,
@@ -638,6 +640,8 @@ export default function Dashboard() {
         sessionCount: 0,
       };
       const acMap =
+        data?.metrics?.archiveCountMap && typeof data.metrics.archiveCountMap === 'object'
+          ? data.metrics.archiveCountMap
           : {};
       setHealth(healthData);
       setStatusOverview(statusData);
@@ -681,8 +685,7 @@ export default function Dashboard() {
     [sessions],
   );
 
-  const recentSessionColumns = useMemo(
-  );
+  const recentSessionColumns = buildRecentSessionColumns(intl);
 
   if (loading) {
     return (
@@ -696,9 +699,11 @@ export default function Dashboard() {
   const idleSessions = sessions.filter((s) => s.status === 'idle').length;
   const totalSessions = sessions.length;
 
+  const skillChartData = (metrics.skills || []).slice(0, 5).map((s) => ({
     name: s.skill?.length > 15 ? `${s.skill.slice(0, 15)}…` : s.skill,
     count: s.count,
   }));
+  const toolChartData = (metrics.tools || []).slice(0, 5).map((t) => ({
     name: t.tool?.length > 15 ? `${t.tool.slice(0, 15)}…` : t.tool,
     count: t.count,
   }));
@@ -960,6 +965,8 @@ export default function Dashboard() {
         </Col>
       </Row>
 
+      {metrics.tokenSummary && (() => {
+        const ts = metrics.tokenSummary;
         const d = dashboardDualStats;
         const chartData = [
           {
@@ -1145,7 +1152,9 @@ export default function Dashboard() {
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
           >
+            {skillChartData.length ? (
               <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={skillChartData}>
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} />
                   <YAxis tick={{ fill: token.colorTextSecondary }} />
                   <RechartsTooltip contentStyle={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorder}` }} />
@@ -1173,7 +1182,9 @@ export default function Dashboard() {
             size="small"
             bodyStyle={{ padding: '12px 16px' }}
           >
+            {toolChartData.length ? (
               <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={toolChartData}>
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: token.colorTextSecondary }} />
                   <YAxis tick={{ fill: token.colorTextSecondary }} />
                   <RechartsTooltip contentStyle={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorder}` }} />
