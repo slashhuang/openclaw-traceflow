@@ -153,7 +153,7 @@ export class SessionsService {
         };
       });
     } catch (error) {
-      this.logger.error(`[listSessions] Error: ${error.message}`);
+      this.logger.error(`[listSessions] Error: ${error.message}`, error.stack);
       return [];
     } finally {
       const totalDuration = Date.now() - startTime;
@@ -305,7 +305,7 @@ export class SessionsService {
         ...(estimatedDetail != null ? { estimatedTokensFromLog: estimatedDetail } : {}),
       };
     } catch (error) {
-      this.logger.error(`[getSessionById] Error for ${id}: ${error.message}`);
+      this.logger.error(`[getSessionById] Error for ${id}: ${error.message}`, error.stack);
       return null;
     } finally {
       const totalDuration = Date.now() - startTime;
