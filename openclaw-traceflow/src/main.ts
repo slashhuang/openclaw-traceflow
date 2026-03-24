@@ -3,7 +3,6 @@ import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
 import { LogsService } from './logs/logs.service';
 import { PerformanceLoggingInterceptor } from './common/performance-logging.interceptor';
-import { WsPerformanceMiddleware } from './common/ws-performance.middleware';
 import * as express from 'express';
 import * as path from 'path';
 
@@ -62,18 +61,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new PerformanceLoggingInterceptor());
   console.log('[bootstrap] PerformanceLoggingInterceptor enabled (HTTP API logging)');
 
-  // ========== WebSocket 性能监控中间件 ==========
-  const wsAdapter = app.getWebSocketAdapter();
-  const wsMiddleware = new WsPerformanceMiddleware();
-  if (wsAdapter && 'addMiddleware' in wsAdapter) {
-    // @ts-ignore - Socket.IO adapter supports middleware
-    wsAdapter.addMiddleware((socket, next) => {
-      wsMiddleware.use(socket, next);
-    });
-    console.log('[bootstrap] WsPerformanceMiddleware enabled (WebSocket logging)');
-  } else {
-    console.warn('[bootstrap] WebSocket adapter does not support middleware, skipping WsPerformanceMiddleware');
-  }
+  // 注：WebSocket 性能日志需要在 WebSocketGateway 中实现，NestJS 不支持全局 WS 中间件
 
   // 启用 CORS
   app.enableCors({
