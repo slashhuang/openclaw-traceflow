@@ -554,20 +554,30 @@ def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
             "message": precheck["message"][:200],
         }
     if not precheck["safe_to_push"]:
-        print(f"[code-sync]   ⚠️  检测到上游领先，先执行 subtree pull --squash: {precheck['message']}")
-        pull_cmd = f"git subtree pull --prefix {subtree_dir} {remote_name} {upstream_branch} --squash"
-        pull_ok, pull_out, pull_err = run_command(pull_cmd, cwd=repo_root, timeout=300)
-        if not pull_ok:
-            pull_msg = (pull_err or pull_out or "subtree pull before push failed").strip()
-            print(f"[code-sync]   ❌ 预同步失败：{pull_msg}")
+        # 上游领先或分叉时，不执行 pull（会覆盖本地提交），直接使用 ignore-joins fallback 推送
+        print(f"[code-sync]   ⚠️  检测到上游领先/分叉，跳过 pull，使用 ignore-joins fallback 推送")
+        fb_ok, fb_msg = push_subtree_ignore_joins_fallback(
+            repo_root, subtree_dir, remote_name, upstream_branch
+        )
+        if fb_ok:
+            print(f"[code-sync]   ✅ 推送成功（ignore-joins fallback）")
+            print(f"[code-sync]   {fb_msg[:200]}")
+            return {
+                "success": True,
+                "dir": subtree_dir,
+                "remote": remote_name,
+                "pushed": True,
+                "message": fb_msg[:200]
+            }
+        else:
+            print(f"[code-sync]   ❌ fallback 推送失败：{fb_msg}")
             return {
                 "success": False,
                 "dir": subtree_dir,
                 "remote": remote_name,
                 "pushed": False,
-                "message": f"pre-push subtree pull failed: {pull_msg[:160]}",
+                "message": fb_msg[:200]
             }
-        print(f"[code-sync]   ✅ 预同步完成，继续推送")
 
     # 检查是否有未推送的提交
     if not has_unpushed_commits(repo_root, subtree_dir, remote_name, upstream_branch):
