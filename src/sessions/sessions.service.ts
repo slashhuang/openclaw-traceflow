@@ -1,20 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
+import { LIST_SESSION_JSONL_MAX_SCAN_LINES } from '../openclaw/streaming-jsonl-reader';
 import { inferSessionTypeLabel, resolveDisplayUser } from '../common/session-user-resolver';
 
 export interface Session {
   sessionKey: string;
   sessionId: string;
   user: string;
+  /** 按 transcript / 消息出现顺序去重后的参与者（展示串,与消息抽取同源） */
+  participants?: string[];
   participantSummary?: string;
+  /** @deprecated 与 participants 同源，保留兼容 */
   participantIds?: string[];
   typeLabel?: string;
   status: 'active' | 'idle' | 'completed' | 'failed';
   lastActive: number;
   duration: number;
   model?: string;
+  totalTokens?: number;
+  tokenUsage?: OpenClawSession['tokenUsage'];
+  tokenUsageMeta?: OpenClawSession['tokenUsageMeta'];
+  usageCost?: OpenClawSession['usageCost'];
   messageCount?: number;
+  messageCountCapped?: boolean;
+  messageCountScanMaxLines?: number;
   transcriptFileSizeBytes?: number;
 }
 
@@ -45,17 +55,38 @@ export class SessionsService {
 
   async listSessions(): Promise<Session[]> {
     const sessions = await this.openclawService.listSessions();
-    return sessions.map((s) => ({
+    return sessions.map((s) => {
+      const typeLabel = inferSessionTypeLabel(s.sessionKey, s.sessionId);
+      const singleParticipant =
+        s.participantIds?.length === 1 ? s.participantIds[0].trim() : '';
+      return {
       sessionKey: s.sessionKey,
       sessionId: s.sessionId,
-      user: s.participantSummary || resolveDisplayUser(s.userId, inferSessionTypeLabel(s.sessionKey, s.sessionId), s.systemSent),
+      user:
+        s.participantSummary ||
+        singleParticipant ||
+        resolveDisplayUser(s.userId, typeLabel, s.systemSent),
+      ...(s.participantIds?.length ? { participants: [...s.participantIds], participantIds: [...s.participantIds] } : {}),
       ...(s.participantSummary ? { participantSummary: s.participantSummary } : {}),
-      typeLabel: inferSessionTypeLabel(s.sessionKey, s.sessionId),
+      typeLabel,
       status: s.status,
       lastActive: s.lastActiveAt,
       duration: Date.now() - s.createdAt,
       model: s.model,
-    }));
+      ...(s.totalTokens != null ? { totalTokens: s.totalTokens } : {}),
+      ...(s.tokenUsage ? { tokenUsage: s.tokenUsage } : {}),
+      ...(s.tokenUsageMeta ? { tokenUsageMeta: s.tokenUsageMeta } : {}),
+      ...(s.usageCost ? { usageCost: s.usageCost } : {}),
+      ...(s.messageCount != null ? { messageCount: s.messageCount } : {}),
+      ...(s.transcriptFileSizeBytes != null ? { transcriptFileSizeBytes: s.transcriptFileSizeBytes } : {}),
+      ...(s.messageCountCapped
+        ? {
+            messageCountCapped: true,
+            messageCountScanMaxLines: s.messageCountScanMaxLines ?? LIST_SESSION_JSONL_MAX_SCAN_LINES,
+          }
+        : {}),
+    };
+    });
   }
 
   async listSessionsPaged(page: number, pageSize: number, filter: string = 'all'): Promise<{ items: Session[]; total: number; page: number; pageSize: number }> {
@@ -75,10 +106,19 @@ export class SessionsService {
     if (!detail) return null;
 
     const typeLabel = inferSessionTypeLabel(detail.sessionKey, detail.sessionId);
+    const singleParticipant =
+      detail.participantIds?.length === 1 ? detail.participantIds[0].trim() : '';
     return {
       sessionKey: detail.sessionKey,
       sessionId: detail.sessionId,
-      user: resolveDisplayUser(detail.userId, typeLabel, detail.systemSent),
+      user:
+        detail.participantSummary ||
+        singleParticipant ||
+        resolveDisplayUser(detail.userId, typeLabel, detail.systemSent),
+      ...(detail.participantIds?.length
+        ? { participants: [...detail.participantIds], participantIds: [...detail.participantIds] }
+        : {}),
+      ...(detail.participantSummary ? { participantSummary: detail.participantSummary } : {}),
       typeLabel,
       status: detail.status,
       lastActive: detail.lastActiveAt,
