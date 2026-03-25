@@ -75,9 +75,12 @@ Ensure the OpenClaw Gateway is reachable at **`OPENCLAW_GATEWAY_URL`** (default 
 
 ## Tech stack
 
-- Backend: NestJS + TypeScript
-- Frontend: React + Vite + Ant Design
-- Realtime/log streaming: Socket.IO
+- **Backend**: NestJS 11 + TypeScript
+- **Frontend**: React 19 + Vite 8 + React Router 7 + Ant Design 5 + Pro Layout + react-intl（中/英）
+- **Charts**: Recharts 3
+- **Realtime**: Socket.IO（日志流；仪表盘 HTTP 轮询）
+- **Storage**: sql.js（SQLite），`data/metrics.db`
+- **Gateway**: `GatewayConnectionService` + `TraceflowGatewayPersistentClient`（长驻 WS，配置变更时重建）
 
 ---
 
