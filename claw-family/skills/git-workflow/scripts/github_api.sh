@@ -1,13 +1,34 @@
 #!/bin/bash
 # GitHub API 封装脚本
 # 提供常用的 GitHub API 调用函数
+# 
+# **Token 获取策略**：
+# 1. 优先使用 gh CLI（自动使用 GH_TOKEN，无需手动配置 GITHUB_TOKEN）
+# 2. 降级到 curl + GITHUB_TOKEN/GH_TOKEN 环境变量
+# 3. 最后从 .env 文件读取
 
 set -e
 
+# 检查 gh CLI 是否可用且已登录
+check_gh_cli() {
+    if command -v gh &> /dev/null; then
+        if gh auth status &> /dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # 获取 GITHUB_TOKEN
-# 优先级：环境变量 GITHUB_TOKEN 或 GH_TOKEN > 项目 .env 文件
+# 优先级：gh CLI > 环境变量 GITHUB_TOKEN 或 GH_TOKEN > 项目 .env 文件
 get_token() {
-    # 1️⃣ 优先使用环境变量（直接读取，无需解析 bashrc）
+    # 1️⃣ 优先使用 gh CLI（自动管理 token）
+    if check_gh_cli; then
+        echo "gh_cli_available"
+        return 0
+    fi
+
+    # 2️⃣ 使用环境变量
     if [ -n "$GITHUB_TOKEN" ]; then
         echo "$GITHUB_TOKEN"
         return 0
@@ -18,7 +39,7 @@ get_token() {
         return 0
     fi
 
-    # 2️⃣ 从项目 .env 文件读取（备用）
+    # 3️⃣ 从项目 .env 文件读取（备用）
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local repo_root="$(cd "$script_dir/../../.." && pwd)"
     local env_file="$repo_root/.env"
@@ -34,14 +55,18 @@ get_token() {
     # 全部失败则报错
     echo "" >&2
     cat >&2 << 'EOF'
-Error: GITHUB_TOKEN not found.
+Error: GITHUB_TOKEN not found and gh CLI not available.
 
-Please set environment variable before running:
-  export GITHUB_TOKEN="ghp_xxx"
-  # or
-  export GH_TOKEN="ghp_xxx"
+Options:
+  1. Install gh CLI: https://cli.github.com/
+     Then run: gh auth login
 
-Or create .env file in repo root with GITHUB_TOKEN=ghp_xxx
+  2. Set environment variable:
+     export GITHUB_TOKEN="ghp_xxx"
+     # or
+     export GH_TOKEN="ghp_xxx"
+
+  3. Create .env file in repo root with GITHUB_TOKEN=ghp_xxx
 
 EOF
     return 1
@@ -87,7 +112,25 @@ create_pr() {
         return 1
     fi
     
-    # 调用 GitHub API 创建 PR
+    # 优先使用 gh CLI 创建 PR（更可靠，自动处理 token）
+    if [ "$token" = "gh_cli_available" ]; then
+        local pr_url
+        pr_url=$(gh pr create --title "$title" --body "$body" --head "$head" --base "$base" 2>&1)
+        
+        if [ $? -eq 0 ]; then
+            # 从 URL 中提取 PR 号
+            local pr_number=$(echo "$pr_url" | grep -o 'pull/[0-9]*' | grep -o '[0-9]*')
+            echo "PR #$pr_number created: $pr_url"
+            echo "$pr_number"
+            return 0
+        else
+            echo "Error: Failed to create PR with gh CLI" >&2
+            echo "Response: $pr_url" >&2
+            return 1
+        fi
+    fi
+    
+    # 降级到 curl + GitHub API
     # 注意：body 中的换行符需要转义为 \n
     local escaped_body=$(echo "$body" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
     

@@ -75,14 +75,22 @@ main() {
     # 验证 Token 是否存在
     local token_check="$(get_token)"
     if [ -z "$token_check" ]; then
-        echo "[git-workflow] ❌ 错误：找不到 GITHUB_TOKEN" >&2
+        echo "[git-workflow] ❌ 错误：找不到 GITHUB_TOKEN 且 gh CLI 不可用" >&2
         echo "[git-workflow] 请确保：" >&2
-        echo "[git-workflow]   1. 全局环境变量：在 ~/.zshrc 中添加 export GH_TOKEN=\"ghp_xxx\"" >&2
-        echo "[git-workflow]   2. 或项目 .env 文件：在仓库根目录创建 .env 文件，添加 GITHUB_TOKEN=ghp_xxx" >&2
-        echo "[git-workflow]   3. 或启动前设置：export GITHUB_TOKEN=ghp_xxx 然后启动 openclaw" >&2
+        echo "[git-workflow]   1. 安装 gh CLI（推荐）：https://cli.github.com/" >&2
+        echo "[git-workflow]      然后运行：gh auth login" >&2
+        echo "[git-workflow]   2. 或设置环境变量：export GITHUB_TOKEN=\"ghp_xxx\"" >&2
+        echo "[git-workflow]   3. 或在项目 .env 文件中添加：GITHUB_TOKEN=ghp_xxx" >&2
         echo "" >&2
-        echo "[git-workflow] Token 获取优先级：GITHUB_TOKEN > GH_TOKEN > .env 文件 > ~/.zshrc" >&2
+        echo "[git-workflow] Token 获取优先级：gh CLI > GITHUB_TOKEN > GH_TOKEN > .env 文件" >&2
         return 1
+    fi
+    
+    # 提示使用的认证方式
+    if [ "$token_check" = "gh_cli_available" ]; then
+        echo "[git-workflow] 使用 gh CLI 创建 PR（推荐方式）"
+    else
+        echo "[git-workflow] 使用 GitHub API (curl) 创建 PR"
     fi
 
     # 生成 PR 描述
