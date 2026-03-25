@@ -533,7 +533,7 @@ export default {
   'systemPrompt.fullCollapseScopeDesc':
     '折叠内为完整 Markdown：可能来自 transcript 中的 system、模型回传或重建；见展开后顶部 Alert。',
   'systemPrompt.breakdownCardScopeDesc':
-    '分块 Token 来自 probe.breakdown；各块可展开查看对应文本或表格（workspace/skills/tools 等）。',
+    '分块 Token 来自 probe.breakdown；已按优先级排序（用户自定义文件如 AGENTS.md、identity.md 优先）。横向比例柱展示 Token 分布。各块可展开查看对应文本或表格（workspace/skills/tools 等）。',
   'systemPrompt.analysisBlockScopeDesc':
     '与 Skills 页「占用分析」同源 analysis 接口；饼图为活跃/僵尸/重复 skill 相关 token 估算。',
   'systemPrompt.zombieDuplicateCardScopeDesc':
@@ -558,6 +558,9 @@ export default {
   'systemPrompt.skillsPrompt': 'Skills 提示词',
   'systemPrompt.toolsSchemaHintTitle': '为何此处无 schema 定义？',
   'systemPrompt.toolsSchemaHint': '工具 JSON Schema 通过 API 的 tools 参数发送（如 OpenAI function calling），不在 system prompt 文本中。大模型从 API 请求体获取完整 schema 来正确传参，本页仅解析 system prompt 文本，故无法展示 schema。下表为 Gateway report 的 per-tool 统计（schema 字符数、属性数）。',
+  'systemPrompt.workspaceProjectTitle': 'Workspace & Project Context',
+  'systemPrompt.workspaceProjectCardScopeDesc': '用户自定义的项目文件（AGENTS.md、identity.md 等）和注入到 system prompt 的工作区文件。以标签页形式组织，方便浏览。',
+  'systemPrompt.projectContextHint': 'System Prompt 中的 Project Context 部分（AGENTS.md、identity.md 等）',
   'pricing.title': '模型价格配置',
   'pricing.pageScopeDesc':
     '价格来自 GET /api/pricing 与本地配置文件；「在用」标签依赖会话列表与已配置模型并集。金额为每百万 token 美元单价，供费用列估算。',
