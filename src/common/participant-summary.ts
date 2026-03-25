@@ -21,3 +21,42 @@ export function formatParticipantSummary(distinctIds: string[]): string | undefi
   const others = ids.length - 1;
   return `${first} (+${others})`;
 }
+
+/**
+ * 从详情页已解析的 user 消息（含 sender）按出现顺序去重，过滤占位串。
+ */
+export function participantsFromSessionMessages(
+  messages: Array<{ role: string; sender?: string }>,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const m of messages) {
+    if (m.role !== 'user') continue;
+    const raw = m.sender?.trim();
+    if (!raw || raw.length > 200 || isPlaceholderParticipantId(raw)) continue;
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
+  }
+  return out;
+}
+
+/**
+ * 以「当前响应里解析到的消息」为主序，再追加扫描缓存中有而消息里未出现的人（如 head_tail 截断时补全）。
+ */
+export function mergeParticipantListsOrdered(fromMessages: string[], fromScanCache: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (s: string) => {
+    const t = s.trim();
+    if (!t || t.length > 200 || isPlaceholderParticipantId(t)) return;
+    if (seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+  for (const s of fromMessages) push(s);
+  if (fromScanCache) {
+    for (const s of fromScanCache) push(s);
+  }
+  return out;
+}
