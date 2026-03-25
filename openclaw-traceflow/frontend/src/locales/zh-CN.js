@@ -276,6 +276,8 @@ export default {
   'sessions.column.statusTooltip':
     '根据 transcript 推断：活跃 / 空闲 / 已结束 / 失败。其中「已结束」表示最后一条为 Agent 最终回复（agent:final），本轮对话已结束。注意：这与右侧「归档」列不是同一概念——「归档」列统计的是该会话下用户开启新对话（写入 *.jsonl.reset.*）的次数。',
   'sessions.column.user': '参与者',
+  'sessions.participantCount': '{count} 人',
+  'sessions.lastSpeaker': '最近',
   'sessions.column.participantTooltip':
     '一行会话 = OpenClaw 里的一条对话线程；sessionKey 表示路由（单聊 / 群聊 / 频道等）。「主会话」对应 dm 策略为 main 时折叠的默认桶 agent:*:main，与心跳任务是否写入同一桶无必然关系。本列多为索引里的对接身份（如飞书 open_id）。与左侧会话列里的通道/形态标签配合理解。',
   'sessions.detailParticipantLabel': '参与者',
@@ -285,6 +287,8 @@ export default {
   'sessions.column.lastActive': '最后活跃',
   'sessions.column.duration': '持续时间',
   'sessions.column.messages': '消息',
+  'sessions.column.messagesExceededScanTooltip':
+    '已超过列表扫描行数上限（{n} 行），条数为下界，非精确值',
   'sessions.column.fileSize': '文件大小',
   'sessions.column.archived': '归档',
   'sessions.column.archivedTooltip':
