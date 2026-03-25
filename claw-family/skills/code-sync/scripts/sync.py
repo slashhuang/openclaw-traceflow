@@ -435,13 +435,26 @@ def push_subtree_ignore_joins_fallback(repo_root, subtree_dir, remote_name, upst
 def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     """
     同步单个 subtree
-    返回：{success, beforeCommit, afterCommit, message}
+    返回：{success, beforeCommit, afterCommit, message, skipped}
     """
     print(f"[code-sync] 🔄 同步 subtree: {subtree_dir} (from {remote_name}/{upstream_branch})")
     
     # 获取同步前的 commit
     before_commit = get_commit_short(repo_root, f"HEAD:{subtree_dir}")
     print(f"[code-sync]   同步前 commit: {before_commit}")
+    
+    # 检查是否有未推送的本地修改，有的话跳过 pull（避免丢失本地提交）
+    if has_unpushed_commits(repo_root, subtree_dir, remote_name, upstream_branch):
+        print(f"[code-sync]   ⏭️  检测到本地未推送提交，跳过 pull（由 push 步骤处理）")
+        return {
+            "success": True,
+            "dir": subtree_dir,
+            "remote": remote_name,
+            "beforeCommit": before_commit,
+            "afterCommit": before_commit,
+            "message": "Skipped (has unpushed local commits)",
+            "skipped": True
+        }
     
     # 执行 subtree pull
     cmd = f"git subtree pull --prefix {subtree_dir} {remote_name} {upstream_branch} --squash"
@@ -461,7 +474,8 @@ def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
             "remote": remote_name,
             "beforeCommit": before_commit,
             "afterCommit": after_commit,
-            "message": message
+            "message": message,
+            "skipped": False
         }
     else:
         # 检查是否是无更新的情况
@@ -474,7 +488,8 @@ def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
                 "remote": remote_name,
                 "beforeCommit": before_commit,
                 "afterCommit": before_commit,
-                "message": "Already up-to-date"
+                "message": "Already up-to-date",
+                "skipped": False
             }
         else:
             print(f"[code-sync]   ❌ 同步失败：{error_msg}")
@@ -484,7 +499,8 @@ def sync_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
                 "remote": remote_name,
                 "beforeCommit": before_commit,
                 "afterCommit": after_commit,
-                "message": error_msg[:200]
+                "message": error_msg[:200],
+                "skipped": False
             }
 
 
