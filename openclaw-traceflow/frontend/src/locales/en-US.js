@@ -539,7 +539,7 @@ export default {
   'systemPrompt.fullCollapseScopeDesc':
     'Collapsed panel holds full Markdown: may come from transcript system, model reveal, or rebuild—see the alert when expanded.',
   'systemPrompt.breakdownCardScopeDesc':
-    'Per-block tokens from probe.breakdown; expand each block for text or tables (workspace, skills, tools, …).',
+    'Per-block tokens from probe.breakdown; blocks are sorted with user-defined files (AGENTS.md, identity.md) first. Token distribution shown as proportional bar. Expand each block for text or tables (workspace, skills, tools, …).',
   'systemPrompt.analysisBlockScopeDesc':
     'Same analysis API as the Skills “token use” tab: pie chart of active/zombie/duplicate skill-related token estimates.',
   'systemPrompt.zombieDuplicateCardScopeDesc':
@@ -564,6 +564,9 @@ export default {
   'systemPrompt.skillsPrompt': 'Skills prompt',
   'systemPrompt.toolsSchemaHintTitle': 'Why no schema here?',
   'systemPrompt.toolsSchemaHint': "Tool JSON Schemas are sent via the API's tools parameter (e.g. OpenAI function calling), not in system prompt text. The model receives full schema from the API request to call tools correctly. This page only parses system prompt text, so schema cannot be displayed. The table below shows per-tool stats from the Gateway report (schema chars, properties count).",
+  'systemPrompt.workspaceProjectTitle': 'Workspace & Project Context',
+  'systemPrompt.workspaceProjectCardScopeDesc': 'User-defined project files (AGENTS.md, identity.md, etc.) and workspace files injected into system prompt. Organized in tabs for easy navigation.',
+  'systemPrompt.projectContextHint': 'Project Context section from system prompt (AGENTS.md, identity.md, etc.)',
   'pricing.title': 'Model Pricing Configuration',
   'pricing.pageScopeDesc':
     'Prices from GET /api/pricing and local config; “In use” merges session models with configured models. Values are $ per 1M tokens for estimates.',
