@@ -9,6 +9,7 @@
 
 import * as fs from 'fs';
 import { Logger } from '@nestjs/common';
+import { extractSenderFromMessageEntry } from '../common/extract-sender-from-message';
 
 const logger = new Logger('StreamingJsonlReader');
 
@@ -168,12 +169,17 @@ export async function readJsonlHeadTail(
   }
 }
 
+/** 会话列表扫描 JSONL 时最多处理的行数；达到后 messageCount 仅为下界 */
+export const LIST_SESSION_JSONL_MAX_SCAN_LINES = 1000;
+
 /**
  * 流式扫描 JSONL 文件提取特定信息（不加载整个文件）
  */
 export interface ScanResult {
   userId?: string;
   messageCount: number;
+  /** 达到 maxLines 行上限提前结束；messageCount 非精确值 */
+  messageCountCapped?: boolean;
   distinctSenders: string[];
   totalTokens?: number;
   hasCostField: boolean;
@@ -188,7 +194,7 @@ export interface ScanResult {
 
 export async function scanJsonlForMetadata(
   filePath: string,
-  maxLines = 1000,
+  maxLines = LIST_SESSION_JSONL_MAX_SCAN_LINES,
 ): Promise<ScanResult> {
   const fd = await fs.promises.open(filePath, 'r');
   const stats = await fs.promises.stat(filePath);
@@ -233,7 +239,7 @@ export async function scanJsonlForMetadata(
 
           // 提取 userId
           if (!result.userId) {
-            const sender = extractSenderFromEntry(entry);
+            const sender = extractSenderFromMessageEntry(entry);
             if (sender) {
               result.userId = sender;
             }
@@ -245,7 +251,7 @@ export async function scanJsonlForMetadata(
           }
 
           // 提取 sender
-          const sender = extractSenderFromEntry(entry);
+          const sender = extractSenderFromMessageEntry(entry);
           if (sender && !senderSet.has(sender)) {
             senderSet.add(sender);
           }
@@ -276,6 +282,7 @@ export async function scanJsonlForMetadata(
       offset += read.bytesRead;
     }
 
+    result.messageCountCapped = linesProcessed >= maxLines;
     result.distinctSenders = Array.from(senderSet);
     
     if (result.hasCostField) {
@@ -292,26 +299,4 @@ export async function scanJsonlForMetadata(
   } finally {
     await fd.close();
   }
-}
-
-/**
- * 从 JSONL 条目中提取 sender
- */
-function extractSenderFromEntry(entry: any): string | null {
-  if (entry?.user && typeof entry.user === 'string' && entry.user.trim()) {
-    return entry.user.trim();
-  }
-
-  const msg = entry?.message;
-  if (!msg) return null;
-
-  if (typeof msg.senderLabel === 'string' && msg.senderLabel.trim()) {
-    return msg.senderLabel.trim();
-  }
-
-  if (typeof msg.sender === 'string' && msg.sender.trim()) {
-    return msg.sender.trim();
-  }
-
-  return null;
 }
