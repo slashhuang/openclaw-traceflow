@@ -79,12 +79,21 @@ export function inferSessionChatKind(sessionKey, sessionId) {
 }
 
 /**
- * 列表「参与者」列：优先展示索引/解析得到的真实身份（如飞书 open_id）；
- * 若仍为 unknown 或与 heartbeat/cron/boot 占位一致，再用会话类型标签兜底。
- * @param {{ sessionKey?: string, sessionId?: string, user?: string, participantSummary?: string, typeLabel?: string }} row
+ * 列表「参与者」列：优先用 participants 列表（与消息抽取同源），再 participantSummary / user。
+ * @param {{ sessionKey?: string, sessionId?: string, user?: string, participants?: string[], participantIds?: string[], participantSummary?: string, typeLabel?: string }} row
  * @returns {string}
  */
 export function formatSessionParticipantDisplay(row) {
+  const parts = row.participants ?? row.participantIds;
+  if (Array.isArray(parts) && parts.length > 1) {
+    const first = String(parts[0] ?? '').trim();
+    const n = parts.length - 1;
+    return first ? `${first} (+${n})` : `+${n}`;
+  }
+  if (Array.isArray(parts) && parts.length === 1) {
+    const one = String(parts[0] ?? '').trim();
+    if (one) return one;
+  }
   const summary = (row.participantSummary ?? '').trim();
   if (summary) return summary;
   const typeLabel = row.typeLabel || inferSessionTypeLabel(row.sessionKey || '', row.sessionId || '');
@@ -100,4 +109,18 @@ export function formatSessionParticipantDisplay(row) {
   if (u && !isPlaceholder) return u;
   if (sys) return typeLabel;
   return u || '—';
+}
+
+/**
+ * 列表「消息」列：有 messageCount 时显示数字；达到扫描行上限时显示 >maxLines（非精确条数）。
+ * @param {{ messageCount?: number, messageCountCapped?: boolean, messageCountScanMaxLines?: number }} row
+ * @returns {string}
+ */
+export function formatSessionListMessageCount(row) {
+  if (row.messageCount == null) return '—';
+  if (row.messageCountCapped) {
+    const cap = row.messageCountScanMaxLines ?? 1000;
+    return `>${cap}`;
+  }
+  return String(row.messageCount);
 }
