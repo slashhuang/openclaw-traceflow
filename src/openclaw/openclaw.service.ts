@@ -19,6 +19,12 @@ import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
 import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
 import { FileSystemSessionStorage, type SessionData, type SessionStorage } from '../storage/session-storage';
 import { readJsonlHeadTail, type HeadTailResult } from './streaming-jsonl-reader';
+import { extractSenderFromMessageEntry } from '../common/extract-sender-from-message';
+import {
+  formatParticipantSummary,
+  mergeParticipantListsOrdered,
+  participantsFromSessionMessages,
+} from '../common/participant-summary';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -116,6 +122,10 @@ export interface OpenClawSession {
 
   /** JSONL 中带 entry.message 的行数（与详情页 messages 口径一致） */
   messageCount?: number;
+  /** 列表扫描达到行数上限，messageCount 仅为下界；展示可用 >messageCountScanMaxLines */
+  messageCountCapped?: boolean;
+  /** 与 messageCountCapped 配套，一般为 LIST_SESSION_JSONL_MAX_SCAN_LINES */
+  messageCountScanMaxLines?: number;
   /** 当前会话 transcript .jsonl 文件大小（字节） */
   transcriptFileSizeBytes?: number;
   /**
@@ -125,7 +135,8 @@ export interface OpenClawSession {
   participantSummary?: string;
 
   /**
-   * transcript 中按出现顺序去重后的真人参与者 id（与 participantSummary 同源）；列表 API 不返回，仅详情合并。
+   * transcript 扫描 / 详情消息合并后，按出现顺序去重的参与者展示串（与 participantSummary 同源）。
+   * HTTP 层常以 `participants` 字段暴露同一数组。
    */
   participantIds?: string[];
 
@@ -284,55 +295,6 @@ interface SessionFile {
 }
 
 /**
- * 从消息内容中提取 sender（用户标识）。
- * 消息可能包含：1) senderLabel 属性 2) 元数据块 3) 群聊格式 "SenderName: body"
- */
-function extractSenderFromMessageContent(text: string): string | null {
-  if (!text || typeof text !== 'string') return null;
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-
-  // 1. Sender (untrusted metadata) 块
-  const senderBlockMatch = trimmed.match(
-    /Sender \(untrusted metadata\):\s*\n```json\s*\n([\s\S]*?)\n```/
-  );
-  if (senderBlockMatch) {
-    try {
-      const obj = JSON.parse(senderBlockMatch[1]);
-      const v = obj?.label || obj?.name || obj?.username || obj?.e164 || obj?.id;
-      if (typeof v === 'string' && v.trim()) return v.trim();
-    } catch {
-      /* ignore */
-    }
-  }
-
-  // 2. Conversation info 块中的 sender
-  const convBlockMatch = trimmed.match(
-    /Conversation info \(untrusted metadata\):\s*\n```json\s*\n([\s\S]*?)\n```/
-  );
-  if (convBlockMatch) {
-    try {
-      const obj = JSON.parse(convBlockMatch[1]);
-      const v = obj?.sender;
-      if (typeof v === 'string' && v.trim()) return v.trim();
-    } catch {
-      /* ignore */
-    }
-  }
-
-  // 3. 群聊 envelope 格式: [Channel from ts] SenderName: body 或 SenderName: body
-  const afterEnvelope = trimmed.replace(/^\[[^\]]+\]\s*/, '');
-  const colonMatch = afterEnvelope.match(/^([^:\n]+):\s/);
-  if (colonMatch) {
-    const sender = colonMatch[1].trim();
-    if (sender === '(self)') return 'self';
-    if (sender.length > 0 && sender.length < 200) return sender;
-  }
-
-  return null;
-}
-
-/**
  * 从 transcript 推断是否为 greeting 会话（系统先发问候、用户尚未回复）。
  * 当首条有效 assistant 消息内容像问候语时，视为 systemSent，用于 unknown→greeting 映射。
  */
@@ -360,32 +322,6 @@ function inferSystemSentFromTranscript(lines: string[]): boolean {
     }
   }
   return false;
-}
-
-function extractSenderFromMessageEntry(entry: {
-  message?: { role?: string; content?: unknown; senderLabel?: string };
-  user?: string;
-}): string | null {
-  if (entry?.user && typeof entry.user === 'string' && entry.user.trim()) {
-    return entry.user.trim();
-  }
-  const msg = entry?.message;
-  if (!msg) return null;
-  if (typeof msg.senderLabel === 'string' && msg.senderLabel.trim()) {
-    return msg.senderLabel.trim();
-  }
-  if (msg.role !== 'user') return null;
-  const content = msg.content;
-  let text = '';
-  if (typeof content === 'string') text = content;
-  else if (Array.isArray(content)) {
-    for (const item of content) {
-      if (item?.type === 'text' && typeof item.text === 'string') {
-        text += item.text;
-      }
-    }
-  }
-  return extractSenderFromMessageContent(text) || null;
 }
 
 @Injectable()
@@ -994,11 +930,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     const sessions: OpenClawSession[] = [];
 
     for (const [_, data] of sessionsMap) {
-      // 移除 fileMeta / 内部扫描版本 / 完整参与者 id 列表（列表只需 participantSummary 短串）
+      // 移除 fileMeta / 内部扫描版本；保留 participantIds 供列表 participants 数组
       const {
         fileMeta,
         transcriptParticipantScanVersion: _scanVer,
-        participantIds: _pids,
         ...session
       } = data;
       sessions.push(session);
@@ -1403,10 +1338,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
               contentText = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
             }
 
-            const sender =
-              role === 'user'
-                ? (msg.senderLabel as string) || extractSenderFromMessageContent(contentText)
-                : undefined;
+            const sender = role === 'user' ? extractSenderFromMessageEntry(entry) : undefined;
             const displayRole = role === 'toolResult' ? 'assistant' : (role as 'user' | 'assistant' | 'system');
             messages.push({
               role: displayRole,
@@ -1695,6 +1627,18 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
       const archiveEpochs = await this.listSessionArchiveEpochs(sessionId);
 
+      const fromMsgs = participantsFromSessionMessages(messages);
+      let cachedParticipantIds: string[] | undefined;
+      try {
+        const cachedSession = await this.sessionStorage.get(sessionKey);
+        cachedParticipantIds = cachedSession?.participantIds;
+      } catch {
+        /* 缓存未就绪时仅使用消息推导 */
+      }
+      const mergedParticipants = mergeParticipantListsOrdered(fromMsgs, cachedParticipantIds);
+      const participantSummaryComputed =
+        mergedParticipants.length > 0 ? formatParticipantSummary(mergedParticipants) : undefined;
+
       return {
         sessionKey,
         sessionId: sessionFile.sessionId,
@@ -1733,6 +1677,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           : {}),
         ...(archiveEpochs.length ? { archiveEpochs } : {}),
         ...(resetTs ? { archiveResetTimestamp: resetTs } : {}),
+        ...(mergedParticipants.length > 0 ? { participantIds: mergedParticipants } : {}),
+        ...(participantSummaryComputed ? { participantSummary: participantSummaryComputed } : {}),
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);
