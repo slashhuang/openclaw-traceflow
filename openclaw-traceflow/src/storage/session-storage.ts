@@ -12,11 +12,16 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import type { OpenClawSession } from '../openclaw/openclaw.service';
 import { formatParticipantSummary, isPlaceholderParticipantId } from '../common/participant-summary';
+import { extractSenderFromMessageEntry } from '../common/extract-sender-from-message';
 import { isIndexTotalTokensUsableForContext } from '../common/session-token-context';
-import { readJsonlHeadTail, scanJsonlForMetadata } from '../openclaw/streaming-jsonl-reader';
+import {
+  LIST_SESSION_JSONL_MAX_SCAN_LINES,
+  readJsonlHeadTail,
+  scanJsonlForMetadata,
+} from '../openclaw/streaming-jsonl-reader';
 
 /** 参与者扫描逻辑升级时递增，使内存缓存命中后仍会重扫 transcript */
-const TRANSCRIPT_PARTICIPANT_SCAN_VERSION = 3;
+const TRANSCRIPT_PARTICIPANT_SCAN_VERSION = 6;
 
 /**
  * 会话数据接口（KV 存储的 value）
@@ -319,7 +324,7 @@ export class FileSystemSessionStorage implements SessionStorage {
         // 如果 sessions.json 有 messageCount，直接用（避免扫描）
         // 否则使用流式扫描获取（最多扫 1000 行）
         if (stats) {
-          scanResult = await scanJsonlForMetadata(filePath, 1000);
+          scanResult = await scanJsonlForMetadata(filePath, LIST_SESSION_JSONL_MAX_SCAN_LINES);
           if (scanResult.userId) {
             userId = scanResult.userId;
           }
@@ -343,7 +348,7 @@ export class FileSystemSessionStorage implements SessionStorage {
           for (const line of allLines.slice(0, 100)) {
             try {
               const entry = JSON.parse(line);
-              const sender = this.extractSenderFromMessageEntry(entry);
+              const sender = extractSenderFromMessageEntry(entry);
               if (sender && !senderSet.has(sender)) {
                 senderSet.add(sender);
               }
@@ -497,6 +502,12 @@ export class FileSystemSessionStorage implements SessionStorage {
         tokenUsage,
         usageCost,
         messageCount,
+        ...(scanResult?.messageCountCapped
+          ? {
+              messageCountCapped: true,
+              messageCountScanMaxLines: LIST_SESSION_JSONL_MAX_SCAN_LINES,
+            }
+          : {}),
         transcriptFileSizeBytes: actualStats.size,
         tokenUsageMeta,
         transcriptParticipantScanVersion: TRANSCRIPT_PARTICIPANT_SCAN_VERSION,
@@ -518,89 +529,6 @@ export class FileSystemSessionStorage implements SessionStorage {
       this.logger.debug(`Failed to read session file ${filePath}:`, error);
       return null;
     }
-  }
-
-  /**
-   * 从消息条目中提取 sender
-   */
-  private extractSenderFromMessageEntry(entry: any): string | null {
-    if (entry?.user && typeof entry.user === 'string' && entry.user.trim()) {
-      return entry.user.trim();
-    }
-    
-    const msg = entry?.message;
-    if (!msg) return null;
-    
-    if (typeof msg.senderLabel === 'string' && msg.senderLabel.trim()) {
-      return msg.senderLabel.trim();
-    }
-    if (typeof msg.sender === 'string' && msg.sender.trim()) {
-      return msg.sender.trim();
-    }
-
-    if (msg.role !== 'user') return null;
-    
-    const content = msg.content;
-    let text = '';
-    if (typeof content === 'string') {
-      text = content;
-    } else if (Array.isArray(content)) {
-      for (const item of content) {
-        if (item?.type === 'text' && typeof item.text === 'string') {
-          text += item.text;
-        }
-      }
-    }
-    
-    return this.extractSenderFromMessageContent(text) || null;
-  }
-
-  /**
-   * 从消息内容中提取 sender
-   */
-  private extractSenderFromMessageContent(text: string): string | null {
-    if (!text || typeof text !== 'string') return null;
-    const trimmed = text.trim();
-    if (!trimmed) return null;
-
-    // Sender (untrusted metadata) 块
-    const senderBlockMatch = trimmed.match(
-      /Sender \(untrusted metadata\):\s*\n```json\s*\n([\s\S]*?)\n```/
-    );
-    if (senderBlockMatch) {
-      try {
-        const obj = JSON.parse(senderBlockMatch[1]);
-        const v = obj?.label || obj?.name || obj?.username || obj?.e164 || obj?.id;
-        if (typeof v === 'string' && v.trim()) return v.trim();
-      } catch {
-        /* ignore */
-      }
-    }
-
-    // Conversation info 块（与 openclaw.service extractSenderFromMessageContent 对齐）
-    const convBlockMatch = trimmed.match(
-      /Conversation info \(untrusted metadata\):\s*\n```json\s*\n([\s\S]*?)\n```/
-    );
-    if (convBlockMatch) {
-      try {
-        const obj = JSON.parse(convBlockMatch[1]);
-        const v = obj?.sender;
-        if (typeof v === 'string' && v.trim()) return v.trim();
-      } catch {
-        /* ignore */
-      }
-    }
-
-    // 群聊 envelope 格式
-    const afterEnvelope = trimmed.replace(/^\[[^\]]+\]\s*/, '');
-    const colonMatch = afterEnvelope.match(/^([^:\n]+):\s/);
-    if (colonMatch) {
-      const sender = colonMatch[1].trim();
-      if (sender === '(self)') return 'self';
-      if (sender.length > 0 && sender.length < 200) return sender;
-    }
-
-    return null;
   }
 
   /**
