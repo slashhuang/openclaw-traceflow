@@ -30,7 +30,6 @@ export const skillsApi = {
   getUsage: () => api.get('/skills/usage').then(res => res.data),
   getUsageByUser: () => api.get('/skills/usage-by-user').then(res => res.data),
   getSkillToolUsage: () => api.get('/skills/skill-tool-usage').then(res => res.data),
-  getSystemPromptAnalysis: () => api.get('/skills/system-prompt/analysis').then(res => res.data),
 };
 
 export const healthApi = {
