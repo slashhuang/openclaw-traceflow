@@ -37,6 +37,36 @@
 
 ---
 
+## 判断标准（决策流）
+
+### 1. 是否涉及本仓库
+
+| 操作类型 | 是否涉及 |
+|---------|---------|
+| 修改 `claw-sources/` 下的文件 | ✅ 是 |
+| 仅查看/查询文件 | ❌ 否 |
+| 执行外部命令（不涉及仓库） | ❌ 否 |
+
+### 2. 是否需要 PR
+
+| 修改目录 | 是否需要 PR |
+|---------|-----------|
+| `claw-family/skills/`, `claw-family/config/`, `claw-family/workspace-defaults/` | ✅ 必须 |
+| `docs/`（PRD 文档） | ✅ 必须 |
+| `futu-openD/`, `openclaw-traceflow/`（子项目） | ✅ 必须 |
+| `claw-family/openClawRuntime/.workspace/` | ❌ 不需要 |
+| 仅查看文件 | ❌ 不需要 |
+
+### 3. 是否需要 PRD
+
+| 需求类型 | 是否需要 PRD |
+|---------|-----------|
+| **修 bug（fix）** | ❌ 不需要 |
+| **功能扩展（feat）** | ✅ 需要（先 PRD → 用户确认 → 实施） |
+| **纯文档 typo** | ❌ 不需要 |
+
+---
+
 ## 核心原则
 
 ### 1. Single Source of Truth
