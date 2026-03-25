@@ -37,9 +37,9 @@ import SectionScopeHint from '../components/SectionScopeHint';
 import { sessionStatusLabel } from '../i18n/sessionStatusLabel';
 import { formatArchiveEpochLabel } from '../utils/archive-epoch';
 
-/** 详情页「参与者」：多人时首位可点 +Tag 展开全部（与列表 participantSummary 同源） */
+/** 详情页「参与者」：多人时首位可点 +Tag 展开全部（participants 与消息列表抽取同源） */
 function DetailParticipantField({ session, intl }) {
-  const ids = session.participantIds;
+  const ids = session.participants ?? session.participantIds;
   if (Array.isArray(ids) && ids.length > 1) {
     const first = ids[0];
     const rest = ids.length - 1;
@@ -323,6 +323,7 @@ function SessionMessagesList({ messages, intl, token, listResetKey }) {
         const isOpen = expanded.has(index);
         const content = msg.content || '(empty)';
         const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleString(intl.locale) : '—';
+        const sender = msg.sender;
 
         return (
           <Card
@@ -361,6 +362,11 @@ function SessionMessagesList({ messages, intl, token, listResetKey }) {
                   <Tag color="processing">{intl.formatMessage({ id: 'session.detailNewestBadge' })}</Tag>
                 )}
                 <Tag color={messageRoleTagColor(role)}>{role}</Tag>
+                {sender && isInferredUser && (
+                  <Tag color="cyan" style={{ fontSize: 11 }}>
+                    {sender}
+                  </Tag>
+                )}
                 <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                   {timeStr}
                 </Typography.Text>
