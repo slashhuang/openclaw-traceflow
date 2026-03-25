@@ -26,10 +26,13 @@ require_bin pm2
 cd "$CLAW_FAMILY_DIR"
 
 log "Checking PM2 process status..."
-pm2 status claw-gateway || log "Warning: claw-gateway process not found in PM2"
-
-log "Restarting claw-gateway with --update-env..."
-pm2 restart claw-gateway --update-env || fail "Failed to restart claw-gateway"
+if pm2 status claw-gateway >/dev/null 2>&1; then
+    log "Gateway 进程已存在，执行 restart..."
+    pm2 restart claw-gateway --update-env || fail "Failed to restart claw-gateway"
+else
+    log "Gateway 进程不存在，执行 start..."
+    pm2 start ecosystem.config.cjs || fail "Failed to start claw-gateway"
+fi
 
 log "Verifying process healthy..."
 sleep 2
