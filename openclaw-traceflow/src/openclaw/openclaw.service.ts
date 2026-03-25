@@ -2250,7 +2250,6 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       injectedWorkspaceFiles: (chosen?.entry?.systemPromptReport as any)?.injectedWorkspaceFiles,
     };
   }
-}
 
   /**
    * 分析 system prompt（简化版：不含 token 统计）
@@ -2265,7 +2264,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }> {
     const probe = await this.probeSystemPrompt();
     
-    const skillBlocks = probe.skillsSnapshot?.skillBlocks || [];
+    const skillBlocks = probe.sections?.skillBlocks || [];
     const hasToolsList = !!probe.sections?.toolsListText;
     const hasProjectContext = !!probe.sections?.projectContextText;
     
@@ -2289,3 +2288,4 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       recommendations,
     };
   }
+}
