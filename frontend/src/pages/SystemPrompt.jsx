@@ -15,14 +15,6 @@ import {
   Space,
 } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-} from 'recharts';
 import { useIntl } from 'react-intl';
 import SectionScopeHint from '../components/SectionScopeHint';
 
@@ -111,8 +103,6 @@ export default function SystemPromptPage() {
   const { token } = theme.useToken();
   const [probe, setProbe] = useState(null);
   const [probeLoading, setProbeLoading] = useState(true);
-  const [analysis, setAnalysis] = useState(null);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
   const [skills, setSkills] = useState([]);
   const [showAllSkills, setShowAllSkills] = useState(false);
   const [showAllTools, setShowAllTools] = useState(false);
@@ -159,23 +149,15 @@ export default function SystemPromptPage() {
       }
     })();
 
-    // Analysis + skills 独立加载。
     (async () => {
-      setAnalysisLoading(true);
       try {
-        const [analysisRes, skillsRes] = await Promise.all([
-          fetch('/api/skills/system-prompt/analysis'),
-          fetch('/api/skills/usage'),
-        ]);
-        const [analysisData, skillsData] = await Promise.all([analysisRes.json(), skillsRes.json()]);
+        const skillsRes = await fetch('/api/skills/usage');
+        const skillsData = await skillsRes.json();
         if (!cancelled) {
-          setAnalysis(analysisData);
           setSkills(Array.isArray(skillsData) ? skillsData : []);
         }
       } catch {
-        // keep analysis null on failure
-      } finally {
-        if (!cancelled) setAnalysisLoading(false);
+        // ignore
       }
     })();
     return () => {
@@ -404,14 +386,6 @@ export default function SystemPromptPage() {
     showAllTools,
     token,
   ]);
-
-  const tokenDistribution = analysis
-    ? [
-        { name: intl.locale === 'zh-CN' ? '活跃' : 'Active', value: analysis.activeSkillsTokens, color: '#10B981' },
-        { name: intl.locale === 'zh-CN' ? '僵尸' : 'Zombie', value: analysis.zombieSkillsTokens, color: '#EF4444' },
-        { name: intl.locale === 'zh-CN' ? '重复' : 'Dup', value: analysis.duplicateSkillsTokens, color: '#F59E0B' },
-      ]
-    : [];
 
   const zombieSkills = skills.filter(
     (s) => s.lastUsed && s.lastUsed < Date.now() - 30 * 24 * 60 * 60 * 1000,
@@ -792,75 +766,6 @@ export default function SystemPromptPage() {
           </>
         )}
       </Card>
-
-      {analysis && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Typography.Title level={5} style={{ margin: 0 }}>Skills dir · analysis</Typography.Title>
-            <SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />
-          </div>
-          <Row gutter={16} style={{ marginBottom: 24 }}>
-            <Col xs={24} lg={12}>
-              <Card
-                title={intl.formatMessage({ id: 'skills.analysisTokenPieTitle' })}
-                extra={<SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />}
-              >
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie data={tokenDistribution} cx="50%" cy="50%" outerRadius={100} dataKey="value" label>
-                      {tokenDistribution.map((e, i) => (
-                        <Cell key={i} fill={e.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v) => v?.toLocaleString()} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Card>
-            </Col>
-            <Col xs={24} lg={12}>
-              <Card
-                title={intl.formatMessage({ id: 'skills.analysisSavingsTitle' })}
-                extra={<SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />}
-              >
-                <Typography.Paragraph>Current: {(analysis.totalTokens ?? 0).toLocaleString()}</Typography.Paragraph>
-                <Typography.Paragraph type="success">
-                  After: {((analysis.totalTokens ?? 0) - (analysis.savings ?? 0)).toLocaleString()} (−{(analysis.savings ?? 0)}, {(analysis.savingsPercent ?? 0)}%)
-                </Typography.Paragraph>
-                <ul>
-                  {(analysis.recommendations || []).map((rec, i) => (
-                    <li key={i}>{rec}</li>
-                  ))}
-                </ul>
-                {(analysis.zombieSkillNames?.length > 0) && (
-                  <div style={{ marginTop: 12 }}>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {intl.locale === 'zh-CN' ? '僵尸 skills：' : 'Zombie skills: '}
-                    </Typography.Text>
-                    <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {(analysis.zombieSkillNames || []).map((name) => (
-                        <Tag key={name} color="red">{name}</Tag>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {(analysis.duplicateSkillNames?.length > 0) && (
-                  <div style={{ marginTop: 12 }}>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {intl.locale === 'zh-CN' ? '重复 skills：' : 'Duplicate skills: '}
-                    </Typography.Text>
-                    <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {(analysis.duplicateSkillNames || []).map((name) => (
-                        <Tag key={name} color="orange">{name}</Tag>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </Card>
-            </Col>
-          </Row>
-        </>
-      )}
 
       {zombieSkills.length > 0 && (
         <Card
