@@ -34,6 +34,7 @@ import {
   inferSessionTypeLabel,
   inferSessionChatKind,
   formatSessionParticipantDisplay,
+  formatSessionListMessageCount,
 } from '../utils/session-user';
 import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
@@ -216,27 +217,50 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
         </Tooltip>
       ),
       key: 'user',
-      width: 170,
+      width: 200,
       render: (_, r) => {
         const v = formatSessionParticipantDisplay(r);
+        const participants = r.participants ?? r.participantIds ?? [];
+        const participantCount = Array.isArray(participants) ? participants.length : 0;
+        const lastSpeaker = participantCount > 0 ? participants[participants.length - 1] : null;
+        const showLastSpeaker = lastSpeaker && participantCount > 1;
+
         return (
           <Link
             to={`/sessions/${encodeURIComponent(r.sessionId)}`}
             className="session-user-link"
             title={r.sessionKey || r.sessionId}
+            style={{ display: 'block' }}
           >
             <Typography.Text
               style={{
-                display: 'inline-block',
-                maxWidth: 140,
+                display: 'block',
+                maxWidth: 170,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                verticalAlign: 'middle',
               }}
             >
               {v}
             </Typography.Text>
+            {participantCount > 1 && (
+              <Typography.Text
+                type="secondary"
+                style={{
+                  display: 'block',
+                  fontSize: 11,
+                  maxWidth: 170,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  marginTop: 2,
+                }}
+                title={showLastSpeaker ? `${intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })} · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}` : undefined}
+              >
+                {intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })}
+                {showLastSpeaker && ` · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}`}
+              </Typography.Text>
+            )}
           </Link>
         );
       },
@@ -250,15 +274,27 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
     {
       title: intl.formatMessage({ id: 'sessions.column.duration' }),
       key: 'duration',
-      width: 130,
+      width: 90,
+      align: 'right',
       render: (_, r) => formatDuration(r.duration),
     },
     {
       title: intl.formatMessage({ id: 'sessions.column.messages' }),
       key: 'messageCount',
-      width: 88,
+      width: 70,
       align: 'right',
-      render: (_, r) => (r.messageCount != null ? r.messageCount : '—'),
+      render: (_, r) => {
+        const text = formatSessionListMessageCount(r);
+        if (r.messageCountCapped) {
+          const n = r.messageCountScanMaxLines ?? 1000;
+          return (
+            <Tooltip title={intl.formatMessage({ id: 'sessions.column.messagesExceededScanTooltip' }, { n })}>
+              <span style={{ cursor: 'help' }}>{text}</span>
+            </Tooltip>
+          );
+        }
+        return text;
+      },
     },
     {
       title: intl.formatMessage({ id: 'sessions.column.fileSize' }),
