@@ -128,11 +128,27 @@ git worktree add ../claw-sources--{分支名} -b {分支名} origin/main
 
 ### 4. 推送并创建 PR（必须步骤）
 
+**推送前检查（关键！）**：
 ```bash
-# 推送分支
-git push -u origin {分支名}
+# 确认本地分支领先远程
+git status
+# 应显示：Your branch is ahead of 'origin/xxx' by 1 commit
 
-# 自动创建 PR
+# 确认 commit 已创建
+git log --oneline -3
+```
+
+**推送分支**：
+```bash
+# 推荐：使用 -f 确保远程分支指向正确的 commit
+git push -f -u origin {分支名}
+
+# 或者：常规推送（如果远程分支不存在）
+git push -u origin {分支名}
+```
+
+**自动创建 PR**：
+```bash
 ./skills/git-workflow/scripts/create_pr.sh "{分支名}" "feat: 需求描述" "变更内容..."
 ```
 
@@ -144,6 +160,7 @@ git push -u origin {分支名}
 **禁止行为**：
 - ❌ 返回 `/new/分支名` 链接让用户手动创建
 - ❌ 跳过 API 调用
+- ❌ 推送前不检查 `git status`（可能推送错误的 ref）
 
 ### 5. 用户确认后合并 PR
 
@@ -278,6 +295,39 @@ pm2 restart claw-gateway
 | `API rate limit exceeded` | GitHub API 限流 | 等待 1 小时或使用认证的 Token |
 | `branch already exists` | 分支已存在 | 删除远程分支后重试 |
 | `PR already exists` | PR 已存在 | 直接使用现有 PR |
+| `No commits between main and xxx` | 远程分支未正确更新 | 使用 `git push -f` 强制推送 |
+
+### 推送问题（worktree 常见）
+
+**问题**：推送后远程分支未指向正确的 commit
+
+**症状**：
+- 本地 `git log` 显示有新 commit
+- 但 `origin/分支名` 仍指向旧 commit（如 main 的 commit）
+- gh CLI 报错：`No commits between main and 分支名`
+
+**原因**：
+- worktree 共享同一个 `.git` 目录
+- 推送时可能误推送了错误的 ref
+
+**解决方案**：
+```bash
+# 1. 推送前检查
+git status
+# 确认显示：Your branch is ahead of 'origin/xxx' by 1 commit
+
+# 2. 强制推送（确保远程分支指向本地 commit）
+git push -f -u origin 分支名
+
+# 3. 验证推送成功
+git log --oneline origin/分支名
+# 应显示最新的 commit
+```
+
+**预防措施**：
+- ✅ 推送前始终运行 `git status` 确认分支状态
+- ✅ 使用 `git push -f` 强制推送（worktree 环境推荐）
+- ✅ 或者回到主仓库（非 worktree）操作推送
 
 ## 依赖
 
