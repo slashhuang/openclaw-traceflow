@@ -137,11 +137,7 @@ Subtree Push（推送到上游）:
   ✅ openclaw-traceflow: 已推送到 openclaw-traceflow（或「无本地修改」）
 ```
 
-**第六步：重启 Gateway（如需要）**
-```bash
-pm2 restart claw-gateway
-```
-**结果**：✅ Gateway 重启成功
+
 
 ---
 
