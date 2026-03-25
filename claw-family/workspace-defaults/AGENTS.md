@@ -15,6 +15,28 @@
 
 ---
 
+## 仓库认知
+
+### 1. 工作仓库
+- **主仓库**：`claw-sources`（monorepo 根目录）
+- **路径**：`/root/githubRepo/claw-sources/`
+- **所有代码工作都在此仓库下进行**
+
+### 2. 可改动范围
+
+| 目录 | 类型 | 是否可修改 |
+|------|------|-----------|
+| `claw-family/` | OpenClaw runtime 主项目 | ✅ 可修改 |
+| `claw-family/skills/` | 技能代码 | ✅ 可修改 |
+| `claw-family/workspace-defaults/` | Bootstrap 模板 | ✅ 可修改 |
+| `claw-family/openClawRuntime/.workspace/` | Workspace 文档 | ✅ 可修改（无需 PR） |
+| `futu-openD/` | 富途 OpenD 项目（subtree） | ✅ 可修改 |
+| `openclaw-traceflow/` | TraceFlow UI 项目（subtree） | ✅ 可修改 |
+| `docs/` | PRD 文档 | ✅ 可修改 |
+| `external-refs/` | 外部参考代码 | ❌ **禁止修改**（只读引用） |
+
+---
+
 ## 核心原则
 
 ### 1. Single Source of Truth
