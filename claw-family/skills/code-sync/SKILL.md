@@ -28,8 +28,8 @@ metadata:
 1. **前置检查**：必须在 `main` 分支、工作区干净（无未提交改动）
 2. **刷新远端状态**：`git fetch --all --prune`
 3. **同步主仓库**：`git pull --ff-only`
-4. **校准并同步所有 Subtree**：先确保 upstream remote 完整，再执行 `git subtree pull`（claw-family、futu-openD、openclaw-traceflow）
-5. **安全推送本地修改**：`git subtree push` 前先做上游祖先预检查；检测到上游领先时先自动 `subtree pull --squash` 再推
+4. **校准并同步所有 Subtree**：先确保 upstream remote 完整；检测到本地有未推送提交时跳过 pull（避免覆盖）
+5. **安全推送本地修改**：`git subtree push` 前先做上游祖先预检查；检测到上游领先/分叉时使用 `ignore-joins fallback` 推送（避免 "cache already exists" 错误）
 6. **清理 worktree**：运行 `cleanup_worktree.py` 删除已合并的 worktree
 7. **保存报告**：写入 `.workspace/.sync_report.json`
 
@@ -48,7 +48,12 @@ python3 skills/code-sync/scripts/sync.py
 [code-sync] 同步前 commit: abc1234
 [code-sync] ✅ 主仓库同步成功：abc1234 → def5678
 [code-sync] === 同步 Subtree 项目（pull） ===
-...
+[code-sync] 🔄 同步 subtree: openclaw-traceflow (from openclaw-traceflow/main)
+[code-sync]   ⏭️  检测到本地未推送提交，跳过 pull（由 push 步骤处理）
+[code-sync] === 推送 Subtree 项目（push） ===
+[code-sync] 🔄 推送 subtree: openclaw-traceflow (to openclaw-traceflow/main)
+[code-sync]   ⚠️  检测到上游领先/分叉，跳过 pull，使用 ignore-joins fallback 推送
+[code-sync]   ✅ 推送成功（ignore-joins fallback）
 [code-sync] === 清理已合并的 worktree ===
 ...
 [code-sync] ✅ 代码同步完成！如需重启 Gateway，请执行：./skills/claw-family-restart/scripts/restart.sh
