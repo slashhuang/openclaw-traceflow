@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-代码同步与 Gateway 重启脚本（增强版：支持主仓库 + Subtree 同步）
+代码同步脚本（增强版：支持主仓库 + Subtree 同步）
 等同于 ./bootstrap.sh 的核心流程
 
 用法：
@@ -631,52 +631,7 @@ def push_all_subtrees(repo_root):
     return results
 
 
-def check_pm2():
-    """检查 PM2 是否安装"""
-    success, _, _ = run_command("which pm2")
-    if not success:
-        print("[code-sync] 错误：未找到 pm2。请安装：npm i -g pm2")
-        return False
-    return True
 
-
-def restart_gateway(repo_root):
-    """重启或启动 Gateway"""
-    print("[code-sync] === 重启 Gateway ===")
-    
-    # 检查是否已存在
-    success, stdout, _ = run_command("pm2 describe claw-gateway", cwd=repo_root, capture_output=True)
-    
-    if success and "online" in stdout:
-        print("[code-sync] 重启 claw-gateway...")
-        success, stdout, stderr = run_command("pm2 restart claw-gateway", cwd=repo_root)
-        action = "restart"
-    else:
-        print("[code-sync] 启动 claw-gateway...")
-        success, stdout, stderr = run_command("pm2 start ecosystem.config.cjs", cwd=repo_root)
-        action = "start"
-    
-    if not success:
-        print(f"[code-sync] ❌ PM2 操作失败：{stderr}")
-        return {"success": False, "action": action, "message": (stderr or "PM2 operation failed").strip()}
-    
-    print(f"[code-sync] ✅ Gateway 已 {action}")
-    return {"success": True, "action": action, "message": f"Gateway {action} successfully"}
-
-
-def wait_and_verify(repo_root):
-    """等待启动并验证"""
-    import time
-    print("[code-sync] 等待 Gateway 启动...")
-    time.sleep(3)
-    
-    success, stdout, _ = run_command("pm2 describe claw-gateway", cwd=repo_root, capture_output=True)
-    
-    if success and "online" in stdout:
-        return True
-    else:
-        print("[code-sync] 警告：Gateway 可能未正常启动")
-        return False
 
 
 def cleanup_worktrees(repo_root):
@@ -785,7 +740,6 @@ def print_summary(report):
         print(f"✅ Worktree 清理：{len(cleanup['cleaned'])} 个")
     
     print("")
-    print("⚠️  Gateway 未重启，如需重启请手动执行：pm2 restart claw-gateway")
     print("=" * 60)
 
 
@@ -852,7 +806,7 @@ def main():
     print(f"[SYNC_REPORT] {json.dumps(report, ensure_ascii=False)}")
     
     print("")
-    print("[code-sync] ✅ 代码同步完成！Gateway 未重启，如需重启请手动执行：pm2 restart claw-gateway")
+    print("[code-sync] ✅ 代码同步完成！如需重启 Gateway，请执行：./skills/claw-family-restart/scripts/restart.sh")
 
 
 if __name__ == "__main__":

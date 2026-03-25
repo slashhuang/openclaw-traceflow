@@ -1,11 +1,11 @@
 ---
 name: code-sync
-description: 代码同步（主仓库 + Subtree）与 worktree 清理。**不重启 Gateway**，重启需单独执行。当用户说「同步代码」、「更新代码」时自动执行。
+description: 代码同步（主仓库 + Subtree）与 worktree 清理。**不重启 Gateway**，重启需使用 `claw-family-restart` skill。当用户说「同步代码」、「更新代码」时自动执行。
 metadata:
   {
     "openclaw": {
       "emoji": "🔄",
-      "requires": { "bins": ["git", "pm2"] },
+      "requires": { "bins": ["git"] },
     },
   }
 ---
@@ -51,7 +51,7 @@ python3 skills/code-sync/scripts/sync.py
 ...
 [code-sync] === 清理已合并的 worktree ===
 ...
-[code-sync] ✅ 代码同步完成！Gateway 未重启，如需重启请手动执行：pm2 restart claw-gateway
+[code-sync] ✅ 代码同步完成！如需重启 Gateway，请执行：./skills/claw-family-restart/scripts/restart.sh
 ```
 
 ## 依赖
@@ -62,11 +62,11 @@ python3 skills/code-sync/scripts/sync.py
 
 ## 注意事项
 
-- **不重启 Gateway**：同步完成后需手动执行 `pm2 restart claw-gateway`
+- **不重启 Gateway**：同步完成后如需重启，使用 `claw-family-restart` skill
 - **PR 合并后流程**：
   1. `./skills/git-workflow/scripts/merge_pr.sh <PR 号> merge`
   2. `python3 skills/code-sync/scripts/sync.py`
-  3. `pm2 restart claw-gateway`
+  3. `./skills/claw-family-restart/scripts/restart.sh`（如需要）
 - **禁止行为**：
   - ❌ `./bootstrap.sh | tail`（管道会导致 SIGINT 杀死进程）
   - ❌ `gh pr merge`（不用 merge_pr.sh）
@@ -77,7 +77,7 @@ python3 skills/code-sync/scripts/sync.py
 同步后可用以下命令检查：
 
 ```bash
-pm2 status
-pm2 logs claw-gateway
 git log --oneline -5
 ```
+
+如需检查 Gateway 状态，使用 `claw-family-restart` skill。
