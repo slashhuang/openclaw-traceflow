@@ -37,6 +37,36 @@
 
 ---
 
+## 判断标准（决策流）
+
+### 1. 是否涉及本仓库
+
+| 操作类型 | 是否涉及 |
+|---------|---------|
+| 修改 `claw-sources/` 下的文件 | ✅ 是 |
+| 仅查看/查询文件 | ❌ 否 |
+| 执行外部命令（不涉及仓库） | ❌ 否 |
+
+### 2. 是否需要 PR
+
+| 修改目录 | 是否需要 PR |
+|---------|-----------|
+| `claw-family/skills/`, `claw-family/config/`, `claw-family/workspace-defaults/` | ✅ 必须 |
+| `docs/`（PRD 文档） | ✅ 必须 |
+| `futu-openD/`, `openclaw-traceflow/`（子项目） | ✅ 必须 |
+| `claw-family/openClawRuntime/.workspace/` | ❌ 不需要 |
+| 仅查看文件 | ❌ 不需要 |
+
+### 3. 是否需要 PRD
+
+| 需求类型 | 是否需要 PRD |
+|---------|-----------|
+| **修 bug（fix）** | ❌ 不需要 |
+| **功能扩展（feat）** | ✅ 需要（先 PRD → 用户确认 → 实施） |
+| **纯文档 typo** | ❌ 不需要 |
+
+---
+
 ## 核心原则
 
 ### 1. Single Source of Truth
@@ -63,79 +93,52 @@
 
 ---
 
-## 给用户回复（PR 流程说明）
+## 给用户回复（掌控感）
 
-**当用户请求修改代码/配置时**，回复必须包含完整流程和每一步的结果，让技术专家用户有**掌控感**：
+**无论修改代码还是运维操作**，回复必须包含完整流程和每一步的结果，让技术专家用户有**掌控感**：
 
 ### 核心原则
-
 - ✅ **展示步骤和结果**：用户需要知道阿布在做什么、每步成功/失败
 - ❌ **不展示代码 diff**：用户不需要看具体改了哪些文件内容
-- ✅ **关键信息必含**：分支名、PR 链接、命令执行结果
+- ✅ **关键信息必含**：分支名/PR 链接/命令执行结果/进程状态
 
 ### 回复格式模板
 
+**修改代码/配置（PR 流程）**：
 ```
 流程说明：
-- ✅ 是否涉及本仓库：是/否
-- ✅ 是否先写 PRD：是（功能扩展）/ 否（修 bug 直接实施）
+- ✅ 是否涉及本仓库：是
+- ✅ 是否先写 PRD：是（功能扩展）/ 否（修 bug）
 - ✅ worktree 路径：/root/githubRepo/claw-sources--{分支名}
 
-**详细步骤**：
+详细步骤：
+1. 创建 worktree 分支 → ✅ 成功
+2. 修改代码并提交 → ✅ 成功（commit: {短 hash}）
+3. 推送并创建 PR → ✅ PR #XX → {链接}
 
-**第一步：创建 worktree 分支**
-```bash
-git worktree add ../claw-sources--{分支名} -b {分支名} origin/main
-```
-**结果**：✅ worktree 创建成功
-
-**第二步：修改代码并提交**
-- 修改文件：`claw-family/workspace-defaults/AGENTS.md`
-- 提交信息：`{commit message}`
-
-**结果**：✅ 提交成功（commit: {短 hash}）
-
-**第三步：推送并创建 PR**
-```bash
-git push -u origin {分支名}
-```
-**结果**：✅ 推送成功
-```bash
-./claw-family/skills/git-workflow/scripts/create_pr.sh "{分支名}" "{标题}" "{描述}"
-```
-**结果**：✅ PR 创建成功 → https://github.com/slashhuang/claw-sources/pull/{编号}
-
----
-
-**等待用户确认**：回复「可以合并」后继续
+等待用户确认「可以合并」后：
+4. 合并 PR → ✅ 成功
+5. 同步代码 → ✅ 主仓库 {旧}→{新}，subtree 状态...
 ```
 
-**合并后流程**（用户确认后）：
-
-**第四步：合并 PR**
-```bash
-./claw-family/skills/git-workflow/scripts/merge_pr.sh {PR 号} merge
+**运维操作（重启/查看状态）**：
 ```
-**结果**：✅ PR 合并成功
+流程说明：
+- ✅ 是否涉及本仓库：否（运维操作）
+- ✅ 是否先写 PRD：否
 
-**第五步：同步代码（含 git subtree 细粒度状态）**
-```bash
-python3 skills/code-sync/scripts/sync.py
+详细步骤：
+1. 执行命令 → ✅ 成功（pid: xxx, uptime: xxx）
+2. 验证服务状态 → ✅ 所有服务 online
 ```
-**结果**：
-```
-✅ 主仓库：{旧 commit} → {新 commit}
 
-Subtree Pull（从上游拉取）:
-  ✅ claw-family: {旧 commit} → {新 commit}（或「无更新」）
-  ✅ futu-openD: {旧 commit} → {新 commit}（或「无更新」）
-  ✅ openclaw-traceflow: {旧 commit} → {新 commit}（或「无更新」）
-
-Subtree Push（推送到上游）:
-  ✅ claw-family: 已推送到 claw-family-upstream
-  ✅ futu-openD: 已推送到 futu-openD-upstream
-  ✅ openclaw-traceflow: 已推送到 openclaw-traceflow（或「无本地修改」）
-```
+### 常见运维操作
+| 操作 | 命令 | 说明 |
+|------|------|------|
+| 重启 claw-gateway | `./skills/claw-family-restart/scripts/restart.sh` | 使用 claw-family-restart skill |
+| 重启 traceflow | `pm2 restart openclaw-traceflow --update-env` | 在 openclaw-traceflow 目录执行 |
+| 查看服务状态 | `pm2 status` | 显示所有 PM2 进程 |
+| 查看日志 | `pm2 logs {服务名} --lines 50 --nostream` | 查看最近 50 行日志 |
 
 
 
