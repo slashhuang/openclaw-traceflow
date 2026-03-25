@@ -2251,3 +2251,41 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     };
   }
 }
+
+  /**
+   * 分析 system prompt（简化版：不含 token 统计）
+   * 用于 SystemPrompt 页面的 Analysis 卡片
+   */
+  async analyzeSystemPrompt(): Promise<{
+    hasSkillBlocks: boolean;
+    skillBlockCount: number;
+    hasToolsList: boolean;
+    hasProjectContext: boolean;
+    recommendations: string[];
+  }> {
+    const probe = await this.probeSystemPrompt();
+    
+    const skillBlocks = probe.skillsSnapshot?.skillBlocks || [];
+    const hasToolsList = !!probe.sections?.toolsListText;
+    const hasProjectContext = !!probe.sections?.projectContextText;
+    
+    // 生成简单建议（不含 token 优化建议）
+    const recommendations: string[] = [];
+    if (skillBlocks.length === 0) {
+      recommendations.push('未检测到 skill blocks，建议在 system prompt 中添加 skill 配置');
+    }
+    if (!hasToolsList) {
+      recommendations.push('未检测到 tools list，建议确认 Gateway 是否正确注入 tools');
+    }
+    if (!hasProjectContext) {
+      recommendations.push('未检测到 project context，建议添加 .claw/ 或 .cursor/ 配置');
+    }
+    
+    return {
+      hasSkillBlocks: skillBlocks.length > 0,
+      skillBlockCount: skillBlocks.length,
+      hasToolsList,
+      hasProjectContext,
+      recommendations,
+    };
+  }
