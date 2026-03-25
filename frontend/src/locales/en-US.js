@@ -279,6 +279,8 @@ export default {
   'sessions.column.statusTooltip':
     'Inferred from the transcript: active / idle / ended / failed. “Ended” means the last message is agent:final (this turn finished). This is not the same as the “Archived” column—Archived counts how many times a new chat was started for this thread (writes to *.jsonl.reset.*).',
   'sessions.column.user': 'Participant',
+  'sessions.participantCount': '{count} participants',
+  'sessions.lastSpeaker': 'Last',
   'sessions.column.participantTooltip':
     'One row = one conversation thread in OpenClaw; sessionKey encodes routing (DM / group / channel). “Main session” is the default DM bucket (agent:*:main) when dmScope is main; it is not the same as the heartbeat job. Identity shown here comes from the session index (e.g. Feishu open_id). Use with the channel/kind tags in the Session column.',
   'sessions.detailParticipantLabel': 'Participant',
@@ -288,6 +290,8 @@ export default {
   'sessions.column.lastActive': 'Last active',
   'sessions.column.duration': 'Duration',
   'sessions.column.messages': 'Messages',
+  'sessions.column.messagesExceededScanTooltip':
+    'Hit the list scan line cap ({n} lines); count is a lower bound, not exact',
   'sessions.column.fileSize': 'File size',
   'sessions.column.archived': 'Archived',
   'sessions.column.archivedTooltip':
