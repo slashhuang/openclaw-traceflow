@@ -823,9 +823,9 @@ export default function SystemPromptPage() {
                 title={intl.formatMessage({ id: 'skills.analysisSavingsTitle' })}
                 extra={<SectionScopeHint intl={intl} messageId="systemPrompt.analysisBlockScopeDesc" />}
               >
-                <Typography.Paragraph>Current: {analysis.totalTokens.toLocaleString()}</Typography.Paragraph>
+                <Typography.Paragraph>Current: {(analysis.totalTokens ?? 0).toLocaleString()}</Typography.Paragraph>
                 <Typography.Paragraph type="success">
-                  After: {(analysis.totalTokens - analysis.savings).toLocaleString()} (−{analysis.savings}, {analysis.savingsPercent}%)
+                  After: {((analysis.totalTokens ?? 0) - (analysis.savings ?? 0)).toLocaleString()} (−{(analysis.savings ?? 0)}, {(analysis.savingsPercent ?? 0)}%)
                 </Typography.Paragraph>
                 <ul>
                   {(analysis.recommendations || []).map((rec, i) => (
