@@ -56,6 +56,8 @@ export interface SessionEvaluation {
   metadata: {
     evaluationVersion: string;
     promptVersion: string;
+    /** 评估所用模板来源（仅新记录；旧数据可能无此字段） */
+    promptTemplateSource?: 'builtin' | 'override';
     sessionSnapshot: {
       turnCount: number;
       startTime: string | number;

@@ -108,6 +108,8 @@ pnpm test
 | `GET /api/setup/status` | 配置状态（受 access mode 保护） |
 | `POST /api/setup/configure` | 保存配置 |
 | `POST /api/setup/test-connection` | 测试 Gateway |
+| `GET /api/skills/system-prompt/probe` | System Prompt 嗅探（workspace 引导文件等） |
+| `PUT /api/skills/system-prompt/workspace-file` | 写入核心引导 `AGENTS/SOUL/IDENTITY/USER.md`（需 AuthGuard；`accessMode=none` 时默认禁止，除非 `OPENCLAW_WORKSPACE_WRITE=true`；仅当 TraceFlow 进程能访问解析出的 workspace 路径时有效） |
 
 ## WebSocket
 
@@ -127,11 +129,7 @@ pnpm test
 
 ## 部署
 
-```bash
-docker run -d -p 3001:3001 \
-  -e OPENCLAW_GATEWAY_URL=http://your-gateway:18789 \
-  clawfamily/openclaw-traceflow:latest
-```
+生产构建后可用 `node dist/main.js` 或 `pnpm run deploy:pm2`（见 `scripts/deploy-pm2.sh`）。环境变量见上文「配置默认值」。
 
 ## 开发注意
 

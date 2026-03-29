@@ -13,6 +13,10 @@ import { PricingConfigModule } from './config/pricing-config.module';
 import { StorageModule } from './storage/storage.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EvaluationController } from './evaluators/evaluation.controller';
+import { PromptEvaluationController } from './evaluators/prompt-evaluation.controller';
+import { EvaluationPromptController } from './evaluators/evaluation-prompt.controller';
+import { WorkspaceBootstrapEvaluationPromptController } from './evaluators/workspace-bootstrap-evaluation-prompt.controller';
+import { EvaluationPromptConfigService } from './evaluators/evaluation-prompt-config.service';
 
 @Module({
   imports: [
@@ -28,7 +32,13 @@ import { EvaluationController } from './evaluators/evaluation.controller';
     StorageModule,
     DashboardModule,
   ],
-  controllers: [AppController, EvaluationController],
-  providers: [AppService],
+  controllers: [
+    AppController,
+    EvaluationController,
+    PromptEvaluationController,
+    EvaluationPromptController,
+    WorkspaceBootstrapEvaluationPromptController,
+  ],
+  providers: [AppService, EvaluationPromptConfigService],
 })
 export class AppModule {}

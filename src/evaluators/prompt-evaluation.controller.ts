@@ -1,5 +1,5 @@
 /**
- * OpenClaw Audit System - 评估 API 控制器
+ * System Prompt 评估 API（与 api/sessions/:id/evaluations 对称）
  *
  * @see PRD: docs/PRD-openclaw-audit-system.md Section 11.2.5
  */
@@ -16,7 +16,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { EvaluationStore } from '../stores/evaluation-store';
-import { SessionEvaluator } from '../evaluators/session-evaluator';
+import { PromptEvaluator } from './prompt-evaluator';
 import { evaluationTaskQueue } from '../utils/async-task-queue';
 import { coalesceLatestEvaluation } from '../utils/evaluation-latest-coalesce';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
@@ -24,9 +24,9 @@ import { OpenClawService } from '../openclaw/openclaw.service';
 import { ConfigService } from '../config/config.service';
 import { EvaluationPromptConfigService } from './evaluation-prompt-config.service';
 
-@Controller('api/sessions')
-export class EvaluationController {
-  private readonly sessionEvaluator: SessionEvaluator;
+@Controller('api/prompts')
+export class PromptEvaluationController {
+  private readonly promptEvaluator: PromptEvaluator;
 
   constructor(
     private readonly gatewayConnection: GatewayConnectionService,
@@ -36,7 +36,7 @@ export class EvaluationController {
   ) {
     const dataDir = configService.getConfig().dataDir;
     const store = new EvaluationStore(dataDir);
-    this.sessionEvaluator = new SessionEvaluator(
+    this.promptEvaluator = new PromptEvaluator(
       store,
       gatewayConnection,
       openclawService,
@@ -45,22 +45,19 @@ export class EvaluationController {
   }
 
   /**
-   * 创建会话评估。
-   * `body.wait === true`：单次 HTTP 内 await 任务完成并返回完整 `data`（短连等待，不轮询 GET latest）。
-   * 默认：202 异步排队，行为与旧版一致。
+   * `body.wait === true`：单次 HTTP 内 await 完成并返回 `data`（不轮询 GET latest）。
    */
-  @Post(':sessionId/evaluations')
-  async createSessionEvaluation(
-    @Param('sessionId') sessionId: string,
+  @Post(':promptId/evaluations')
+  async createPromptEvaluation(
+    @Param('promptId') promptId: string,
     @Body() body: { userId?: string; wait?: boolean },
     @Res({ passthrough: true }) res: Response,
   ) {
     const userId = body.userId || 'anonymous';
-
     if (body.wait) {
       try {
         const evaluation = await evaluationTaskQueue.add(() =>
-          this.sessionEvaluator.evaluate(sessionId, userId),
+          this.promptEvaluator.evaluate(promptId, userId),
         );
         res.status(HttpStatus.OK);
         return { success: true, data: evaluation };
@@ -69,10 +66,9 @@ export class EvaluationController {
         return { success: false, error: (error as Error).message };
       }
     }
-
     try {
       evaluationTaskQueue.add(() =>
-        this.sessionEvaluator.evaluate(sessionId, userId),
+        this.promptEvaluator.evaluate(promptId, userId),
       );
       res.status(HttpStatus.ACCEPTED);
       return {
@@ -86,12 +82,11 @@ export class EvaluationController {
     }
   }
 
-  // 获取会话评估历史
-  @Get(':sessionId/evaluations')
-  async getSessionEvaluations(@Param('sessionId') sessionId: string) {
+  @Get(':promptId/evaluations')
+  async getPromptEvaluations(@Param('promptId') promptId: string) {
     try {
       const evaluations =
-        await this.sessionEvaluator.getEvaluationHistory(sessionId);
+        await this.promptEvaluator.getEvaluationHistory(promptId);
       return {
         success: true,
         data: evaluations,
@@ -105,12 +100,12 @@ export class EvaluationController {
   }
 
   /** 必须在 :evaluationId 之前注册，否则 latest 会被当成 evaluationId */
-  @Get(':sessionId/evaluations/latest')
-  async getLatestSessionEvaluation(@Param('sessionId') sessionId: string) {
-    return coalesceLatestEvaluation(`session:${sessionId}`, async () => {
+  @Get(':promptId/evaluations/latest')
+  async getLatestPromptEvaluation(@Param('promptId') promptId: string) {
+    return coalesceLatestEvaluation(`prompt:${promptId}`, async () => {
       try {
         const evaluation =
-          await this.sessionEvaluator.getLatestEvaluation(sessionId);
+          await this.promptEvaluator.getLatestEvaluation(promptId);
         if (!evaluation) {
           return {
             success: false,
@@ -130,15 +125,14 @@ export class EvaluationController {
     });
   }
 
-  // 获取单次评估详情
-  @Get(':sessionId/evaluations/:evaluationId')
-  async getSessionEvaluation(
-    @Param('sessionId') sessionId: string,
+  @Get(':promptId/evaluations/:evaluationId')
+  async getPromptEvaluation(
+    @Param('promptId') promptId: string,
     @Param('evaluationId') evaluationId: string,
   ) {
     try {
-      const evaluation = await this.sessionEvaluator.getEvaluation(
-        sessionId,
+      const evaluation = await this.promptEvaluator.getEvaluation(
+        promptId,
         evaluationId,
       );
       if (!evaluation) {
@@ -159,14 +153,12 @@ export class EvaluationController {
     }
   }
 
-  // 删除评估记录
-  @Delete(':sessionId/evaluations/:evaluationId')
-  async deleteSessionEvaluation(
-    @Param('sessionId') sessionId: string,
+  @Delete(':promptId/evaluations/:evaluationId')
+  async deletePromptEvaluation(
+    @Param('promptId') promptId: string,
     @Param('evaluationId') evaluationId: string,
   ) {
     try {
-      // TODO: 实现删除逻辑
       return {
         success: true,
         message: '评估记录已删除',

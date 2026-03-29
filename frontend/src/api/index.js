@@ -7,6 +7,24 @@ const api = axios.create({
   timeout: 10000,
 });
 
+/** 与设置页保存 token 时写入的 key 一致，供 accessMode=token 时调用受保护 API */
+export const TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY = 'openclawTraceflowAccessToken';
+
+api.interceptors.request.use((config) => {
+  try {
+    if (typeof localStorage === 'undefined') return config;
+    const t = localStorage.getItem(TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY);
+    if (t) {
+      const headers = config.headers ?? {};
+      headers.Authorization = `Bearer ${t}`;
+      config.headers = headers;
+    }
+  } catch {
+    /* ignore */
+  }
+  return config;
+});
+
 export function extractApiErrorMessage(error, fallback = 'Request failed') {
   const data = error?.response?.data;
   if (typeof data === 'string' && data.trim()) {
@@ -60,8 +78,23 @@ export const logsApi = {
   getRecent: (limit = 100) => api.get(`/logs?limit=${limit}`).then(res => res.data),
 };
 
+/** 合并并发 GET /setup/status（开发态 StrictMode 会双跑 useEffect，避免重复打 Gateway） */
+let setupStatusInflight = null;
+
 export const setupApi = {
-  getStatus: () => api.get('/setup/status').then(res => res.data),
+  /** 单次 Gateway + 本地路径解析，最坏约 8s+8s，避免默认 10s axios 超时 */
+  getStatus: () => {
+    if (setupStatusInflight) {
+      return setupStatusInflight;
+    }
+    setupStatusInflight = api
+      .get('/setup/status', { timeout: 25000 })
+      .then((res) => res.data)
+      .finally(() => {
+        setupStatusInflight = null;
+      });
+    return setupStatusInflight;
+  },
   testConnection: (params) =>
     api.post('/setup/test-connection', {
       openclawGatewayUrl: params?.gatewayUrl ?? params?.openclawGatewayUrl,
@@ -92,6 +125,37 @@ export const pricingApi = {
   updateModelPrice: (name, pricing) => api.post(`/pricing/model/${name}`, pricing).then(res => res.data),
   removeModelPrice: (name) => api.delete(`/pricing/model/${name}`).then(res => res.data),
   resetToDefaults: () => api.post('/pricing/reset').then(res => res.data),
+};
+
+export const systemPromptApi = {
+  putWorkspaceBootstrapFile: (body) =>
+    api
+      .put('/skills/system-prompt/workspace-file', body, { timeout: 60000 })
+      .then((res) => res.data),
+};
+
+/** 会话质量评估模板（eval-prompt-v1），用于会话详情 POST /sessions/:id/evaluations */
+export const evaluationPromptApi = {
+  get: () => api.get('/evaluation-prompt', { timeout: 60000 }).then((res) => res.data),
+  save: (template) =>
+    api.put('/evaluation-prompt', { template }, { timeout: 60000 }).then((res) => res.data),
+  clear: () => api.delete('/evaluation-prompt', { timeout: 60000 }).then((res) => res.data),
+};
+
+/** 工作区规范与引导文件评估模板（workspace-bootstrap-eval-v1），用于 /system-prompt */
+export const workspaceBootstrapEvaluationPromptApi = {
+  get: () =>
+    api
+      .get('/workspace-bootstrap-evaluation-prompt', { timeout: 60000 })
+      .then((res) => res.data),
+  save: (template) =>
+    api
+      .put('/workspace-bootstrap-evaluation-prompt', { template }, { timeout: 60000 })
+      .then((res) => res.data),
+  clear: () =>
+    api
+      .delete('/workspace-bootstrap-evaluation-prompt', { timeout: 60000 })
+      .then((res) => res.data),
 };
 
 export default api;

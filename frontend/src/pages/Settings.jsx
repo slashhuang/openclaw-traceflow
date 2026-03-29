@@ -1,11 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert, Space, Tag } from 'antd';
 import { useIntl } from 'react-intl';
-import { setupApi, actionsApi, extractApiErrorMessage } from '../api';
+import {
+  setupApi,
+  actionsApi,
+  evaluationPromptApi,
+  workspaceBootstrapEvaluationPromptApi,
+  extractApiErrorMessage,
+  TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY,
+} from '../api';
 import SectionScopeHint from '../components/SectionScopeHint';
+
+const EVAL_CONTEXT_PLACEHOLDER = '{context}';
 
 export default function Settings() {
   const intl = useIntl();
+  const location = useLocation();
+  const evaluationPromptCardRef = useRef(null);
+  const workspaceBootstrapPromptCardRef = useRef(null);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -13,6 +26,79 @@ export default function Settings() {
   const [showPaths, setShowPaths] = useState(false);
   const [sys, setSys] = useState(null);
   const [testResult, setTestResult] = useState(null);
+
+  const [evalPromptLoading, setEvalPromptLoading] = useState(true);
+  const [evalPromptSaving, setEvalPromptSaving] = useState(false);
+  const [evalPromptTemplate, setEvalPromptTemplate] = useState('');
+  const [evalPromptSource, setEvalPromptSource] = useState('builtin');
+  const [evalPromptVersion, setEvalPromptVersion] = useState('eval-prompt-v1');
+
+  const [wsEvalPromptLoading, setWsEvalPromptLoading] = useState(true);
+  const [wsEvalPromptSaving, setWsEvalPromptSaving] = useState(false);
+  const [wsEvalPromptTemplate, setWsEvalPromptTemplate] = useState('');
+  const [wsEvalPromptSource, setWsEvalPromptSource] = useState('builtin');
+  const [wsEvalPromptVersion, setWsEvalPromptVersion] = useState('workspace-bootstrap-eval-v1');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await evaluationPromptApi.get();
+        if (res?.success && res.data) {
+          setEvalPromptTemplate(res.data.template ?? '');
+          setEvalPromptSource(res.data.source ?? 'builtin');
+          setEvalPromptVersion(res.data.promptVersion ?? 'eval-prompt-v1');
+        }
+      } catch (e) {
+        message.error(
+          extractApiErrorMessage(e, intl.formatMessage({ id: 'settings.evaluationPrompt.loadFailed' })),
+        );
+      } finally {
+        setEvalPromptLoading(false);
+      }
+    })();
+  }, [intl]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await workspaceBootstrapEvaluationPromptApi.get();
+        if (res?.success && res.data) {
+          setWsEvalPromptTemplate(res.data.template ?? '');
+          setWsEvalPromptSource(res.data.source ?? 'builtin');
+          setWsEvalPromptVersion(res.data.promptVersion ?? 'workspace-bootstrap-eval-v1');
+        }
+      } catch (e) {
+        message.error(
+          extractApiErrorMessage(
+            e,
+            intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.loadFailed' }),
+          ),
+        );
+      } finally {
+        setWsEvalPromptLoading(false);
+      }
+    })();
+  }, [intl]);
+
+  useEffect(() => {
+    const hash = location.hash;
+    if (hash === '#evaluation-prompt' && !evalPromptLoading) {
+      const t = window.setTimeout(() => {
+        evaluationPromptCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      return () => window.clearTimeout(t);
+    }
+    if (hash === '#workspace-bootstrap-evaluation-prompt' && !wsEvalPromptLoading) {
+      const t = window.setTimeout(() => {
+        workspaceBootstrapPromptCardRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 150);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [location.hash, evalPromptLoading, wsEvalPromptLoading]);
 
   useEffect(() => {
     (async () => {
@@ -76,6 +162,15 @@ export default function Settings() {
         accessMode: v.accessMode,
         accessToken: v.accessMode === 'token' ? v.accessToken : undefined,
       });
+      try {
+        if (v.accessMode === 'token' && (v.accessToken || '').trim()) {
+          localStorage.setItem(TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY, v.accessToken.trim());
+        } else {
+          localStorage.removeItem(TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY);
+        }
+      } catch {
+        /* ignore */
+      }
       message.success({ content: intl.formatMessage({ id: 'settings.saveSuccess' }), key: toastKey });
     } catch (e) {
       if (e?.errorFields) {
@@ -87,6 +182,106 @@ export default function Settings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const onSaveEvalPrompt = async () => {
+    if (!evalPromptTemplate.includes(EVAL_CONTEXT_PLACEHOLDER)) {
+      message.error(intl.formatMessage({ id: 'settings.evaluationPrompt.needContext' }));
+      return;
+    }
+    setEvalPromptSaving(true);
+    try {
+      const res = await evaluationPromptApi.save(evalPromptTemplate);
+      if (res?.success && res.data) {
+        setEvalPromptTemplate(res.data.template ?? '');
+        setEvalPromptSource(res.data.source ?? 'override');
+        setEvalPromptVersion(res.data.promptVersion ?? 'eval-prompt-v1');
+        message.success(intl.formatMessage({ id: 'settings.evaluationPrompt.saveSuccess' }));
+      }
+    } catch (e) {
+      message.error(
+        extractApiErrorMessage(e, intl.formatMessage({ id: 'settings.evaluationPrompt.saveFailed' })),
+      );
+    } finally {
+      setEvalPromptSaving(false);
+    }
+  };
+
+  const onResetEvalPrompt = () => {
+    Modal.confirm({
+      title: intl.formatMessage({ id: 'settings.evaluationPrompt.resetConfirmTitle' }),
+      onOk: async () => {
+        setEvalPromptSaving(true);
+        try {
+          const res = await evaluationPromptApi.clear();
+          if (res?.success && res.data) {
+            setEvalPromptTemplate(res.data.template ?? '');
+            setEvalPromptSource(res.data.source ?? 'builtin');
+            setEvalPromptVersion(res.data.promptVersion ?? 'eval-prompt-v1');
+            message.success(intl.formatMessage({ id: 'settings.evaluationPrompt.resetSuccess' }));
+          }
+        } catch (e) {
+          message.error(
+            extractApiErrorMessage(e, intl.formatMessage({ id: 'settings.evaluationPrompt.resetFailed' })),
+          );
+        } finally {
+          setEvalPromptSaving(false);
+        }
+      },
+    });
+  };
+
+  const onSaveWsEvalPrompt = async () => {
+    if (!wsEvalPromptTemplate.includes(EVAL_CONTEXT_PLACEHOLDER)) {
+      message.error(intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.needContext' }));
+      return;
+    }
+    setWsEvalPromptSaving(true);
+    try {
+      const res = await workspaceBootstrapEvaluationPromptApi.save(wsEvalPromptTemplate);
+      if (res?.success && res.data) {
+        setWsEvalPromptTemplate(res.data.template ?? '');
+        setWsEvalPromptSource(res.data.source ?? 'override');
+        setWsEvalPromptVersion(res.data.promptVersion ?? 'workspace-bootstrap-eval-v1');
+        message.success(intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.saveSuccess' }));
+      }
+    } catch (e) {
+      message.error(
+        extractApiErrorMessage(
+          e,
+          intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.saveFailed' }),
+        ),
+      );
+    } finally {
+      setWsEvalPromptSaving(false);
+    }
+  };
+
+  const onResetWsEvalPrompt = () => {
+    Modal.confirm({
+      title: intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.resetConfirmTitle' }),
+      onOk: async () => {
+        setWsEvalPromptSaving(true);
+        try {
+          const res = await workspaceBootstrapEvaluationPromptApi.clear();
+          if (res?.success && res.data) {
+            setWsEvalPromptTemplate(res.data.template ?? '');
+            setWsEvalPromptSource(res.data.source ?? 'builtin');
+            setWsEvalPromptVersion(res.data.promptVersion ?? 'workspace-bootstrap-eval-v1');
+            message.success(intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.resetSuccess' }));
+          }
+        } catch (e) {
+          message.error(
+            extractApiErrorMessage(
+              e,
+              intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.resetFailed' }),
+            ),
+          );
+        } finally {
+          setWsEvalPromptSaving(false);
+        }
+      },
+    });
   };
 
   const accessMode = Form.useWatch('accessMode', form);
@@ -205,6 +400,94 @@ export default function Settings() {
           </Col>
         </Row>
       </Form>
+
+      <div ref={evaluationPromptCardRef} id="evaluation-prompt">
+        <Card
+          title={intl.formatMessage({ id: 'settings.evaluationPrompt.title' })}
+          extra={
+            <SectionScopeHint intl={intl} messageId="settings.evaluationPrompt.cardScopeDesc" />
+          }
+          style={{ marginTop: 16 }}
+          loading={evalPromptLoading}
+        >
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={intl.formatMessage({ id: 'settings.evaluationPrompt.hint' })}
+          />
+          <Space wrap style={{ marginBottom: 8 }}>
+            <Tag>{intl.formatMessage({ id: 'settings.evaluationPrompt.version' })}: {evalPromptVersion}</Tag>
+            <Tag color={evalPromptSource === 'override' ? 'processing' : 'default'}>
+              {evalPromptSource === 'override'
+                ? intl.formatMessage({ id: 'settings.evaluationPrompt.sourceOverride' })
+                : intl.formatMessage({ id: 'settings.evaluationPrompt.sourceBuiltin' })}
+            </Tag>
+          </Space>
+          <Input.TextArea
+            value={evalPromptTemplate}
+            onChange={(e) => setEvalPromptTemplate(e.target.value)}
+            rows={16}
+            style={{ fontFamily: 'monospace', fontSize: 12 }}
+            disabled={evalPromptLoading}
+          />
+          <Space style={{ marginTop: 12 }}>
+            <Button type="primary" onClick={onSaveEvalPrompt} loading={evalPromptSaving}>
+              {intl.formatMessage({ id: 'settings.evaluationPrompt.save' })}
+            </Button>
+            <Button onClick={onResetEvalPrompt} disabled={evalPromptLoading || evalPromptSaving}>
+              {intl.formatMessage({ id: 'settings.evaluationPrompt.reset' })}
+            </Button>
+          </Space>
+        </Card>
+      </div>
+
+      <div ref={workspaceBootstrapPromptCardRef} id="workspace-bootstrap-evaluation-prompt">
+        <Card
+          title={intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.title' })}
+          extra={
+            <SectionScopeHint intl={intl} messageId="settings.workspaceEvaluationPrompt.cardScopeDesc" />
+          }
+          style={{ marginTop: 16 }}
+          loading={wsEvalPromptLoading}
+        >
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.hint' })}
+          />
+          <Space wrap style={{ marginBottom: 8 }}>
+            <Tag>
+              {intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.version' })}:{' '}
+              {wsEvalPromptVersion}
+            </Tag>
+            <Tag color={wsEvalPromptSource === 'override' ? 'processing' : 'default'}>
+              {wsEvalPromptSource === 'override'
+                ? intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.sourceOverride' })
+                : intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.sourceBuiltin' })}
+            </Tag>
+          </Space>
+          <Input.TextArea
+            value={wsEvalPromptTemplate}
+            onChange={(e) => setWsEvalPromptTemplate(e.target.value)}
+            rows={16}
+            style={{ fontFamily: 'monospace', fontSize: 12 }}
+            disabled={wsEvalPromptLoading}
+          />
+          <Space style={{ marginTop: 12 }}>
+            <Button type="primary" onClick={onSaveWsEvalPrompt} loading={wsEvalPromptSaving}>
+              {intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.save' })}
+            </Button>
+            <Button
+              onClick={onResetWsEvalPrompt}
+              disabled={wsEvalPromptLoading || wsEvalPromptSaving}
+            >
+              {intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.reset' })}
+            </Button>
+          </Space>
+        </Card>
+      </div>
 
       <Card
         title={intl.formatMessage({ id: 'settings.quick' })}

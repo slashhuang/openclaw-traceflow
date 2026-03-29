@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Steps, Form, Input, Button, Space, Row, Col, Typography, message, Tag, Alert } from 'antd';
 import { useIntl } from 'react-intl';
-import { setupApi, extractApiErrorMessage } from '../api';
+import { setupApi, extractApiErrorMessage, TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY } from '../api';
 import SectionScopeHint from '../components/SectionScopeHint';
 
 export default function SetupWizard({ onComplete }) {
@@ -83,6 +83,15 @@ export default function SetupWizard({ onComplete }) {
         accessMode: vals.accessMode,
         accessToken: vals.accessMode === 'token' ? vals.accessToken : undefined,
       });
+      try {
+        if (vals.accessMode === 'token' && (vals.accessToken || '').trim()) {
+          localStorage.setItem(TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY, vals.accessToken.trim());
+        } else {
+          localStorage.removeItem(TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY);
+        }
+      } catch {
+        /* ignore */
+      }
       message.success({ content: intl.formatMessage({ id: 'settings.saveSuccess' }), key: toastKey });
       setTimeout(() => onComplete(), 300);
     } catch (e) {
