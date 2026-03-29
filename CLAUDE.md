@@ -16,8 +16,8 @@
 | 规则 | 说明 |
 |------|------|
 | 工作目录 | TraceFlow：`cd openclaw-traceflow` 再 `pnpm install` / `pnpm run start:dev`；**根目录无独立 Nest 应用** |
-| Git | **仅当用户明确说**提交、推送、同步远端时，才执行 `git add` / `commit` / `push`；否则不要代提交 |
-| 双远端推送 | 用户要求推 **`main`** 且变更含 **`openclaw-traceflow/`** 时，在仓库根**依次**：`git push origin main` → `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main` |
+| Git | 用户说**提交**→ 默认仅本地 `add`/`commit`，不自动 push、不 fetch subtree。用户明确**推送/同步**时再 push；否则不要代提交 |
+| 双远端推送 | 推 **`main`** 且含 **`openclaw-traceflow/`** 时，根目录**依次**：`git push origin main` → `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main`（勿默认 `git fetch` subtree） |
 | Gateway | Backend 无设备连接 **scopes 可能被清空**；路径用 connect **snapshot**，概览用 **`health` RPC**（详见 AGENTS.md） |
 
 ---

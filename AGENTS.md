@@ -15,8 +15,8 @@
 | 对照 OpenClaw 上游 | `external-refs/openclaw/` | **只读**，勿当业务依赖乱改 |
 
 - **根目录没有 Nest 应用**：无根级 `package.json` / `src/` / `frontend/`；勿在根目录 `pnpm start` 找应用。
-- **Git**：改代码 ≠ 提交/推送。仅当用户**明确**要求 `commit` / `push` / 同步远端时再执行；**禁止**主动代提交、代推送。
-- **TraceFlow 推 `main` 且含 `openclaw-traceflow/`**：在仓库根**依次**执行 `git push origin main`，再 `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main`（只做第一步不会更新独立仓）。
+- **Git（本地优先）**：用户说**提交**→ 默认只做本地 `add`/`commit`，**不**自动 push、**不** `git subtree push`、**不**为 subtree 做 `git fetch`（workflow 不依赖 fetch subtree）。用户明确要**推送 / 同步远端**时再 push；**禁止**未要求时代提交、代推送。
+- **TraceFlow 双远端（仅推送时）**：推 `main` 且含 `openclaw-traceflow/` 时，在仓库根**依次** `git push origin main` → `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main`（只做第一步不会更新独立仓）。
 
 ---
 
@@ -83,6 +83,7 @@ pnpm run start:dev
 
 - 不要恢复根目录独立 Monitor 应用，除非刻意维护两套仪表盘。
 - 不要在用户未明确要求时执行 `git add` / `commit` / `push` / `subtree push`。
+- 用户只说「提交」时不要自动 push；不要为了 subtree 默认执行 `git fetch openclaw-traceflow`（除非用户单独要求）。
 
 ---
 

@@ -5,10 +5,10 @@ alwaysApply: true
 
 # claw-sources
 
-- **改代码与 Git 提交/推送是两件事**：完成编辑不等于要入库。仅在用户**明确说**要提交、推送、同步远端、合并等时，再执行 `git add` / `git commit` / `git push` / `git subtree push`；**未要求时不要代提交、代推送**。
+- **Git 语义（本地优先）**：用户说**「提交」**→ **默认只做本地** `git add` / `git commit`，**不要**自动 `git push`、**不要** `git subtree push`、**不要**为 subtree 执行 `git fetch`（本仓 workflow 不依赖 fetch subtree）。用户**明确说推送 / 同步远端 / subtree 也要推**等时，再执行 push 与 subtree push。**未要求时不要代提交、代推送**。
 - This repo is a **monorepo**. There is **no** root-level Nest app (no root `package.json` / `src/` / `frontend/`).
 - **OpenClaw TraceFlow** (NestJS + React dashboard) lives only under **`openclaw-traceflow/`**. Run `pnpm install` and `pnpm run start:dev` **inside that directory**.
 - Other subtree projects: **`claw-family/`**, **`futu-openD/`**. **`external-refs/`** is reference code only.
 - For **Gateway WebSocket** work in TraceFlow, read **`AGENTS.md`** at repo root: backend clients without device identity get **cleared scopes**; use **`health` RPC** for overview, not `status`/`skills.status` alone, to avoid **`missing scope: operator.read`**.
 - Upstream for TraceFlow: `git@github.com:slashhuang/openclaw-traceflow.git`.
-- **TraceFlow 双远端（main）**：当用户**要求提交并推送**且变更在 **`main`**、含 **`openclaw-traceflow/`** 时，推送须**依次**执行：`git push origin main`，再 `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main`。仅 `git push origin` 不会更新独立仓 `openclaw-traceflow`。
+- **TraceFlow 双远端（main，仅在用户要推送时）**：在 **`main`** 且本次要同步的变更含 **`openclaw-traceflow/`** 时，须**依次**：`git push origin main`，再 `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main`。仅第一步不会更新独立仓 `openclaw-traceflow`。不要为此先 `git fetch` subtree 远端（除非用户**单独**要求 fetch）。
