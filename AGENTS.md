@@ -1,29 +1,41 @@
 # claw-sources — AI / 编码助手说明
 
-本文件供 **Cursor、Claude Code、Codex** 等助手在修改本仓库时阅读；**CLAUDE.md** 为同内容的简短入口。
+> **受众**：Cursor、Claude Code、Codex 等；修改本仓库前优先读本文件。  
+> **人类短入口**：[CLAUDE.md](./CLAUDE.md)（与本文件同策略，更短）。
 
-## 仓库是什么
+---
 
-- **Monorepo**，开发入口在仓库根 `.git`。
+## TL;DR（先读这段再动手）
+
+| 用户要做的事 | 工作目录 | 必读补充 |
+|-------------|----------|----------|
+| TraceFlow（Nest/React、Gateway WS、仪表盘、设置/测试连接） | `openclaw-traceflow/` | [openclaw-traceflow/CLAUDE.md](openclaw-traceflow/CLAUDE.md) |
+| claw-family（技能、部署等） | `claw-family/` | [docs/monorepo-workflow.md](docs/monorepo-workflow.md) |
+| 富途 OpenD | `futu-openD/` | 同上 |
+| 对照 OpenClaw 上游 | `external-refs/openclaw/` | **只读**，勿当业务依赖乱改 |
+
+- **根目录没有 Nest 应用**：无根级 `package.json` / `src/` / `frontend/`；勿在根目录 `pnpm start` 找应用。
+- **Git**：改代码 ≠ 提交/推送。仅当用户**明确**要求 `commit` / `push` / 同步远端时再执行；**禁止**主动代提交、代推送。
+- **TraceFlow 推 `main` 且含 `openclaw-traceflow/`**：在仓库根**依次**执行 `git push origin main`，再 `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main`（只做第一步不会更新独立仓）。
+
+---
+
+## 仓库结构（Monorepo）
+
+- 开发入口：仓库根 `.git`。
 - **一方子项目（git subtree）**：
-  | 目录 | 说明 | 上游（示例） |
-  |------|------|----------------|
-  | `openclaw-traceflow/` | OpenClaw **可观测仪表盘**（NestJS + React），**默认工作目录** | `git@github.com:slashhuang/openclaw-traceflow.git` |
-  | `claw-family/` | OpenClaw + 飞书等 | 见 `docs/monorepo-workflow.md` |
-  | `futu-openD/` | 富途 OpenD | 同上 |
+
+| 目录 | 说明 | 上游（示例） |
+|------|------|----------------|
+| `openclaw-traceflow/` | OpenClaw **可观测仪表盘**（NestJS + React），**默认工作目录** | `git@github.com:slashhuang/openclaw-traceflow.git` |
+| `claw-family/` | OpenClaw + 飞书等 | 见 `docs/monorepo-workflow.md` |
+| `futu-openD/` | 富途 OpenD | 同上 |
+
 - **`external-refs/`**：参考源码，**不是** subtree 产品。
-- **根目录**没有独立 Nest 应用：无根级 `package.json` / `src/` / `frontend/`；已删除历史 Monitor 重复目录。
 
-## 任务该改哪里
+---
 
-| 你要做的事 | 目录 |
-|------------|------|
-| TraceFlow 后端、前端、Gateway WebSocket、设置/测试连接、仪表盘 | **`openclaw-traceflow/`** |
-| claw-family 技能、部署脚本 | `claw-family/` |
-| futu-openD | `futu-openD/` |
-| 对照 OpenClaw 上游实现 | `external-refs/openclaw/`（只读参考，勿当业务依赖随意改） |
-
-在 **`openclaw-traceflow/`** 内安装与运行：
+## TraceFlow 运行命令（仅在子目录执行）
 
 ```bash
 cd openclaw-traceflow
@@ -31,32 +43,58 @@ pnpm install
 pnpm run start:dev
 ```
 
-Docker：根目录 `docker-compose.yml` 构建上下文为 `./openclaw-traceflow`；或 `cd openclaw-traceflow && docker compose up -d`。
+- Docker：根目录 `docker-compose.yml` 构建上下文为 `./openclaw-traceflow`；或 `cd openclaw-traceflow && docker compose up -d`。
 
-## TraceFlow 与 OpenClaw Gateway（必读）
+---
 
-### `missing scope: operator.read` 与「测试连接」
+## TraceFlow × OpenClaw Gateway（必读）
 
-- TraceFlow 以 **`mode: backend`**、**无设备身份** 连 Gateway 时，Gateway 会在鉴权通过后 **清空该连接的 `scopes`**（安全策略：未绑定设备的客户端不能保留自拟 operator scope）。
-- 旧逻辑在 `connect` 成功后又调 **`skills.status`** / **`status`** / **`usage.status`** / **`logs.tail`** 等需要 **`operator.read`** 的 RPC，会在清空 scopes 后失败，报错 **`missing scope: operator.read`**（**设置里「测试连接」**即走此路径）。
-- **修复方向**（已实现）：
-  - **路径探测**（`fetchRuntimePathsFromGateway` / `fetchRuntimePaths`）：只用 connect 响应里的 **snapshot**（`stateDir` / `configPath`），**不再**调 `skills.status`。
-  - **状态概览与仪表盘**：用 Gateway 对 **`health` RPC 的豁免**（不按 operator scope 拦截），将结果 **映射**为仪表盘可用的 `status` 形状；`logs.tail` **尽力而为**，失败则空日志并打 debug。
+### 背景：`missing scope: operator.read`
 
-### 代码入口（TraceFlow）
+- TraceFlow 以 **`mode: backend`**、**无设备身份** 连接 Gateway 时，鉴权通过后 Gateway 会**清空该连接的 `scopes`**（未绑定设备不能保留自拟 operator scope）。
+- 若在 `connect` 成功后再调 **`skills.status`** / **`status`** / **`usage.status`** / **`logs.tail`** 等需 **`operator.read`** 的 RPC，会失败并报 **`missing scope: operator.read`**（设置里「测试连接」曾走此路径）。
 
-- WebSocket 路径：`openclaw-traceflow/src/openclaw/gateway-ws-paths.ts`、`gateway-persistent-client.ts`、`gateway-rpc.ts`
-- 概览映射：`openclaw-traceflow/src/openclaw/gateway-overview-health.ts`
-- 连接测试：`openclaw.service.ts` → `checkConnection` → `GatewayConnectionService.fetchRuntimePaths()`
+### 正确做法（已实现，修改时请保持）
+
+| 场景 | 做法 |
+|------|------|
+| 路径 / 运行时目录探测 | 仅用 connect 响应 **snapshot**（`stateDir` / `configPath`）；**不要**依赖 `skills.status` 做路径探测 |
+| 仪表盘 / 状态概览 | 用 Gateway **`health` RPC**（豁免 operator scope），再**映射**为仪表盘 `status` 形状 |
+| 日志 | `logs.tail` **尽力而为**；失败则空日志 + debug，勿当作唯一数据源 |
+
+### 代码入口（相对 `openclaw-traceflow/`）
+
+| 主题 | 路径 |
+|------|------|
+| WebSocket / RPC | `src/openclaw/gateway-ws-paths.ts`、`gateway-persistent-client.ts`、`gateway-rpc.ts` |
+| health → 概览映射 | `src/openclaw/gateway-overview-health.ts` |
+| 连接测试 | `openclaw.service.ts` → `checkConnection` → `GatewayConnectionService.fetchRuntimePaths()` |
+
+---
+
+## AI 助手约束（DO / DON'T）
+
+**DO**
+
+- 改 TraceFlow 时同步考虑：**无设备 backend 连接无 operator scopes**。
+- 需要 TraceFlow 细节（API、目录、i18n、双远端）时读 [openclaw-traceflow/CLAUDE.md](openclaw-traceflow/CLAUDE.md)。
+
+**DON'T**
+
+- 不要恢复根目录独立 Monitor 应用，除非刻意维护两套仪表盘。
+- 不要在用户未明确要求时执行 `git add` / `commit` / `push` / `subtree push`。
+
+---
 
 ## 文档索引
 
 - [README.md](README.md) — 根说明
 - [docs/MONOREPO-SIMPLIFIED.md](docs/MONOREPO-SIMPLIFIED.md)
 - [docs/monorepo-workflow.md](docs/monorepo-workflow.md)
-- TraceFlow 细节：[openclaw-traceflow/CLAUDE.md](openclaw-traceflow/CLAUDE.md)
+- TraceFlow：[openclaw-traceflow/CLAUDE.md](openclaw-traceflow/CLAUDE.md)
 
-## 约束
+---
 
-- 不要恢复根目录独立 Monitor 应用，除非刻意维护两套仪表盘。
-- 改 Gateway 对接时同步考虑：**无设备 backend 连接无 operator scopes**。
+## 检索关键词（embedding / 搜索用）
+
+`monorepo` `subtree` `openclaw-traceflow` `TraceFlow` `NestJS` `React` `Gateway` `WebSocket` `operator.read` `health RPC` `backend mode` `missing scope` `git subtree push` `claw-family` `futu-openD` `external-refs`

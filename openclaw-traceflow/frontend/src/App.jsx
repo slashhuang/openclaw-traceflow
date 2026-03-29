@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Spin, message } from 'antd';
 import { useIntl } from 'react-intl';
 import { setupApi } from './api';
@@ -52,6 +52,7 @@ function AppInner() {
           <Route path="/sessions/:id/archives" element={<SessionArchiveList />} />
           <Route path="/sessions/:id" element={<SessionDetail />} />
           <Route path="/system-prompt" element={<SystemPrompt />} />
+          <Route path="/agent-harness" element={<Navigate to="/system-prompt" replace />} />
 
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/logs" element={<Logs />} />

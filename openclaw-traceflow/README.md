@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 
-**Observability for the [OpenClaw](https://docs.openclaw.ai) Agent** — sessions, skills, token usage & alerts, latency (P50/P95/P99), system prompt insight, model pricing, and live logs. Ships as a standalone NestJS + React app with an English/Chinese UI.
+**Observability for the [OpenClaw](https://docs.openclaw.ai) Agent** — sessions, skills, token usage & alerts, latency (P50/P95/P99), **agent & harness** (Project Context, OpenClaw Structure, …), model pricing, and live logs. Ships as a standalone NestJS + React app with an English/Chinese UI.
 
 **Languages:** English (this file) · [简体中文](README.zh-CN.md)
 
@@ -21,7 +21,7 @@
 | Skill call tracing (inferred from `read` paths) | — | Yes |
 | Per-user skill stats | — | Yes |
 | Token thresholds & rankings | Basic | Stronger |
-| System prompt analysis | — | Yes |
+| Agent & harness (OpenClaw-aligned labels) | — | Yes |
 | Latency P50/P95/P99 | — | Yes |
 | Gateway connection behavior | Long-lived WS | Long-lived WS (reused for `status`, `usage`, `logs.tail`, `skills.status`, etc.) |
 | Deployment | With Gateway | PM2, own port |
@@ -92,6 +92,8 @@ TraceFlow is a **separate web service** that talks to your running **OpenClaw Ga
 
 **Performance stance.** Observability should not mean “re-read everything on every click.” TraceFlow already ships **incremental** session directory scans, **fingerprint-based caching** for per-session tool/skill aggregation when transcripts haven’t changed, **head/tail** parsing for very large JSONL transcripts, a **single long-lived** Gateway WebSocket for RPC, and a **batched** dashboard overview endpoint. Remaining hot paths (e.g. worst-case **O(n)** scans when many sessions exist) are tracked honestly in **`ROADMAP.md`**.
 
+**Product design:** The **harness-visible** vision, **platform vs user** system prompt layering, and TraceFlow UX roadmap are in **[docs/agent-harness-and-system-prompt.md](./docs/agent-harness-and-system-prompt.md)**.
+
 ---
 
 ## Configuration (zero-config first)
@@ -132,7 +134,7 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 | `/` · `/dashboard` | Overview: Gateway health, tokens, latency, tools, etc. |
 | `/sessions` · `/sessions/:id` | Session list and detail |
 | `/skills` | Skill usage statistics |
-| `/system-prompt` | System prompt analysis |
+| `/system-prompt` (`/agent-harness` redirects here) | Agent & harness: Project Context, OpenClaw Structure, skills snapshot, etc. |
 | `/tokens` | Token monitoring & alerts |
 | `/pricing` | Model pricing |
 | `/logs` | Live logs (Socket.IO) |

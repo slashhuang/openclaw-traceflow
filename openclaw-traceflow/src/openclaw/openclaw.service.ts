@@ -20,6 +20,7 @@ import { loadModelPricing, type ModelPricing } from '../config/model-pricing.con
 import { FileSystemSessionStorage, type SessionData, type SessionStorage } from '../storage/session-storage';
 import { readJsonlHeadTail, type HeadTailResult } from './streaming-jsonl-reader';
 import { extractSenderFromMessageEntry } from '../common/extract-sender-from-message';
+import { scanSessionJsonlLines, type SessionJsonlScanResult } from './session-jsonl-scan';
 import {
   formatParticipantSummary,
   mergeParticipantListsOrdered,
@@ -240,24 +241,6 @@ export interface OpenClawSessionDetail extends OpenClawSession {
     outputTokens: number;
   }>;
 }
-
-type SessionJsonlScan = {
-  messages: OpenClawSessionDetail['messages'];
-  toolCalls: OpenClawSessionDetail['toolCalls'];
-  events: OpenClawSessionDetail['events'];
-  firstUserData: any;
-  tokenUsage: any;
-  transcriptUsageObserved: boolean;
-  sumInput: number;
-  sumOutput: number;
-  lastTotal: number;
-  hasCostField: boolean;
-  sumCostInput: number;
-  sumCostOutput: number;
-  sumCostCacheRead: number;
-  sumCostCacheWrite: number;
-  sumCostTotal: number;
-};
 
 type ArchivedResetUsage = {
   sessionId: string;
@@ -1156,250 +1139,6 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 解析 transcript JSONL 行（全量与首尾分片共用） */
-  private scanSessionJsonlLines(lines: string[]): SessionJsonlScan {
-    const messages: OpenClawSessionDetail['messages'] = [];
-    const toolCalls: OpenClawSessionDetail['toolCalls'] = [];
-    const events: OpenClawSessionDetail['events'] = [];
-    const toolCallIdToIndex = new Map<string, number>();
-    const legacyToolUseNames = new Set<string>();
-
-    let firstUserData: any = null;
-    let tokenUsage: any = null;
-    let transcriptUsageObserved = false;
-    let sumInput = 0;
-    let sumOutput = 0;
-    let lastTotal = 0;
-    let sumCostInput = 0;
-    let sumCostOutput = 0;
-    let sumCostCacheRead = 0;
-    let sumCostCacheWrite = 0;
-    let sumCostTotal = 0;
-    let hasCostField = false;
-
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line);
-
-        // 提取用户信息：优先 entry.user，否则从消息内容中提取 sender
-        if (!firstUserData) {
-          const sender = extractSenderFromMessageEntry(entry);
-          if (sender) {
-            firstUserData = { user: sender };
-          } else if (entry.user) {
-            firstUserData = entry;
-          }
-        }
-
-        // 提取 token 使用：支持 entry.tokenUsage 或 entry.message.usage，多轮会话累加
-        const usage = (entry?.message as any)?.usage ?? entry?.tokenUsage;
-        if (usage && typeof usage.totalTokens === 'number') {
-          transcriptUsageObserved = true;
-          const inp = typeof usage.input === 'number' ? usage.input : 0;
-          const out = typeof usage.output === 'number' ? usage.output : 0;
-          sumInput += inp;
-          sumOutput += out;
-          lastTotal = usage.totalTokens;
-
-          // usage.cost 由 provider/model cost 配置驱动；用于异常告警展示
-          const cost = (usage as any)?.cost;
-          if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
-            hasCostField = true;
-            sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
-            sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
-            sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
-            sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
-            sumCostTotal += cost.total;
-          }
-          tokenUsage = {
-            input: sumInput,
-            output: sumOutput,
-            total: lastTotal,
-            limit: typeof usage.limit === 'number' ? usage.limit : undefined,
-          };
-        }
-
-        // 提取消息（包括 session、model_change 等元数据行）
-        if (entry.message || entry.type === 'session' || entry.type === 'model_change' || entry.type === 'thinking_level_change' || entry.type === 'custom') {
-          const msg = entry.message;
-          const role = msg?.role as string || 'system';
-          
-          // 处理元数据行（session、model_change 等）
-          if (!msg && entry.type) {
-            let metaContent = '';
-            if (entry.type === 'session') {
-              metaContent = `[Session] id=${entry.id}, version=${entry.version}`;
-            } else if (entry.type === 'model_change') {
-              metaContent = `[Model] ${entry.provider}/${entry.modelId}`;
-            } else if (entry.type === 'thinking_level_change') {
-              metaContent = `[Thinking] level=${entry.thinkingLevel || 'unknown'}`;
-            } else if (entry.type === 'custom' && entry.customType) {
-              metaContent = `[Custom] ${entry.customType}`;
-            } else {
-              metaContent = `[${entry.type}]`;
-            }
-            
-            messages.push({
-              role: 'system' as const,
-              content: metaContent,
-              timestamp: entry.timestamp || Date.now(),
-              tokenCount: 0,
-            });
-          }
-          
-          // 处理普通消息
-          if (msg) {
-            const messageContent = msg.content;
-            
-            // 顶层 + content 级：toolResult 消息（role=toolResult）关联到之前的 toolCall
-            if (role === 'toolResult') {
-              const toolCallId = msg.toolCallId as string | undefined;
-              const toolName = msg.toolName as string | undefined;
-              const isError = msg.isError === true;
-              const details = msg.details as { durationMs?: number; status?: string } | undefined;
-              const durationMs = details?.durationMs ?? 0;
-
-              let output: any = {};
-              if (Array.isArray(messageContent)) {
-                const texts: string[] = [];
-                for (const item of messageContent) {
-                  if (item?.type === 'text' && typeof item.text === 'string') {
-                    texts.push(item.text);
-                  }
-                }
-                output = texts.length === 1 ? texts[0] : texts.length > 1 ? texts : {};
-              }
-              if (details && Object.keys(details).length > 0 && (typeof output !== 'object' || Object.keys(output as object).length === 0)) {
-                output = details;
-              }
-
-              if (toolCallId && toolCallIdToIndex.has(toolCallId)) {
-                const idx = toolCallIdToIndex.get(toolCallId)!;
-                const prev = toolCalls[idx];
-                toolCalls[idx] = {
-                  ...prev,
-                  output,
-                  durationMs,
-                  success: !isError,
-                  error: isError ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined,
-                  timestamp:
-                    prev.timestamp ??
-                    (typeof entry.timestamp === 'number' ? entry.timestamp : undefined),
-                };
-              } else {
-                toolCalls.push({
-                  name: toolName || 'unknown',
-                  input: {},
-                  output,
-                  durationMs,
-                  success: !isError,
-                  error: isError ? (typeof output === 'string' ? output : undefined) : undefined,
-                  timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
-                });
-              }
-            }
-
-            // 处理 content 可能是数组或字符串的情况
-            let contentText = '';
-            if (Array.isArray(messageContent)) {
-              for (const item of messageContent) {
-                if (item.type === 'toolCall') {
-                  const id = item.id || item.toolCallId;
-                  const name = item.name || item.toolName || 'unknown';
-                  const args = item.arguments || item.input || {};
-                  const idx = toolCalls.length;
-                  toolCalls.push({
-                    name,
-                    input: args,
-                    output: {},
-                    durationMs: 0,
-                    success: true,
-                    error: undefined,
-                    timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
-                  });
-                  if (id) toolCallIdToIndex.set(id, idx);
-                } else if (item.type === 'text') {
-                  contentText += item.text || '';
-                } else if (item.type === 'thinking') {
-                  // 跳过 thinking 内容，不显示
-                }
-              }
-              if (!contentText && role === 'assistant') {
-                const tcNames = messageContent.filter((c: any) => c?.type === 'toolCall').map((c: any) => c.name || c.toolName).filter(Boolean);
-                if (tcNames.length > 0) {
-                  contentText = '[工具调用：' + tcNames.join(', ') + ']';
-                } else if (!contentText) {
-                  contentText = '[无内容]';
-                }
-              } else if (!contentText) {
-                contentText = '[无内容]';
-              }
-            } else {
-              contentText = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
-            }
-
-            const sender = role === 'user' ? extractSenderFromMessageEntry(entry) : undefined;
-            const displayRole = role === 'toolResult' ? 'assistant' : (role as 'user' | 'assistant' | 'system');
-            messages.push({
-              role: displayRole,
-              content: contentText,
-              timestamp: entry.timestamp || Date.now(),
-              tokenCount: msg.tokenCount,
-              ...(sender ? { sender } : {}),
-            });
-          }
-        }
-
-        // 提取工具调用（兼容旧的 toolUse 格式）
-        if (entry.toolUse) {
-          const legacyToolName = entry.toolUse.name as string;
-          if (!legacyToolUseNames.has(legacyToolName)) {
-            legacyToolUseNames.add(legacyToolName);
-            toolCalls.push({
-              name: entry.toolUse.name,
-              input: entry.toolUse.input || {},
-              output: entry.toolUse.output || {},
-              durationMs: entry.toolUse.durationMs || 0,
-              success: entry.toolUse.success !== false,
-              error: entry.toolUse.error,
-              timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
-            });
-          }
-        }
-
-        // 提取事件
-        if (entry.type && !entry.message && !entry.toolUse) {
-          events.push({
-            type: entry.type,
-            timestamp: entry.timestamp || Date.now(),
-            payload: entry,
-          });
-        }
-      } catch (e) {
-        // 跳过无法解析的行
-      }
-    }
-
-
-    return {
-      messages,
-      toolCalls,
-      events,
-      firstUserData,
-      tokenUsage,
-      transcriptUsageObserved,
-      sumInput,
-      sumOutput,
-      lastTotal,
-      hasCostField,
-      sumCostInput,
-      sumCostOutput,
-      sumCostCacheRead,
-      sumCostCacheWrite,
-      sumCostTotal,
-    };
-  }
-
   /**
    * 获取会话详情（从文件系统读取）
    *
@@ -1440,7 +1179,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       let transcriptJsonlLineCount: number | undefined;
       let transcriptHeadJsonlLineCount: number | undefined;
       let transcriptTailJsonlLineCount: number | undefined;
-      let scan: SessionJsonlScan;
+      let scan: SessionJsonlScanResult;
 
       // 先快速估算行数（通过读取文件头部 64KB）
       const headBuffer = this.readFileUtf8Slice(sessionFile.filePath, 0, 64 * 1024);
@@ -1456,7 +1195,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         if (lines.length === 0) {
           return null;
         }
-        scan = this.scanSessionJsonlLines(lines);
+        scan = scanSessionJsonlLines(lines);
         transcriptJsonlLineCount = lines.length;
       } else {
         // 行数多：使用流式首尾分片读取
@@ -1475,13 +1214,13 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
           // 合并首尾数据进行扫描
           const allLines = [...result.headLines, ...result.tailLines];
-          scan = this.scanSessionJsonlLines(allLines);
+          scan = scanSessionJsonlLines(allLines);
         } catch (error) {
           this.logger.error(`Stream read failed, fallback to full read: ${error.message}`);
           // 降级：全量读取
           const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
           const lines = content.split('\n').filter((line) => line.trim());
-          scan = this.scanSessionJsonlLines(lines);
+          scan = scanSessionJsonlLines(lines);
           transcriptJsonlLineCount = lines.length;
           transcriptParseMode = 'full';
         }
