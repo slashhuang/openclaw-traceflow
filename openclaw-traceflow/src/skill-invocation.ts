@@ -20,7 +20,9 @@ export interface InvokedSkill {
   readCount: number;
 }
 
-function findSkillPathInArgs(args: Record<string, unknown> | null | undefined): string | null {
+function findSkillPathInArgs(
+  args: Record<string, unknown> | null | undefined,
+): string | null {
   if (!args || typeof args !== 'object') return null;
   for (const v of Object.values(args)) {
     if (typeof v === 'string' && v.trim()) {

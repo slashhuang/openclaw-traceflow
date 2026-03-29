@@ -1,6 +1,6 @@
 /**
  * 会话存储抽象层
- * 
+ *
  * 设计目标：
  * 1. 统一的存储接口，支持多种后端实现（FileSystem、SQLite 等）
  * 2. KV 数据结构，支持快速查找
@@ -11,7 +11,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import type { OpenClawSession } from '../openclaw/openclaw.service';
-import { formatParticipantSummary, isPlaceholderParticipantId } from '../common/participant-summary';
+import {
+  formatParticipantSummary,
+  isPlaceholderParticipantId,
+} from '../common/participant-summary';
 import { extractSenderFromMessageEntry } from '../common/extract-sender-from-message';
 import { isIndexTotalTokensUsableForContext } from '../common/session-token-context';
 import {
@@ -89,7 +92,7 @@ export interface SessionStorage {
 
 /**
  * 文件系统存储实现（当前默认实现）
- * 
+ *
  * 特点：
  * - 内存 KV 缓存 + 定时持久化
  * - 增量扫描（只读取新增/变更的文件）
@@ -97,16 +100,17 @@ export interface SessionStorage {
  */
 export class FileSystemSessionStorage implements SessionStorage {
   private readonly logger = new Logger(FileSystemSessionStorage.name);
-  
+
   /** 内存 KV 缓存 */
   private cache: Map<string, SessionData> = new Map();
-  
+
   /** 缓存时间戳 */
   private cacheTimestamp: number = 0;
-  
+
   /** 文件元数据缓存（用于增量扫描） */
-  private fileMetaCache: Map<string, { size: number; mtimeMs: number }> = new Map();
-  
+  private fileMetaCache: Map<string, { size: number; mtimeMs: number }> =
+    new Map();
+
   /** OpenClaw state 目录 */
   private stateDir: string | null = null;
 
@@ -140,7 +144,7 @@ export class FileSystemSessionStorage implements SessionStorage {
 
     try {
       const agentDirs = await fs.promises.readdir(agentsDir);
-      
+
       for (const agent of agentDirs) {
         const sessionsDir = path.join(agentsDir, agent, 'sessions');
         if (!fs.existsSync(sessionsDir)) {
@@ -152,7 +156,7 @@ export class FileSystemSessionStorage implements SessionStorage {
 
         // 扫描 JSONL 文件
         const files = await fs.promises.readdir(sessionsDir);
-        
+
         for (const file of files) {
           if (!file.endsWith('.jsonl') || file.includes('.reset.')) {
             continue;
@@ -161,7 +165,8 @@ export class FileSystemSessionStorage implements SessionStorage {
           const sessionId = file.replace('.jsonl', '');
           const filePath = path.join(sessionsDir, file);
           const stats = await fs.promises.stat(filePath);
-          const sessionKey = sessionsMeta.get(sessionId)?.storeKey ?? `${agent}/${sessionId}`;
+          const sessionKey =
+            sessionsMeta.get(sessionId)?.storeKey ?? `${agent}/${sessionId}`;
 
           // 增量扫描：只读取新增/变更的文件（或缓存缺 messageCount / 文件大小时重扫）
           const cachedMeta = this.fileMetaCache.get(filePath);
@@ -173,7 +178,8 @@ export class FileSystemSessionStorage implements SessionStorage {
             cachedSession &&
             cachedSession.messageCount != null &&
             cachedSession.transcriptFileSizeBytes != null &&
-            cachedSession.transcriptParticipantScanVersion === TRANSCRIPT_PARTICIPANT_SCAN_VERSION
+            cachedSession.transcriptParticipantScanVersion ===
+              TRANSCRIPT_PARTICIPANT_SCAN_VERSION
           ) {
             newCache.set(sessionKey, cachedSession);
             continue;
@@ -201,8 +207,10 @@ export class FileSystemSessionStorage implements SessionStorage {
 
       this.cache = newCache;
       this.cacheTimestamp = Date.now();
-      this.logger.debug(`FileSystemSessionStorage: loaded ${newCache.size} sessions`);
-      
+      this.logger.debug(
+        `FileSystemSessionStorage: loaded ${newCache.size} sessions`,
+      );
+
       return newCache;
     } catch (error) {
       this.logger.error('Failed to load sessions from filesystem:', error);
@@ -216,27 +224,41 @@ export class FileSystemSessionStorage implements SessionStorage {
   private async readSessionsMeta(
     stateDir: string,
     agent: string,
-  ): Promise<Map<string, {
-    storeKey?: string;
-    totalTokens?: number;
-    inputTokens?: number;
-    outputTokens?: number;
-    contextTokens?: number;
-    model?: string;
-    systemSent?: boolean;
-    totalTokensFresh?: boolean;
-  }>> {
-    const storePath = path.join(stateDir, 'agents', agent, 'sessions', 'sessions.json');
-    const metaMap = new Map<string, {
-      storeKey?: string;
-      totalTokens?: number;
-      inputTokens?: number;
-      outputTokens?: number;
-      contextTokens?: number;
-      model?: string;
-      systemSent?: boolean;
-      totalTokensFresh?: boolean;
-    }>();
+  ): Promise<
+    Map<
+      string,
+      {
+        storeKey?: string;
+        totalTokens?: number;
+        inputTokens?: number;
+        outputTokens?: number;
+        contextTokens?: number;
+        model?: string;
+        systemSent?: boolean;
+        totalTokensFresh?: boolean;
+      }
+    >
+  > {
+    const storePath = path.join(
+      stateDir,
+      'agents',
+      agent,
+      'sessions',
+      'sessions.json',
+    );
+    const metaMap = new Map<
+      string,
+      {
+        storeKey?: string;
+        totalTokens?: number;
+        inputTokens?: number;
+        outputTokens?: number;
+        contextTokens?: number;
+        model?: string;
+        systemSent?: boolean;
+        totalTokensFresh?: boolean;
+      }
+    >();
 
     if (!fs.existsSync(storePath)) {
       return metaMap;
@@ -251,13 +273,31 @@ export class FileSystemSessionStorage implements SessionStorage {
 
         metaMap.set(entry.sessionId, {
           storeKey: key,
-          totalTokens: typeof entry.totalTokens === 'number' ? entry.totalTokens : undefined,
-          inputTokens: typeof entry.inputTokens === 'number' ? entry.inputTokens : undefined,
-          outputTokens: typeof entry.outputTokens === 'number' ? entry.outputTokens : undefined,
-          contextTokens: typeof entry.contextTokens === 'number' ? entry.contextTokens : undefined,
+          totalTokens:
+            typeof entry.totalTokens === 'number'
+              ? entry.totalTokens
+              : undefined,
+          inputTokens:
+            typeof entry.inputTokens === 'number'
+              ? entry.inputTokens
+              : undefined,
+          outputTokens:
+            typeof entry.outputTokens === 'number'
+              ? entry.outputTokens
+              : undefined,
+          contextTokens:
+            typeof entry.contextTokens === 'number'
+              ? entry.contextTokens
+              : undefined,
           model: typeof entry.model === 'string' ? entry.model : undefined,
-          systemSent: typeof entry.systemSent === 'boolean' ? entry.systemSent : undefined,
-          totalTokensFresh: typeof entry.totalTokensFresh === 'boolean' ? entry.totalTokensFresh : undefined,
+          systemSent:
+            typeof entry.systemSent === 'boolean'
+              ? entry.systemSent
+              : undefined,
+          totalTokensFresh:
+            typeof entry.totalTokensFresh === 'boolean'
+              ? entry.totalTokensFresh
+              : undefined,
         });
       }
 
@@ -269,7 +309,7 @@ export class FileSystemSessionStorage implements SessionStorage {
 
   /**
    * 读取单个会话文件
-   * 
+   *
    * 性能优化：
    * - 列表页模式：只读首行获取 userId，messageCount 等从 sessions.json 元数据获取
    * - 详情页模式：使用流式首尾分片读取
@@ -293,15 +333,20 @@ export class FileSystemSessionStorage implements SessionStorage {
     try {
       // 列表页优化：优先使用 sessions.json 元数据，避免扫描 JSONL
       const indexTotal = meta?.totalTokens;
-      const indexTotalUsable = isIndexTotalTokensUsableForContext(indexTotal, meta?.totalTokensFresh);
-      
+      const indexTotalUsable = isIndexTotalTokensUsableForContext(
+        indexTotal,
+        meta?.totalTokensFresh,
+      );
+
       // 流式读取首行获取 userId 和基本信息
       let userId: string = 'unknown';
       let sessionData: Record<string, unknown> | null = null;
       let messageCount: number | undefined;
       let distinctSenders: string[] = [];
-      let scanResult: Awaited<ReturnType<typeof scanJsonlForMetadata>> | undefined;
-      
+      let scanResult:
+        | Awaited<ReturnType<typeof scanJsonlForMetadata>>
+        | undefined;
+
       try {
         // 只读首行获取 userId
         const fd = await fs.promises.open(filePath, 'r');
@@ -320,11 +365,14 @@ export class FileSystemSessionStorage implements SessionStorage {
         } finally {
           await fd.close();
         }
-        
+
         // 如果 sessions.json 有 messageCount，直接用（避免扫描）
         // 否则使用流式扫描获取（最多扫 1000 行）
         if (stats) {
-          scanResult = await scanJsonlForMetadata(filePath, LIST_SESSION_JSONL_MAX_SCAN_LINES);
+          scanResult = await scanJsonlForMetadata(
+            filePath,
+            LIST_SESSION_JSONL_MAX_SCAN_LINES,
+          );
           if (scanResult.userId) {
             userId = scanResult.userId;
           }
@@ -332,10 +380,14 @@ export class FileSystemSessionStorage implements SessionStorage {
           distinctSenders = scanResult.distinctSenders;
         }
       } catch (error) {
-        this.logger.debug(`Failed to stream read ${filePath}: ${error.message}`);
+        this.logger.debug(
+          `Failed to stream read ${filePath}: ${error.message}`,
+        );
         // 降级：全量读取（仅小文件）
         if (stats && stats.size < 1024 * 1024) {
-          const allLines = (await fs.promises.readFile(filePath, 'utf-8')).split('\n').filter((l) => l.trim());
+          const allLines = (await fs.promises.readFile(filePath, 'utf-8'))
+            .split('\n')
+            .filter((l) => l.trim());
           if (allLines.length > 0) {
             try {
               sessionData = JSON.parse(allLines[0]) as Record<string, unknown>;
@@ -363,13 +415,17 @@ export class FileSystemSessionStorage implements SessionStorage {
 
       const participantSummary = formatParticipantSummary(distinctSenders);
 
-      const humanSenders = distinctSenders.filter((t) => !isPlaceholderParticipantId(t));
+      const humanSenders = distinctSenders.filter(
+        (t) => !isPlaceholderParticipantId(t),
+      );
       if (humanSenders.length >= 1 && isPlaceholderParticipantId(userId)) {
         userId = humanSenders[0];
       }
 
       // 解析 token usage（列表口径：首行 tokenUsage + sessions.json 元数据）
-      const parsedFromTranscript = this.parseTokenUsage(sessionData?.tokenUsage);
+      const parsedFromTranscript = this.parseTokenUsage(
+        sessionData?.tokenUsage,
+      );
       const contextTokens = meta?.contextTokens;
       const model = meta?.model;
 
@@ -379,16 +435,20 @@ export class FileSystemSessionStorage implements SessionStorage {
 
       const firstLineHasTotals =
         !!parsedFromTranscript &&
-        ((parsedFromTranscript.input ?? 0) + (parsedFromTranscript.output ?? 0) > 0 ||
-          (typeof parsedFromTranscript.total === 'number' && parsedFromTranscript.total > 0));
+        ((parsedFromTranscript.input ?? 0) +
+          (parsedFromTranscript.output ?? 0) >
+          0 ||
+          (typeof parsedFromTranscript.total === 'number' &&
+            parsedFromTranscript.total > 0));
 
       let resolvedTotal: number | undefined;
       let contextUtilizationReliable = false;
 
       if (firstLineHasTotals) {
         resolvedTotal =
-          parsedFromTranscript!.total ??
-          (parsedFromTranscript!.input ?? 0) + (parsedFromTranscript!.output ?? 0);
+          parsedFromTranscript.total ??
+          (parsedFromTranscript.input ?? 0) +
+            (parsedFromTranscript.output ?? 0);
         contextUtilizationReliable = typeof limit === 'number' && limit > 0;
       } else if (indexTotalUsable && typeof indexTotal === 'number') {
         resolvedTotal = indexTotal;
@@ -423,7 +483,8 @@ export class FileSystemSessionStorage implements SessionStorage {
                 ...parsedFromTranscript,
                 input,
                 output,
-                total: resolvedTotal ?? parsedFromTranscript.total ?? input + output,
+                total:
+                  resolvedTotal ?? parsedFromTranscript.total ?? input + output,
                 limit: limit ?? parsedFromTranscript.limit,
                 contextUtilizationReliable,
               }
@@ -446,10 +507,10 @@ export class FileSystemSessionStorage implements SessionStorage {
       const usageCost = scanResult?.usageCost || undefined;
 
       // 推断 systemSent（流式扫描无法获取，设为 undefined）
-      let systemSent = meta?.systemSent;
+      const systemSent = meta?.systemSent;
 
       const sessionKey = meta?.storeKey ?? `${agent}/${sessionId}`;
-      const actualStats = stats || await fs.promises.stat(filePath);
+      const actualStats = stats || (await fs.promises.stat(filePath));
 
       // transcriptUsageObserved 从 scanResult 获取
       const transcriptUsageObserved = scanResult?.totalTokens != null;
@@ -459,7 +520,9 @@ export class FileSystemSessionStorage implements SessionStorage {
         typeof meta?.inputTokens === 'number' ||
         typeof meta?.outputTokens === 'number';
 
-      let tokenUsageSource: NonNullable<OpenClawSession['tokenUsageMeta']>['source'] = 'unknown';
+      let tokenUsageSource: NonNullable<
+        OpenClawSession['tokenUsageMeta']
+      >['source'] = 'unknown';
       if (firstLineHasTotals && storeTokenFieldsPresent) {
         tokenUsageSource = 'mixed';
       } else if (firstLineHasTotals) {
@@ -483,7 +546,9 @@ export class FileSystemSessionStorage implements SessionStorage {
         sessionLogAbsolutePath: filePath,
         sessionsIndexRelativePath:
           this.stateDir && agent
-            ? path.join('agents', agent, 'sessions', 'sessions.json').replace(/\\/g, '/')
+            ? path
+                .join('agents', agent, 'sessions', 'sessions.json')
+                .replace(/\\/g, '/')
             : undefined,
         sessionLogFileSizeBytes: actualStats.size,
       };
@@ -516,13 +581,17 @@ export class FileSystemSessionStorage implements SessionStorage {
         fileMeta: {
           size: actualStats.size,
           mtimeMs: actualStats.mtimeMs,
-          transcriptPath: this.stateDir && filePath.startsWith(this.stateDir)
-            ? filePath.slice(this.stateDir.length + 1)
-            : filePath,
+          transcriptPath:
+            this.stateDir && filePath.startsWith(this.stateDir)
+              ? filePath.slice(this.stateDir.length + 1)
+              : filePath,
           sessionLogAbsolutePath: filePath,
-          sessionsIndexRelativePath: this.stateDir && agent
-            ? path.join('agents', agent, 'sessions', 'sessions.json').replace(/\\/g, '/')
-            : '',
+          sessionsIndexRelativePath:
+            this.stateDir && agent
+              ? path
+                  .join('agents', agent, 'sessions', 'sessions.json')
+                  .replace(/\\/g, '/')
+              : '',
         },
       };
     } catch (error) {
@@ -534,23 +603,40 @@ export class FileSystemSessionStorage implements SessionStorage {
   /**
    * 解析 token usage
    */
-  private parseTokenUsage(val: unknown): { input: number; output: number; total: number; limit?: number; utilization?: number } | undefined {
+  private parseTokenUsage(val: unknown):
+    | {
+        input: number;
+        output: number;
+        total: number;
+        limit?: number;
+        utilization?: number;
+      }
+    | undefined {
     if (!val || typeof val !== 'object') return undefined;
     const o = val as Record<string, unknown>;
-    if (typeof o.input !== 'number' || typeof o.output !== 'number' || typeof o.total !== 'number') return undefined;
+    if (
+      typeof o.input !== 'number' ||
+      typeof o.output !== 'number' ||
+      typeof o.total !== 'number'
+    )
+      return undefined;
     return {
       input: o.input,
       output: o.output,
       total: o.total,
       limit: typeof o.limit === 'number' ? o.limit : undefined,
-      utilization: typeof o.utilization === 'number' ? o.utilization : undefined,
+      utilization:
+        typeof o.utilization === 'number' ? o.utilization : undefined,
     };
   }
 
   /**
    * 推断会话状态
    */
-  private inferSessionStatus(lastMessage: any, mtimeMs: number): 'active' | 'idle' | 'completed' | 'failed' {
+  private inferSessionStatus(
+    lastMessage: any,
+    mtimeMs: number,
+  ): 'active' | 'idle' | 'completed' | 'failed' {
     const now = Date.now();
     const fiveMinutesAgo = now - 5 * 60 * 1000;
 
@@ -573,29 +659,37 @@ export class FileSystemSessionStorage implements SessionStorage {
       /你好 | 有什么可以帮 | 有什么需要 | 需要我帮忙 | 需要帮助/,
       /hello|how can I help|what can I do for you|need help/i,
     ];
-    
+
     for (let i = 1; i < Math.min(lines.length, 20); i++) {
       try {
-        const entry = JSON.parse(lines[i]) as { type?: string; message?: { role?: string; content?: unknown } };
-        if (entry?.type !== 'message' || entry?.message?.role !== 'assistant') continue;
-        
+        const entry = JSON.parse(lines[i]) as {
+          type?: string;
+          message?: { role?: string; content?: unknown };
+        };
+        if (entry?.type !== 'message' || entry?.message?.role !== 'assistant')
+          continue;
+
         const content = entry.message?.content;
         let text = '';
         if (typeof content === 'string') {
           text = content;
         } else if (Array.isArray(content)) {
-          for (const item of content as Array<{ type?: string; text?: string }>) {
-            if (item?.type === 'text' && typeof item.text === 'string') text += item.text;
+          for (const item of content as Array<{
+            type?: string;
+            text?: string;
+          }>) {
+            if (item?.type === 'text' && typeof item.text === 'string')
+              text += item.text;
           }
         }
-        
+
         if (text.trim().length < 5) continue;
         return GREETING_PATTERNS.some((re) => re.test(text));
       } catch {
         /* ignore */
       }
     }
-    
+
     return false;
   }
 

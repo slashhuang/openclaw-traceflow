@@ -28,7 +28,9 @@ export class ActionsService {
     }
   }
 
-  async killSession(sessionId: string): Promise<{ success: boolean; message: string }> {
+  async killSession(
+    sessionId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const result = await this.openclawService.killSession(sessionId);
     if (result) {
       return { success: true, message: `会话 ${sessionId} 已终止` };
@@ -36,7 +38,9 @@ export class ActionsService {
     return { success: false, message: '终止会话失败' };
   }
 
-  async updateConcurrency(maxConcurrent: number): Promise<{ success: boolean; message: string }> {
+  async updateConcurrency(
+    maxConcurrent: number,
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const result = await this.openclawService.updateConfig({
         sessions: { maxConcurrent },

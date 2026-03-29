@@ -63,7 +63,10 @@ export class SetupController {
     const connectionData =
       connectionResult.status === 'fulfilled'
         ? connectionResult.value
-        : { connected: false, error: connectionResult.reason?.message || 'unknown error' };
+        : {
+            connected: false,
+            error: connectionResult.reason?.message || 'unknown error',
+          };
     const pathsData =
       ocPaths.status === 'fulfilled'
         ? ocPaths.value
@@ -142,31 +145,43 @@ export class SetupController {
     },
   ): Promise<{ connected: boolean; message: string; error?: string }> {
     const cfg = this.configService.getConfig();
-    const url = body.openclawGatewayUrl || body.gatewayUrl || cfg.openclawGatewayUrl;
+    const url =
+      body.openclawGatewayUrl || body.gatewayUrl || cfg.openclawGatewayUrl;
     const tempConfig = {
       ...cfg,
       openclawGatewayUrl: url,
-      openclawGatewayToken: body.openclawGatewayToken ?? cfg.openclawGatewayToken,
-      openclawGatewayPassword: body.openclawGatewayPassword ?? cfg.openclawGatewayPassword,
+      openclawGatewayToken:
+        body.openclawGatewayToken ?? cfg.openclawGatewayToken,
+      openclawGatewayPassword:
+        body.openclawGatewayPassword ?? cfg.openclawGatewayPassword,
     };
 
     const mockConfigService = { getConfig: () => tempConfig };
-    const mockGatewayConnection = new GatewayConnectionService(mockConfigService as ConfigService);
-    const testService = new OpenClawService(mockConfigService as any, mockGatewayConnection);
+    const mockGatewayConnection = new GatewayConnectionService(
+      mockConfigService as ConfigService,
+    );
+    const testService = new OpenClawService(
+      mockConfigService as any,
+      mockGatewayConnection,
+    );
     const result = await testService.checkConnection();
 
     if (result.connected) {
       this.configService.updateConfig({
         openclawGatewayUrl: url,
-        openclawGatewayToken: body.openclawGatewayToken ?? cfg.openclawGatewayToken,
-        openclawGatewayPassword: body.openclawGatewayPassword ?? cfg.openclawGatewayPassword,
+        openclawGatewayToken:
+          body.openclawGatewayToken ?? cfg.openclawGatewayToken,
+        openclawGatewayPassword:
+          body.openclawGatewayPassword ?? cfg.openclawGatewayPassword,
       });
       this.openclawService.clearPathsCache();
     }
 
     return {
       connected: result.connected,
-      message: result.connected ? '连接成功，配置已保存' : `连接失败：${result.error}`,
+      message: result.connected
+        ? '连接成功，配置已保存'
+        : `连接失败：${result.error}`,
       error: result.error,
     };
   }

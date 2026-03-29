@@ -9,7 +9,9 @@ export interface LatencyMetrics {
 
 @Injectable()
 export class MetricsService {
-  async getLatencyMetrics(timeRangeMs: number = 3600000): Promise<LatencyMetrics> {
+  async getLatencyMetrics(
+    timeRangeMs: number = 3600000,
+  ): Promise<LatencyMetrics> {
     return { p50: 0, p95: 0, p99: 0, count: 0 };
   }
 }

@@ -1,6 +1,6 @@
 /**
  * 流式 JSONL 读取器
- * 
+ *
  * 设计目标：
  * 1. 避免全量读取大文件导致内存暴涨
  * 2. 支持首尾分片读取（head_tail 模式）
@@ -43,7 +43,7 @@ export interface ScanOptions {
 
 /**
  * 流式读取 JSONL 文件的首尾分片
- * 
+ *
  * @param filePath - JSONL 文件路径
  * @param options - 读取选项
  */
@@ -69,13 +69,15 @@ export async function readJsonlHeadTail(
     const headText = headBuffer.toString('utf-8', 0, headRead.bytesRead);
     const allHeadLines = headText.split('\n').filter((l) => l.trim());
     const head = allHeadLines.slice(0, headLines);
-    const headObjects = head.map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
+    const headObjects = head
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
 
     // 2. 估算平均行大小和总行数
     const avgLineSize = headRead.bytesRead / allHeadLines.length || 400;
@@ -85,13 +87,15 @@ export async function readJsonlHeadTail(
     if (estimatedTotalLines <= headLines + tailLines) {
       const fullText = await fs.promises.readFile(filePath, 'utf-8');
       const fullLines = fullText.split('\n').filter((l) => l.trim());
-      const fullObjects = fullLines.map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      }).filter(Boolean);
+      const fullObjects = fullLines
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
 
       return {
         headLines: fullLines,
@@ -107,10 +111,10 @@ export async function readJsonlHeadTail(
     let extraLines: string[] = [];
     let extraObjects: any[] = [];
     let scanForUserResult: { lines: string[]; objects: any[] } | null = null;
-    
+
     if (scanForUser > 0 && headLines < scanForUser) {
-      let foundUser = headObjects.some((obj) => 
-        obj?.user || obj?.message?.sender || obj?.message?.senderLabel
+      const foundUser = headObjects.some(
+        (obj) => obj?.user || obj?.message?.sender || obj?.message?.senderLabel,
       );
 
       if (!foundUser) {
@@ -118,40 +122,61 @@ export async function readJsonlHeadTail(
         const scanStart = headRead.bytesRead;
         const scanSize = (scanForUser - headLines) * avgLineSize * 2;
         const scanBuffer = Buffer.alloc(Math.min(scanSize, 512 * 1024));
-        const scanRead = await fd.read(scanBuffer, 0, scanBuffer.length, scanStart);
+        const scanRead = await fd.read(
+          scanBuffer,
+          0,
+          scanBuffer.length,
+          scanStart,
+        );
         const scanText = scanBuffer.toString('utf-8', 0, scanRead.bytesRead);
         extraLines = scanText.split('\n').filter((l) => l.trim());
-        extraObjects = extraLines.map((line) => {
-          try {
-            return JSON.parse(line);
-          } catch {
-            return null;
-          }
-        }).filter(Boolean);
+        extraObjects = extraLines
+          .map((line) => {
+            try {
+              return JSON.parse(line);
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
 
         scanForUserResult = { lines: extraLines, objects: extraObjects };
       }
     }
 
     // 5. 读取尾部（seek 到文件末尾）
-    const actualTailBufferSize = Math.min(tailBufferSize, Math.floor(stats.size / 4));
+    const actualTailBufferSize = Math.min(
+      tailBufferSize,
+      Math.floor(stats.size / 4),
+    );
     const tailBuffer = Buffer.alloc(actualTailBufferSize);
     const tailStart = Math.max(0, stats.size - actualTailBufferSize);
-    const tailRead = await fd.read(tailBuffer, 0, actualTailBufferSize, tailStart);
+    const tailRead = await fd.read(
+      tailBuffer,
+      0,
+      actualTailBufferSize,
+      tailStart,
+    );
     const tailText = tailBuffer.toString('utf-8', 0, tailRead.bytesRead);
     const allTailLines = tailText.split('\n').filter((l) => l.trim());
     const tail = allTailLines.slice(-tailLines);
-    const tailObjects = tail.map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
+    const tailObjects = tail
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
 
     // 6. 合并 scanForUser 结果到头部
-    const finalHeadLines = scanForUserResult ? [...head, ...scanForUserResult.lines].slice(0, scanForUser) : head;
-    const finalHeadObjects = scanForUserResult ? [...headObjects, ...scanForUserResult.objects].slice(0, scanForUser) : headObjects;
+    const finalHeadLines = scanForUserResult
+      ? [...head, ...scanForUserResult.lines].slice(0, scanForUser)
+      : head;
+    const finalHeadObjects = scanForUserResult
+      ? [...headObjects, ...scanForUserResult.objects].slice(0, scanForUser)
+      : headObjects;
 
     return {
       headLines: finalHeadLines,
@@ -224,9 +249,9 @@ export async function scanJsonlForMetadata(
       const readSize = Math.min(chunkSize, stats.size - offset);
       const readBuffer = Buffer.alloc(readSize);
       const read = await fd.read(readBuffer, 0, readSize, offset);
-      
+
       buffer += readBuffer.toString('utf-8', 0, read.bytesRead);
-      
+
       const lines = buffer.split('\n');
       buffer = lines.pop() || ''; // 保留最后一行（可能不完整）
 
@@ -264,12 +289,18 @@ export async function scanJsonlForMetadata(
 
           // 提取 cost
           const cost = usage?.cost;
-          if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
+          if (
+            cost &&
+            typeof cost === 'object' &&
+            typeof cost.total === 'number'
+          ) {
             result.hasCostField = true;
             sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
             sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
-            sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
-            sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
+            sumCostCacheRead +=
+              typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
+            sumCostCacheWrite +=
+              typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
             sumCostTotal += cost.total;
           }
         } catch {
@@ -284,7 +315,7 @@ export async function scanJsonlForMetadata(
 
     result.messageCountCapped = linesProcessed >= maxLines;
     result.distinctSenders = Array.from(senderSet);
-    
+
     if (result.hasCostField) {
       result.usageCost = {
         input: sumCostInput,

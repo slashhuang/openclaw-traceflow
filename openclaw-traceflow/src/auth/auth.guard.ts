@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 
 @Injectable()
@@ -14,7 +19,8 @@ export class AuthGuard implements CanActivate {
     // local-only 模式：只允许本机访问
     if (config.accessMode === 'local-only') {
       const ip = request.ip || request.connection?.remoteAddress || '';
-      const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+      const isLocal =
+        ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 
       if (!isLocal) {
         this.logger.warn(`Blocked non-local access from ${ip}`);
@@ -26,7 +32,9 @@ export class AuthGuard implements CanActivate {
     // token 模式：验证 Access Token
     if (config.accessMode === 'token') {
       const authHeader = request.headers.authorization;
-      const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+      const token = authHeader?.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : undefined;
 
       if (!token || !this.configService.validateToken(token)) {
         this.logger.warn(`Blocked unauthorized access from ${request.ip}`);

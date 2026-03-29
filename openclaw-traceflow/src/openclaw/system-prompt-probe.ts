@@ -73,7 +73,11 @@ export type SystemPromptProbeResult = {
   /** Skills 快照（来自 sessions.json skillsSnapshot，用于 /system-prompt 展示） */
   skillsSnapshot?: {
     prompt?: string;
-    skills?: Array<{ name: string; primaryEnv?: string; requiredEnv?: string[] }>;
+    skills?: Array<{
+      name: string;
+      primaryEnv?: string;
+      requiredEnv?: string[];
+    }>;
   };
   /** Session 元数据（来自 transcript 首行） */
   sessionMeta?: Record<string, unknown>;
@@ -89,7 +93,8 @@ function charsToTok(c: number): number {
 
 const PROJECT_CTX_START = '\n# Project Context\n';
 const PROJECT_CTX_END = '\n## Silent Replies\n';
-const TOOL_LIST_START = 'Tool names are case-sensitive. Call tools exactly as listed.\n';
+const TOOL_LIST_START =
+  'Tool names are case-sensitive. Call tools exactly as listed.\n';
 const TOOL_LIST_END =
   '\nTOOLS.md does not control tool availability; it is user guidance for how to use external tools.';
 
@@ -118,7 +123,8 @@ export function parseSystemPromptSections(
 ): SystemPromptParsedSections {
   const sp = fullText || '';
   const i0 = sp.indexOf(PROJECT_CTX_START);
-  const i1 = i0 === -1 ? -1 : sp.indexOf(PROJECT_CTX_END, i0 + PROJECT_CTX_START.length);
+  const i1 =
+    i0 === -1 ? -1 : sp.indexOf(PROJECT_CTX_END, i0 + PROJECT_CTX_START.length);
 
   let coreText = sp;
   let projectContextText = '';
@@ -136,7 +142,8 @@ export function parseSystemPromptSections(
   const skillBlocks: Array<{ name: string; content: string }> = [];
   for (const m of sp.matchAll(/<skill>[\s\S]*?<\/skill>/gi)) {
     const block = m[0] ?? '';
-    const name = block.match(/<name>\s*([^<]+?)\s*<\/name>/i)?.[1]?.trim() || '(unknown)';
+    const name =
+      block.match(/<name>\s*([^<]+?)\s*<\/name>/i)?.[1]?.trim() || '(unknown)';
     skillBlocks.push({ name, content: block });
   }
 
@@ -149,7 +156,9 @@ export function parseSystemPromptSections(
   };
 }
 
-export function buildBreakdownFromReport(report: Record<string, unknown>): SystemPromptBreakdownItem[] {
+export function buildBreakdownFromReport(
+  report: Record<string, unknown>,
+): SystemPromptBreakdownItem[] {
   const sp = (report.systemPrompt as Record<string, number>) || {};
   const nonP = Number(sp.nonProjectContextChars) || 0;
   const proj = Number(sp.projectContextChars) || 0;
@@ -162,7 +171,9 @@ export function buildBreakdownFromReport(report: Record<string, unknown>): Syste
   const tools = (report.tools as Record<string, unknown>) || {};
   const toolList = Number(tools.listChars) || 0;
   const toolSchema = Number(tools.schemaChars) || 0;
-  const entries = Array.isArray(tools.entries) ? (tools.entries as unknown[]).length : 0;
+  const entries = Array.isArray(tools.entries)
+    ? (tools.entries as unknown[]).length
+    : 0;
 
   const rows = [
     { id: 'core', label: '核心 System（非 Workspace）', chars: nonP },
@@ -189,19 +200,26 @@ export function buildMarkdownFallbackFromReport(
   const breakdown = buildBreakdownFromReport(report);
   const totalTok = breakdown.reduce((s, x) => s + x.tokens, 0);
   const src = String(report.source || '?');
-  const at = report.generatedAt ? new Date(Number(report.generatedAt)).toLocaleString('zh-CN') : '?';
+  const at = report.generatedAt
+    ? new Date(Number(report.generatedAt)).toLocaleString('zh-CN')
+    : '?';
   const model = report.model ? `**模型**: ${report.model}\n\n` : '';
   const ws = Array.isArray(report.injectedWorkspaceFiles)
     ? (report.injectedWorkspaceFiles as Array<Record<string, unknown>>)
     : [];
-  const skills = ((report.skills as Record<string, unknown>)?.entries as Array<{ name: string; blockChars: number }>) || [];
-  const toolsEntries =
-    (report.tools as Record<string, unknown>)?.entries as Array<{
+  const skills =
+    ((report.skills as Record<string, unknown>)?.entries as Array<{
       name: string;
-      summaryChars?: number;
-      schemaChars?: number;
-      propertiesCount?: number | null;
-    }> | undefined;
+      blockChars: number;
+    }>) || [];
+  const toolsEntries = (report.tools as Record<string, unknown>)?.entries as
+    | Array<{
+        name: string;
+        summaryChars?: number;
+        schemaChars?: number;
+        propertiesCount?: number | null;
+      }>
+    | undefined;
 
   const toolsRows = Array.isArray(toolsEntries)
     ? toolsEntries
@@ -236,7 +254,9 @@ export function buildMarkdownFallbackFromReport(
     '',
     '| 区块 | 字符 | ~Token | 占比 |',
     '|------|------|--------|------|',
-    ...breakdown.map((b) => `| ${b.label} | ${b.chars} | ${b.tokens} | ${b.percent}% |`),
+    ...breakdown.map(
+      (b) => `| ${b.label} | ${b.chars} | ${b.tokens} | ${b.percent}% |`,
+    ),
     '',
     `**合计约 ${totalTok.toLocaleString()} tokens**`,
     '',

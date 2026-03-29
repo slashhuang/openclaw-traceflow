@@ -45,7 +45,7 @@ export async function fetchStatusOverview(params: {
 }): Promise<GatewayRpcResult<StatusOverviewResult>> {
   const startTime = Date.now();
   const requestId = `rpc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  
+
   rpcLogger.debug(
     JSON.stringify({
       timestamp: new Date().toISOString(),
@@ -102,7 +102,8 @@ export async function fetchStatusOverview(params: {
 
         if (msg.type === 'event' && msg.event === 'connect.challenge') {
           const nonce =
-            typeof (msg.payload as { nonce?: string } | undefined)?.nonce === 'string'
+            typeof (msg.payload as { nonce?: string } | undefined)?.nonce ===
+            'string'
               ? String((msg.payload as { nonce: string }).nonce).trim()
               : '';
           if (!nonce) {
@@ -174,7 +175,10 @@ export async function fetchStatusOverview(params: {
             return;
           }
           const payload = msg.payload as Record<string, unknown>;
-          const overview = buildStatusOverviewFromHealth(payload, gatewayVersion);
+          const overview = buildStatusOverviewFromHealth(
+            payload,
+            gatewayVersion,
+          );
           done({ ok: true, payload: overview });
           return;
         }
@@ -207,7 +211,7 @@ export async function callGatewayRpc<T = unknown>(params: {
 }): Promise<GatewayRpcResult<T>> {
   const startTime = Date.now();
   const requestId = `rpc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  
+
   rpcLogger.debug(
     JSON.stringify({
       timestamp: new Date().toISOString(),
@@ -240,25 +244,22 @@ export async function callGatewayRpc<T = unknown>(params: {
       resolve(r);
     };
 
-    const timer = setTimeout(
-      () => {
-        const durationMs = Date.now() - startTime;
-        rpcLogger.warn(
-          JSON.stringify({
-            timestamp: new Date().toISOString(),
-            level: 'WARN',
-            module: 'GatewayRpc',
-            operation: 'callGatewayRpc_timeout',
-            requestId,
-            method: params.method,
-            durationMs,
-            timeoutMs,
-          }),
-        );
-        done({ ok: false, error: `WebSocket timeout (${timeoutMs}ms)` });
-      },
-      timeoutMs,
-    );
+    const timer = setTimeout(() => {
+      const durationMs = Date.now() - startTime;
+      rpcLogger.warn(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'WARN',
+          module: 'GatewayRpc',
+          operation: 'callGatewayRpc_timeout',
+          requestId,
+          method: params.method,
+          durationMs,
+          timeoutMs,
+        }),
+      );
+      done({ ok: false, error: `WebSocket timeout (${timeoutMs}ms)` });
+    }, timeoutMs);
 
     let connectReqId: string | null = null;
     let methodReqId: string | null = null;
@@ -277,7 +278,8 @@ export async function callGatewayRpc<T = unknown>(params: {
 
         if (msg.type === 'event' && msg.event === 'connect.challenge') {
           const nonce =
-            typeof (msg.payload as { nonce?: string } | undefined)?.nonce === 'string'
+            typeof (msg.payload as { nonce?: string } | undefined)?.nonce ===
+            'string'
               ? String((msg.payload as { nonce: string }).nonce).trim()
               : '';
           if (!nonce) {
@@ -337,7 +339,7 @@ export async function callGatewayRpc<T = unknown>(params: {
 
         if (msg.type === 'res' && msg.id === methodReqId) {
           const durationMs = Date.now() - startTime;
-          
+
           if (!msg.ok) {
             const err = msg.error as { message?: string } | undefined;
             rpcLogger.error(
@@ -358,7 +360,7 @@ export async function callGatewayRpc<T = unknown>(params: {
             });
             return;
           }
-          
+
           // 成功响应
           const payloadSize = JSON.stringify(msg.payload).length;
           rpcLogger.debug(
@@ -373,14 +375,14 @@ export async function callGatewayRpc<T = unknown>(params: {
               payloadSize,
             }),
           );
-          
+
           // 慢 RPC 警告
           if (durationMs > 1000) {
             rpcLogger.warn(
               `Slow RPC: ${params.method} took ${durationMs}ms, payload: ${payloadSize}bytes`,
             );
           }
-          
+
           done({
             ok: true,
             payload: msg.payload as T,
@@ -487,7 +489,8 @@ export async function runGatewayRpcSequence(params: {
 
         if (msg.type === 'event' && msg.event === 'connect.challenge') {
           const nonce =
-            typeof (msg.payload as { nonce?: string } | undefined)?.nonce === 'string'
+            typeof (msg.payload as { nonce?: string } | undefined)?.nonce ===
+            'string'
               ? String((msg.payload as { nonce: string }).nonce).trim()
               : '';
           if (!nonce) {
