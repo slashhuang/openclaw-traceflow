@@ -58,8 +58,8 @@ export interface SessionEvaluation {
     promptVersion: string;
     sessionSnapshot: {
       turnCount: number;
-      startTime: string;
-      endTime: string;
+      startTime: string | number;
+      endTime: string | number;
       model?: string;
     };
   };

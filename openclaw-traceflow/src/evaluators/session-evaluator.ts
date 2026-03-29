@@ -14,8 +14,10 @@ import {
   SESSION_EVALUATION_PROMPT_V1,
   buildSessionEvaluationContext,
 } from './evaluation-prompt';
-import { sessionJsonlScan } from '../openclaw/session-jsonl-scan';
+import { scanSessionJsonlLines, SessionJsonlScanResult } from '../openclaw/session-jsonl-scan';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 interface SessionMetrics {
   turnCount: number;
@@ -26,9 +28,25 @@ interface SessionMetrics {
   totalOutputTokens: number;
   retryCount: number;
   tokenEfficiencyRatio: number;
-  startTime: string;
-  endTime: string;
+  startTime: string | number;
+  endTime: string | number;
   model?: string;
+}
+
+interface SessionJsonlMessageWithMetadata {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string | number;
+  tokenCount?: number;
+  sender?: string;
+  metadata?: {
+    latency_ms?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    retry_count?: number;
+    error?: string;
+    model?: string;
+  };
 }
 
 interface LLMAnalysisResult {
@@ -71,9 +89,14 @@ export class SessionEvaluator {
 
   // 扫描会话并提取指标
   private async extractMetrics(sessionId: string): Promise<SessionMetrics> {
-    const session = await sessionJsonlScan(sessionId);
+    // 读取会话 JSONL 文件
+    const sessionsDir = process.env.SESSIONS_DIR || path.join(process.cwd(), 'sessions');
+    const sessionFile = path.join(sessionsDir, `${sessionId}.jsonl`);
+    const content = await fs.readFile(sessionFile, 'utf-8');
+    const lines = content.split('\n').filter(line => line.trim());
+    const session: SessionJsonlScanResult = scanSessionJsonlLines(lines);
 
-    const messages = session.messages;
+    const messages = session.messages as SessionJsonlMessageWithMetadata[];
     const assistantMessages = messages.filter((m) => m.role === 'assistant');
 
     // 计算指标
@@ -219,7 +242,7 @@ export class SessionEvaluator {
     const prompt = SESSION_EVALUATION_PROMPT_V1.replace('{context}', context);
 
     // 调用 Gateway LLM API
-    const response = await this.gatewayConnection.call('llm.generate', {
+    const result = await this.gatewayConnection.request('llm.generate', {
       prompt,
       model: 'bailian/qwen3.5-plus',
       temperature: 0.1,
@@ -227,7 +250,7 @@ export class SessionEvaluator {
     });
 
     // 解析 LLM 响应
-    return this.parseLLMResponse(response.content as string);
+    return this.parseLLMResponse((result as any).content || '');
   }
 
   // 解析 LLM 输出（带容错）
