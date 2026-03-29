@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { useIntl } from 'react-intl';
 import { Card, Progress, Typography, Tag, Space, Divider } from 'antd';
 import {
   CheckCircleOutlined,
@@ -48,6 +49,7 @@ interface EvaluationResultProps {
     evaluatorModel: string;
     metadata: {
       promptVersion: string;
+      promptTemplateSource?: 'builtin' | 'override';
     };
   };
 }
@@ -55,6 +57,7 @@ interface EvaluationResultProps {
 export const EvaluationResult: React.FC<EvaluationResultProps> = ({
   evaluation,
 }) => {
+  const intl = useIntl();
   const getGradeColor = (grade: string) => {
     switch (grade) {
       case 'S':
@@ -81,14 +84,22 @@ export const EvaluationResult: React.FC<EvaluationResultProps> = ({
   };
 
   return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+    <Card styles={{ body: { paddingBlock: 16 } }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '16px 20px',
+          flexWrap: 'wrap',
+        }}
+      >
         {/* 综合评分 */}
-        <div style={{ textAlign: 'center', minWidth: '100px' }}>
+        <div style={{ textAlign: 'center', minWidth: '88px', flexShrink: 0 }}>
           <div
             style={{
-              fontSize: '48px',
+              fontSize: 'clamp(32px, 8vw, 48px)',
               fontWeight: 'bold',
+              lineHeight: 1.1,
               color: getGradeColor(evaluation.metrics.overall.grade),
             }}
           >
@@ -96,7 +107,7 @@ export const EvaluationResult: React.FC<EvaluationResultProps> = ({
           </div>
           <div
             style={{
-              fontSize: '24px',
+              fontSize: 'clamp(16px, 4vw, 24px)',
               color: getGradeColor(evaluation.metrics.overall.grade),
             }}
           >
@@ -104,10 +115,10 @@ export const EvaluationResult: React.FC<EvaluationResultProps> = ({
           </div>
         </div>
 
-        <Divider type="vertical" style={{ height: '100px' }} />
+        <Divider type="vertical" style={{ height: 'auto', minHeight: 88, alignSelf: 'stretch' }} />
 
         {/* 详细指标 */}
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             <div>
               <Space>
@@ -198,16 +209,39 @@ export const EvaluationResult: React.FC<EvaluationResultProps> = ({
         )}
       </div>
 
-      {/* 评估元数据 */}
-      <Divider />
-      <div style={{ marginTop: '20px', fontSize: '12px', color: '#666' }}>
-        <Space split={<Divider type="vertical" />}>
-          <span>
-            评估时间：{new Date(evaluation.evaluatedAt).toLocaleString()}
-          </span>
-          <span>评估模型：{evaluation.evaluatorModel}</span>
-          <span>Prompt 版本：{evaluation.metadata.promptVersion}</span>
-        </Space>
+      {/* 评估元数据：窄栏下逐行展示，避免竖线分列导致标签被拆字 */}
+      <Divider style={{ margin: '16px 0' }} />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          fontSize: 12,
+        }}
+      >
+        <div style={{ lineHeight: 1.55 }}>
+          <Text type="secondary">评估时间：</Text>
+          <Text style={{ wordBreak: 'break-word' }}>
+            {new Date(evaluation.evaluatedAt).toLocaleString()}
+          </Text>
+        </div>
+        <div style={{ lineHeight: 1.55 }}>
+          <Text type="secondary">评估模型：</Text>
+          <Text style={{ wordBreak: 'break-all' }}>{evaluation.evaluatorModel}</Text>
+        </div>
+        <div style={{ lineHeight: 1.55 }}>
+          <Text type="secondary">Prompt 版本：</Text>
+          <Text style={{ wordBreak: 'break-word' }}>{evaluation.metadata.promptVersion}</Text>
+        </div>
+        {evaluation.metadata.promptTemplateSource && (
+          <div style={{ lineHeight: 1.55 }}>
+            <Text style={{ wordBreak: 'break-word' }}>
+              {evaluation.metadata.promptTemplateSource === 'override'
+                ? intl.formatMessage({ id: 'evaluationResult.promptSourceOverride' })
+                : intl.formatMessage({ id: 'evaluationResult.promptSourceBuiltin' })}
+            </Text>
+          </div>
+        )}
       </div>
     </Card>
   );

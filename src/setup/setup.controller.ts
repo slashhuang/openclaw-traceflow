@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards, Logger } from '@nestjs/common';
-import { ConfigService } from '../config/config.service';
+import { ConfigService, type Config } from '../config/config.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -25,6 +25,24 @@ export interface SetupResponse {
 @UseGuards(AuthGuard)
 export class SetupController {
   private readonly logger = new Logger(SetupController.name);
+  /** 合并并发 GET /status，避免引导页/多标签同时打两次 Gateway */
+  private setupStatusInFlight: Promise<{
+    isSetup: boolean;
+    config: any;
+    gatewayConnected: boolean;
+    gatewayError?: string;
+  }> | null = null;
+  private setupStatusCache: {
+    at: number;
+    payload: {
+      isSetup: boolean;
+      config: any;
+      gatewayConnected: boolean;
+      gatewayError?: string;
+    };
+  } | null = null;
+  private static readonly SETUP_STATUS_CACHE_MS = 2500;
+
   constructor(
     private configService: ConfigService,
     private openclawService: OpenClawService,
@@ -41,47 +59,42 @@ export class SetupController {
     gatewayConnected: boolean;
     gatewayError?: string;
   }> {
+    const now = Date.now();
+    if (
+      this.setupStatusCache &&
+      now - this.setupStatusCache.at < SetupController.SETUP_STATUS_CACHE_MS
+    ) {
+      return this.setupStatusCache.payload;
+    }
+    if (this.setupStatusInFlight) {
+      return this.setupStatusInFlight;
+    }
+
+    this.setupStatusInFlight = this.computeSetupStatus().finally(() => {
+      this.setupStatusInFlight = null;
+    });
+    const payload = await this.setupStatusInFlight;
+    this.setupStatusCache = { at: Date.now(), payload };
+    return payload;
+  }
+
+  private async computeSetupStatus(): Promise<{
+    isSetup: boolean;
+    config: any;
+    gatewayConnected: boolean;
+    gatewayError?: string;
+  }> {
     const startTime = Date.now();
-    this.logger.debug('[getSetupStatus] starting status check...');
+    this.logger.debug('[getSetupStatus] starting status check (single gateway pass)...');
 
     const config = this.configService.getConfig();
 
-    // 并行执行两个独立检查，避免串行累加超时
-    const [connectionResult, ocPaths] = await Promise.allSettled([
-      this.withTimeout(
-        this.openclawService.checkConnection(),
-        8000,
-        'checkConnection timeout',
-      ),
-      this.withTimeout(
-        this.openclawService.getResolvedPaths(),
-        8000,
-        'getResolvedPaths timeout',
-      ),
-    ]);
-
-    const connectionData =
-      connectionResult.status === 'fulfilled'
-        ? connectionResult.value
-        : {
-            connected: false,
-            error: connectionResult.reason?.message || 'unknown error',
-          };
-    const pathsData =
-      ocPaths.status === 'fulfilled'
-        ? ocPaths.value
-        : {
-            stateDir: null,
-            configPath: null,
-            workspaceDir: null,
-            source: { stateDir: 'unknown' },
-            gatewayHint: null,
-            cliHint: 'path resolution failed',
-          };
+    const { connected, gatewayError, paths: pathsData, totalTimeMs } =
+      await this.openclawService.getSetupStatusSnapshot();
 
     const totalTime = Date.now() - startTime;
     this.logger.debug(
-      `[getSetupStatus] completed in ${totalTime}ms | gatewayConnected=${connectionData.connected} | stateDir=${pathsData.stateDir ?? 'n/a'}`,
+      `[getSetupStatus] completed in ${totalTime}ms | gatewayConnected=${connected} | stateDir=${pathsData.stateDir ?? 'n/a'}`,
     );
 
     return {
@@ -106,28 +119,12 @@ export class SetupController {
         },
         performance: {
           totalTimeMs: totalTime,
-          connectionCheckMs: totalTime, // 并行执行，无法单独统计
+          connectionCheckMs: totalTimeMs,
         },
       },
-      gatewayConnected: connectionData.connected,
-      gatewayError: connectionData.error,
+      gatewayConnected: connected,
+      gatewayError,
     };
-  }
-
-  /**
-   * 带超时控制的 Promise 包装器
-   */
-  private async withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    timeoutMsg: string,
-  ): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(timeoutMsg)), timeoutMs),
-      ),
-    ]);
   }
 
   /**
@@ -156,14 +153,12 @@ export class SetupController {
         body.openclawGatewayPassword ?? cfg.openclawGatewayPassword,
     };
 
-    const mockConfigService = { getConfig: () => tempConfig };
-    const mockGatewayConnection = new GatewayConnectionService(
-      mockConfigService as ConfigService,
-    );
-    const testService = new OpenClawService(
-      mockConfigService as any,
-      mockGatewayConnection,
-    );
+    /** 仅实现 getConfig，供单次连接探测；需断言为 ConfigService 以满足构造签名（Nest 运行时仍注入真实 ConfigService） */
+    const mockConfigService = {
+      getConfig: (): Config => tempConfig as Config,
+    } as unknown as ConfigService;
+    const mockGatewayConnection = new GatewayConnectionService(mockConfigService);
+    const testService = new OpenClawService(mockConfigService, mockGatewayConnection);
     const result = await testService.checkConnection();
 
     if (result.connected) {

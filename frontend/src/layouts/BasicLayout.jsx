@@ -27,11 +27,14 @@ export default function BasicLayout() {
   const { locale, setLocale, themeMode, setThemeMode, isDark } = useLocaleTheme();
   const [health, setHealth] = useState(null);
   const didNotifyHealthErrorRef = useRef(false);
+  const healthFetchInFlightRef = useRef(false);
   const shouldPollHeaderHealth = location.pathname !== '/';
 
   useEffect(() => {
     if (!shouldPollHeaderHealth) return undefined;
     const fetchHealth = async () => {
+      if (healthFetchInFlightRef.current) return;
+      healthFetchInFlightRef.current = true;
       try {
         const data = await healthApi.getHealth();
         setHealth(data);
@@ -41,6 +44,8 @@ export default function BasicLayout() {
           didNotifyHealthErrorRef.current = true;
           message.error(intl.formatMessage({ id: 'gateway.healthError' }));
         }
+      } finally {
+        healthFetchInFlightRef.current = false;
       }
     };
     fetchHealth();

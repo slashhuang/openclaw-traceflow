@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   OnModuleInit,
@@ -13,8 +15,10 @@ import { buildStatusOverviewFromHealth } from './gateway-overview-health';
 import { mergeGatewayOverviewFromSessionsStore } from './gateway-overview-sessions-store';
 import { type StatusOverviewResult } from './gateway-rpc';
 import { GatewayConnectionService } from './gateway-connection.service';
+import type { GatewayWsPathsResult } from './gateway-ws-paths';
 import {
   buildBreakdownFromReport,
+  CORE_BOOTSTRAP_FILENAMES,
   parseSystemPromptSections,
   type SystemPromptProbeResult,
   type WorkspaceFileContent,
@@ -286,6 +290,52 @@ type ArchivedResetFileCacheEntry = {
   usage: ArchivedResetUsage;
 };
 
+/** systemPromptReport 上的注入文件列表（与 Gateway report 对齐） */
+type InjectedWorkspaceFileRef = { path?: string; name?: string };
+
+function readInjectedWorkspaceFilesFromReport(
+  report: object,
+): InjectedWorkspaceFileRef[] | undefined {
+  const r = report as Record<string, unknown>;
+  const v = r['injectedWorkspaceFiles'];
+  if (!Array.isArray(v)) return undefined;
+  return v as InjectedWorkspaceFileRef[];
+}
+
+function readInjectedWorkspaceFilesFromChosenEntry(
+  entry: unknown,
+): InjectedWorkspaceFileRef[] | undefined {
+  if (entry === null || typeof entry !== 'object') return undefined;
+  const spr = (entry as Record<string, unknown>)['systemPromptReport'];
+  if (spr === null || typeof spr !== 'object') return undefined;
+  return readInjectedWorkspaceFilesFromReport(spr);
+}
+
+/**
+ * JSONL transcript 行中的 token usage：`message.usage` 优先，否则顶层 `usage`。
+ */
+function readTokenUsageFromTranscriptLine(
+  entry: Record<string, unknown>,
+): { input: number; output: number; total: number } | null {
+  let usageUnknown: unknown;
+  const msg = entry['message'];
+  if (msg !== null && typeof msg === 'object') {
+    usageUnknown = (msg as Record<string, unknown>)['usage'];
+  }
+  if (usageUnknown === undefined) {
+    usageUnknown = entry['usage'];
+  }
+  if (usageUnknown === null || typeof usageUnknown !== 'object') return null;
+  const u = usageUnknown as Record<string, unknown>;
+  const total = u['totalTokens'];
+  if (typeof total !== 'number') return null;
+  return {
+    input: typeof u['input'] === 'number' ? u['input'] : 0,
+    output: typeof u['output'] === 'number' ? u['output'] : 0,
+    total,
+  };
+}
+
 export interface OpenClawHealth {
   status: 'healthy' | 'degraded' | 'unhealthy';
   version: string;
@@ -298,6 +348,9 @@ export interface OpenClawHealth {
     enabled: boolean;
     lastCalledAt?: number;
   }>;
+  /** Gateway HTTP /health 可能返回（字段名因版本而异） */
+  pid?: number;
+  cpu?: number;
 }
 
 interface SessionFile {
@@ -593,45 +646,26 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         }
       | { ok: false; error: string };
     try {
-      result = await this.gatewayConnection.fetchRuntimePaths();
+      /** 与 HealthModule 的 checkConnection 预算对齐，避免 WS 握手挂起时拖住大量并发 HTTP */
+      result = await this.withTimeout(
+        this.gatewayConnection.fetchRuntimePaths(),
+        3000,
+        'checkConnection timeout',
+      );
     } catch (error: unknown) {
-      const errorMessage = (() => {
-        if (error && typeof error === 'object') {
-          const anyError = error as {
-            message?: unknown;
-            code?: unknown;
-            errors?: unknown;
-          };
-          if (typeof anyError.message === 'string' && anyError.message.trim()) {
-            return anyError.message.trim();
-          }
-          if (Array.isArray(anyError.errors) && anyError.errors.length > 0) {
-            const nested = anyError.errors.find(
-              (item) =>
-                !!item &&
-                typeof item === 'object' &&
-                typeof (item as { message?: unknown }).message === 'string' &&
-                ((item as { message: string }).message || '').trim().length > 0,
-            ) as { message?: string } | undefined;
-            if (nested?.message?.trim()) {
-              return nested.message.trim();
-            }
-          }
-          if (typeof anyError.code === 'string' && anyError.code.trim()) {
-            return anyError.code.trim();
-          }
-        }
-        if (error instanceof Error && error.message.trim()) {
-          return error.message.trim();
-        }
-        if (typeof error === 'string' && error.trim()) {
-          return error.trim();
-        }
-        return 'unknown error';
-      })();
+      if (
+        error instanceof Error &&
+        error.message === 'checkConnection timeout'
+      ) {
+        return {
+          connected: false,
+          error:
+            'Gateway 连接检查超时（请确认 Gateway 可达或稍后重试）',
+        };
+      }
       return {
         connected: false,
-        error: `Gateway 连接失败：${errorMessage}`,
+        error: this.formatGatewayFetchCatchError(error),
       };
     }
 
@@ -639,8 +673,118 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       return { connected: true };
     }
 
-    // Gateway 在未提供 token/password 时会返回 "device identity required"
-    // 提示用户配置并保存鉴权信息
+    const r = this.interpretGatewayFetchFailure(result, token, password);
+    return {
+      connected: r.connected,
+      error: r.gatewayError,
+    };
+  }
+
+  /**
+   * GET /api/setup/status 专用：只发起一次 Gateway connect（与 checkConnection 相同路径），
+   * 再基于 snapshot 做本地路径解析，避免与 getResolvedPaths 并行时双 WebSocket 打满 Gateway/超时 502。
+   */
+  async getSetupStatusSnapshot(): Promise<{
+    connected: boolean;
+    gatewayError?: string;
+    paths: OpenClawResolvedPaths;
+    totalTimeMs: number;
+  }> {
+    const start = Date.now();
+    const cfg = this.configService.getConfig();
+    const gatewayUrl = cfg.openclawGatewayUrl?.trim();
+    if (!gatewayUrl) {
+      const paths = await this.getResolvedPaths();
+      return {
+        connected: false,
+        gatewayError: 'Gateway URL 未配置',
+        paths,
+        totalTimeMs: Date.now() - start,
+      };
+    }
+
+    const token = cfg.openclawGatewayToken?.trim();
+    const password = cfg.openclawGatewayPassword?.trim();
+
+    try {
+      const result = await this.withTimeout(
+        this.gatewayConnection.fetchRuntimePaths(),
+        8000,
+        'checkConnection timeout',
+      );
+      if (result.ok) {
+        const paths = await this.withTimeout(
+          resolveOpenClawPaths({
+            explicitStateDir: cfg.openclawStateDir?.trim() || result.stateDir,
+            explicitWorkspaceDir: cfg.openclawWorkspaceDir,
+          }),
+          8000,
+          'getResolvedPaths timeout',
+        );
+        this.pathsCache = { at: Date.now(), paths };
+        return {
+          connected: true,
+          paths,
+          totalTimeMs: Date.now() - start,
+        };
+      }
+
+      const { connected, gatewayError } = this.interpretGatewayFetchFailure(
+        result,
+        token,
+        password,
+      );
+      const paths = await this.withTimeout(
+        resolveOpenClawPaths({
+          explicitStateDir: cfg.openclawStateDir,
+          explicitWorkspaceDir: cfg.openclawWorkspaceDir,
+        }),
+        8000,
+        'getResolvedPaths timeout',
+      );
+      const merged: OpenClawResolvedPaths = {
+        ...paths,
+        gatewayHint: paths.gatewayHint ?? result.error,
+      };
+      this.pathsCache = { at: Date.now(), paths: merged };
+      return {
+        connected,
+        gatewayError,
+        paths: merged,
+        totalTimeMs: Date.now() - start,
+      };
+    } catch (error: unknown) {
+      const gatewayError = this.formatGatewayFetchCatchError(error);
+      const paths = await this.withTimeout(
+        resolveOpenClawPaths({
+          explicitStateDir: cfg.openclawStateDir,
+          explicitWorkspaceDir: cfg.openclawWorkspaceDir,
+        }),
+        8000,
+        'getResolvedPaths timeout',
+      );
+      const merged: OpenClawResolvedPaths = {
+        ...paths,
+        gatewayHint: paths.gatewayHint ?? gatewayError,
+      };
+      this.pathsCache = { at: Date.now(), paths: merged };
+      return {
+        connected: false,
+        gatewayError,
+        paths: merged,
+        totalTimeMs: Date.now() - start,
+      };
+    }
+  }
+
+  private interpretGatewayFetchFailure(
+    result: GatewayWsPathsResult,
+    token: string | undefined,
+    password: string | undefined,
+  ): { connected: boolean; gatewayError?: string } {
+    if (result.ok) {
+      return { connected: true };
+    }
     const isDeviceIdentityRequired = result.error
       ?.toLowerCase()
       .includes('device identity required');
@@ -648,12 +792,62 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     if (isDeviceIdentityRequired && hasNoAuth) {
       return {
         connected: false,
-        error:
+        gatewayError:
           'Gateway 需要鉴权：请在「设置」中配置 openclawGatewayToken（或 password）并点击「保存」',
       };
     }
+    return { connected: false, gatewayError: result.error };
+  }
 
-    return { connected: false, error: result.error };
+  private formatGatewayFetchCatchError(error: unknown): string {
+    const errorMessage = (() => {
+      if (error && typeof error === 'object') {
+        const anyError = error as {
+          message?: unknown;
+          code?: unknown;
+          errors?: unknown;
+        };
+        if (typeof anyError.message === 'string' && anyError.message.trim()) {
+          return anyError.message.trim();
+        }
+        if (Array.isArray(anyError.errors) && anyError.errors.length > 0) {
+          const nested = anyError.errors.find(
+            (item) =>
+              !!item &&
+              typeof item === 'object' &&
+              typeof (item as { message?: unknown }).message === 'string' &&
+              ((item as { message: string }).message || '').trim().length > 0,
+          ) as { message?: string } | undefined;
+          if (nested?.message?.trim()) {
+            return nested.message.trim();
+          }
+        }
+        if (typeof anyError.code === 'string' && anyError.code.trim()) {
+          return anyError.code.trim();
+        }
+      }
+      if (error instanceof Error && error.message.trim()) {
+        return error.message.trim();
+      }
+      if (typeof error === 'string' && error.trim()) {
+        return error.trim();
+      }
+      return 'unknown error';
+    })();
+    return `Gateway 连接失败：${errorMessage}`;
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    timeoutMsg: string,
+  ): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(timeoutMsg)), timeoutMs),
+      ),
+    ]);
   }
 
   /**
@@ -870,11 +1064,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
                 ? entry.skillsSnapshot
                 : undefined;
             // injectedWorkspaceFiles 来自 systemPromptReport，不是 skillsSnapshot
-            const injectedWorkspaceFiles = Array.isArray(
-              (report as any)?.injectedWorkspaceFiles,
-            )
-              ? (report as any).injectedWorkspaceFiles
-              : undefined;
+            const injectedWorkspaceFiles =
+              readInjectedWorkspaceFilesFromReport(report);
             candidates.push({
               key,
               sessionId: entry.sessionId,
@@ -1045,6 +1236,71 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       return Number(fs.statSync(f.filePath).size);
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * 解析会话 transcript .jsonl 绝对路径（与 listSessions / 会话详情一致，支持 agents/.../sessions 布局）。
+   * 供评估器等需直接读文件的模块使用。
+   *
+   * Gateway 的 sessionKey（如 agent:main:main）与磁盘文件名（UUID）不一致时，findSessionFile 无法直接命中；
+   * 此时从会话扫描缓存（sessions.json storeKey → 文件）反查绝对路径。
+   */
+  async resolveSessionJsonlPath(sessionId: string): Promise<string | null> {
+    try {
+      if (!(await this.stateDir())) {
+        return null;
+      }
+      const f = await this.findSessionFile(sessionId);
+      if (f?.filePath) {
+        return f.filePath;
+      }
+
+      if (
+        Date.now() - this.sessionStorage.getCacheTimestamp() >
+        OpenClawService.CACHE_TTL_MS
+      ) {
+        await this.refreshCache();
+      }
+
+      const pickPath = (data: SessionData | null | undefined): string | null => {
+        const abs =
+          data?.fileMeta?.sessionLogAbsolutePath ||
+          data?.tokenUsageMeta?.sessionLogAbsolutePath;
+        return abs && fs.existsSync(abs) ? abs : null;
+      };
+
+      const direct = await this.sessionStorage.get(sessionId);
+      const fromKey = pickPath(direct);
+      if (fromKey) {
+        return fromKey;
+      }
+
+      const bare = sessionId.includes('/')
+        ? sessionId.slice(sessionId.lastIndexOf('/') + 1)
+        : sessionId;
+      const map = await this.sessionStorage.getAll();
+      for (const [, data] of map) {
+        if (data.sessionKey !== sessionId) {
+          continue;
+        }
+        const p = pickPath(data);
+        if (p) {
+          return p;
+        }
+      }
+      for (const [, data] of map) {
+        if (data.sessionId !== sessionId && data.sessionId !== bare) {
+          continue;
+        }
+        const p = pickPath(data);
+        if (p) {
+          return p;
+        }
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 
@@ -1296,13 +1552,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       for (const line of lines) {
         try {
           const entry = JSON.parse(line) as Record<string, unknown>;
-          const usage = (entry?.message as any)?.usage ?? (entry as any).usage;
-          if (usage && typeof usage.totalTokens === 'number') {
-            lastUsage = {
-              input: typeof usage.input === 'number' ? usage.input : 0,
-              output: typeof usage.output === 'number' ? usage.output : 0,
-              total: usage.totalTokens,
-            };
+          const usage = readTokenUsageFromTranscriptLine(entry);
+          if (usage) {
+            lastUsage = usage;
           }
         } catch {
           // skip bad line
@@ -1749,11 +2001,18 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         }
         const raw = fs.readFileSync(targetReal, 'utf-8');
         const truncated = raw.length > MAX_CHARS;
+        let mtimeMs: number | undefined;
+        try {
+          mtimeMs = fs.statSync(targetReal).mtimeMs;
+        } catch {
+          mtimeMs = undefined;
+        }
         out.push({
           name: f.name || f.path,
           path: f.path,
           content: truncated ? raw.slice(0, MAX_CHARS) : raw,
           truncated,
+          mtimeMs,
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -1767,6 +2026,100 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return out;
+  }
+
+  /**
+   * 将核心引导 Markdown 写入 workspace 根目录（仅 AGENTS / SOUL / IDENTITY / USER）。
+   * 路径解析与 probe 一致：使用 {@link getResolvedPaths} 的 workspaceDir。
+   */
+  async writeWorkspaceBootstrapFile(params: {
+    file: string;
+    content: string;
+    ifMatchMtimeMs?: number;
+  }): Promise<{ ok: true; path: string; mtimeMs: number; size: number }> {
+    const basename = String(params.file || '').trim();
+    if (!CORE_BOOTSTRAP_FILENAMES.has(basename)) {
+      throw new BadRequestException(
+        `仅允许写入: ${[...CORE_BOOTSTRAP_FILENAMES].join(', ')}`,
+      );
+    }
+
+    const paths = await this.getResolvedPaths();
+    const workspaceDir = paths.workspaceDir?.trim();
+    if (!workspaceDir) {
+      throw new BadRequestException(
+        '未解析到 workspace 目录，请设置 OPENCLAW_WORKSPACE_DIR 或 Gateway/配置中的工作区路径。',
+      );
+    }
+
+    if (!fs.existsSync(workspaceDir)) {
+      throw new BadRequestException(`workspace 目录不存在: ${workspaceDir}`);
+    }
+
+    let wsReal: string;
+    try {
+      wsReal = fs.realpathSync(path.resolve(workspaceDir.trim()));
+    } catch {
+      throw new BadRequestException('无法解析 workspace 目录');
+    }
+
+    const target = path.join(wsReal, basename);
+    const targetResolved = path.resolve(target);
+    let targetReal: string;
+    if (fs.existsSync(targetResolved)) {
+      try {
+        targetReal = fs.realpathSync(targetResolved);
+      } catch {
+        targetReal = targetResolved;
+      }
+    } else {
+      targetReal = targetResolved;
+    }
+
+    const relToWs = path.relative(wsReal, targetReal);
+    if (relToWs.startsWith('..') || path.isAbsolute(relToWs)) {
+      throw new BadRequestException('目标路径不在 workspace 内');
+    }
+
+    if (fs.existsSync(targetReal)) {
+      const st0 = fs.statSync(targetReal);
+      if (!st0.isFile()) {
+        throw new BadRequestException('目标路径不是普通文件');
+      }
+      if (
+        params.ifMatchMtimeMs !== undefined &&
+        Number.isFinite(params.ifMatchMtimeMs) &&
+        Math.abs(st0.mtimeMs - params.ifMatchMtimeMs) > 0.5
+      ) {
+        throw new ConflictException(
+          '文件已被其他进程修改，请重新嗅探后再保存',
+        );
+      }
+    } else if (
+      params.ifMatchMtimeMs !== undefined &&
+      Number.isFinite(params.ifMatchMtimeMs)
+    ) {
+      throw new ConflictException(
+        '当前为新建文件，不应携带 ifMatchMtimeMs；请刷新后重试',
+      );
+    }
+
+    const text = typeof params.content === 'string' ? params.content : '';
+    const handle = await fs.promises.open(targetReal, 'w');
+    try {
+      await handle.writeFile(text, 'utf-8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+
+    const st = fs.statSync(targetReal);
+    return {
+      ok: true,
+      path: targetReal,
+      mtimeMs: st.mtimeMs,
+      size: st.size,
+    };
   }
 
   private buildSessionFile(
@@ -2254,8 +2607,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       skillsSnapshot,
       sessionMeta,
       sessionsJsonEntry,
-      injectedWorkspaceFiles: (chosen?.entry?.systemPromptReport as any)
-        ?.injectedWorkspaceFiles,
+      injectedWorkspaceFiles:
+        readInjectedWorkspaceFilesFromChosenEntry(chosen?.entry),
     };
   }
 

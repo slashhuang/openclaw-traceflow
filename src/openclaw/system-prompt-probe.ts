@@ -28,11 +28,21 @@ export type SystemPromptParsedSections = {
   skillBlocks: Array<{ name: string; content: string }>;
 };
 
+/** OpenClaw Project Context 核心引导（可写 allowlist） */
+export const CORE_BOOTSTRAP_FILENAMES = new Set([
+  'AGENTS.md',
+  'SOUL.md',
+  'IDENTITY.md',
+  'USER.md',
+]);
+
 export type WorkspaceFileContent = {
   name: string;
   path: string;
   content: string;
   truncated: boolean;
+  /** 磁盘文件修改时间（毫秒），用于乐观并发；缺失/读失败则无 */
+  mtimeMs?: number;
   readError?: string;
 };
 
