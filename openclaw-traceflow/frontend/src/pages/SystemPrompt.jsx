@@ -13,10 +13,13 @@ import {
   Tag,
   theme,
   Space,
+  Divider,
 } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
+import { CopyOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import SectionScopeHint from '../components/SectionScopeHint';
+import { EvaluationButton } from '../components/evaluation/EvaluationButton';
+import { EvaluationResult } from '../components/evaluation/EvaluationResult';
 
 /** 避免 undefined/非数字调用 toLocaleString 导致运行时崩溃 */
 function safeLocaleNum(n) {
@@ -708,6 +711,11 @@ export default function SystemPromptPage() {
   const [showAllTools, setShowAllTools] = useState(false);
   const [copied, setCopied] = useState(false);
   const scrollContainerRef = useRef(null);
+  
+  // 评估相关状态
+  const [latestEvaluation, setLatestEvaluation] = useState(null);
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
+  const promptId = 'default'; // System Prompt 的 ID
 
   const scrollToSection = useCallback((id) => {
     const container = scrollContainerRef.current;
@@ -760,6 +768,20 @@ export default function SystemPromptPage() {
         // ignore
       }
     })();
+    
+    // 加载最新评估结果
+    (async () => {
+      try {
+        const evalRes = await fetch(`/api/prompts/${promptId}/evaluations/latest`);
+        const evalData = await evalRes.json();
+        if (!cancelled && evalData.success && evalData.data) {
+          setLatestEvaluation(evalData.data);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    
     return () => {
       cancelled = true;
     };
@@ -1342,6 +1364,47 @@ export default function SystemPromptPage() {
           defaultActiveKey={[]}
         />
       )}
+
+      {/* ========== 评估区域 ========== */}
+      <Card
+        title="💡 System Prompt 评估"
+        style={{ marginBottom: 16 }}
+        extra={
+          <EvaluationButton
+            resourceId={promptId}
+            resourceType="prompt"
+            onEvaluationComplete={(evaluationId) => {
+              // 评估完成后重新加载最新结果
+              fetch(`/api/prompts/${promptId}/evaluations/latest`)
+                .then((res) => res.json())
+                .then((data) => {
+                  if (data.success && data.data) {
+                    setLatestEvaluation(data.data);
+                  }
+                });
+            }}
+          />
+        }
+      >
+        {latestEvaluation ? (
+          <>
+            <EvaluationResult evaluation={latestEvaluation} />
+            <Divider />
+            <Space>
+              <Button onClick={() => setLatestEvaluation(null)}>
+                隐藏评估结果
+              </Button>
+              <Button onClick={() => window.location.reload()}>
+                刷新评估
+              </Button>
+            </Space>
+          </>
+        ) : (
+          <Typography.Paragraph type="secondary">
+            点击「评估」按钮，AI 将分析该 System Prompt 在过去会话中的表现，并提供优化建议。
+          </Typography.Paragraph>
+        )}
+      </Card>
 
       {zombieSkills.length > 0 && (
         <Card
