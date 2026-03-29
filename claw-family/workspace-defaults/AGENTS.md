@@ -22,18 +22,33 @@
 - **路径**：`/root/githubRepo/claw-sources/`
 - **所有代码工作都在此仓库下进行**
 
-### 2. 可改动范围
+### 2. Monorepo 结构认知（内部知识）
 
-| 目录 | 类型 | 是否可修改 |
-|------|------|-----------|
-| `claw-family/` | OpenClaw runtime 主项目 | ✅ 可修改 |
-| `claw-family/skills/` | 技能代码 | ✅ 可修改 |
-| `claw-family/workspace-defaults/` | Bootstrap 模板 | ✅ 可修改 |
-| `claw-family/openClawRuntime/.workspace/` | Workspace 文档 | ✅ 可修改（无需 PR） |
-| `futu-openD/` | 富途 OpenD 项目（subtree） | ✅ 可修改 |
-| `openclaw-traceflow/` | TraceFlow UI 项目（subtree） | ✅ 可修改 |
-| `docs/` | PRD 文档 | ✅ 可修改 |
-| `external-refs/` | 外部参考代码 | ❌ **禁止修改**（只读引用） |
+**claw-sources 是 monorepo wrapper**，通过 **subtree** 管理多个独立项目：
+
+- `openclaw-traceflow/` - TraceFlow（独立开源项目）⭐
+- `claw-family/` - OpenClaw runtime（主项目）
+- `futu-openD/` - 富途 OpenD（独立项目）
+
+**核心原则**：
+1. **子项目独立性** - 每个子项目都是独立的开源项目
+2. **Wrapper 不破坏独立性** - 使用 pnpm workspace，不修改子项目内部代码
+3. **子项目 README 不应该提 monorepo** - 用户不需要知道 claw-sources 的存在
+
+**详细说明**：`skills/git-workflow/SKILL.md`、`skills/code-sync/SKILL.md`
+
+### 3. 可改动范围
+
+| 目录 | 类型 | 是否可修改 | 说明 |
+|------|------|-----------|------|
+| `claw-family/` | OpenClaw runtime 主项目 | ✅ 可修改 | 核心项目 |
+| `claw-family/skills/` | 技能代码 | ✅ 可修改 | AgentSkills |
+| `claw-family/workspace-defaults/` | Bootstrap 模板 | ✅ 可修改 | 工作区模板 |
+| `claw-family/openClawRuntime/.workspace/` | Workspace 文档 | ✅ 可修改（无需 PR） | 本地文档 |
+| `futu-openD/` | 富途 OpenD 项目（subtree） | ✅ 可修改 | **独立项目**，修改需 PR |
+| `openclaw-traceflow/` | TraceFlow UI 项目（subtree） | ✅ 可修改 | **独立开源项目**，修改需 PR |
+| `docs/` | PRD 文档 | ✅ 可修改 | 共享文档 |
+| `external-refs/` | 外部参考代码 | ❌ **禁止修改** | 只读引用 |
 
 ---
 
@@ -91,29 +106,22 @@
 - ❌ `./bootstrap.sh`（必须用 code-sync）
 - ❌ 在 main 上直接 commit
 
-### 6. TraceFlow 开发约束（性能 + 稳定性优先）
+### 6. TraceFlow 开发约束（性能 + 稳定性优先 + 自治性）
 
 **当修改 `openclaw-traceflow/` 目录时**，必须考虑：
 
-**性能要求**：
-- ✅ 避免 O(n²) 算法，优先使用缓存和增量更新
-- ✅ 大数据集使用分页/游标，避免一次性加载
-- ✅ 前端组件避免不必要的重渲染（React.memo、useMemo）
-- ✅ 后端 API 添加索引，避免 N+1 查询
-- ✅ 长任务使用后台任务/队列，避免阻塞主线程
+**项目自治性（最重要）⭐**：
+- ✅ TraceFlow 是独立开源项目
+- ✅ 保持独立性 - 不依赖 claw-sources 根目录
+- ✅ 不破坏结构 - 不修改 package.json 结构、目录结构
+- ✅ 可独立运行 - 单独 `git clone` + `pnpm install` 也能工作
 
-**稳定性要求**：
-- ✅ 所有外部调用（Gateway、数据库）必须有错误处理和重试机制
-- ✅ 关键路径添加日志和监控指标
-- ✅ 配置变更必须向后兼容，避免破坏性变更
-- ✅ 前端添加加载状态和错误边界，避免白屏
-- ✅ 后端 API 添加输入验证和速率限制
+**禁止行为**：
+- ❌ 添加对 claw-sources 根目录的硬编码依赖
+- ❌ 修改目录结构导致无法独立提取
+- ❌ 删除或修改 frontend/package.json
 
-**代码审查清单**：
-- [ ] 是否考虑了最坏情况（大数据量、高并发）？
-- [ ] 是否有合适的错误处理和用户提示？
-- [ ] 是否有性能监控和告警？
-- [ ] 是否有回滚方案？
+**性能 + 稳定性要求**：详见 `skills/git-workflow/SKILL.md`
 
 ---
 
@@ -174,6 +182,10 @@
 - **bootstrap 文件**：只改 `workspace-defaults/`，禁止改 `openClawRuntime/`
 - **搜索**：优先用 `bailian-web-search` skill
 - **时区**：北京时间（GMT+8）
+
+---
+
+**详细说明见各 skill 文档**
 
 ---
 
