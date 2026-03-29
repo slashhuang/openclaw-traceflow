@@ -30,8 +30,11 @@ jobs:
         with:
           version: 10
 
-      - name: Install dependencies
+      - name: Install dependencies (root)
         run: pnpm install
+
+      - name: Install dependencies (frontend)
+        run: cd frontend && pnpm install
 
       - name: Run lint (backend)
         run: pnpm run lint
@@ -59,8 +62,11 @@ jobs:
         with:
           version: 10
 
-      - name: Install dependencies
+      - name: Install dependencies (root)
         run: pnpm install
+
+      - name: Install dependencies (frontend)
+        run: cd frontend && pnpm install
 
       - name: Build backend
         run: pnpm run build
@@ -88,8 +94,11 @@ jobs:
         with:
           version: 10
 
-      - name: Install dependencies
+      - name: Install dependencies (root)
         run: pnpm install
+
+      - name: Install dependencies (frontend)
+        run: cd frontend && pnpm install
 
       - name: Run tests
         run: pnpm run test --passWithNoTests
