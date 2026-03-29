@@ -522,7 +522,7 @@ export default {
   'session.tokenZeroPoint3Title': '3）本机怎么核对（与服务读的是否一致）',
   'session.tokenZeroStateRootLabel': '状态根目录（本服务当前解析结果，一般对应环境变量 <code>OPENCLAW_STATE_DIR</code> 或设置里的状态路径）：',
   'session.tokenZeroStateRootFallback': '状态根目录由本服务的 OpenClaw 路径解析得到（环境变量 <code>OPENCLAW_STATE_DIR</code> 或 CLI/配置推断）；若下方无绝对路径，请到「设置」里确认 Gateway/状态目录与运行 OpenClaw 的机器一致。',
-  'session.tokenZeroLogFileLabel': '本会话日志文件（用编辑器打开，搜 <code>&quot;usage&quot;</code> 或 <code>totalTokens</code>）：',
+  'session.tokenZeroLogFileLabel': '本会话日志文件（用编辑器打开，搜 <code>"usage"</code> 或 <code>totalTokens</code>）：',
   'session.tokenZeroRelativePathLabel': '相对状态根的路径：',
   'session.tokenZeroIndexFileLabel': '同目录索引文件（可搜本页的 sessionId，看是否有 <code>totalTokens</code> / <code>inputTokens</code>）：',
   'session.tokenZeroIndexPathHint': '（完整路径 = 状态根 + 上述相对路径）',
