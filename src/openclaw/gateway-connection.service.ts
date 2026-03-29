@@ -45,7 +45,11 @@ export class GatewayConnectionService implements OnModuleDestroy {
     methodParams?: Record<string, unknown>,
     timeoutMs?: number,
   ): Promise<GatewayRpcResult<T>> {
-    return this.getOrCreateClient().request<T>(method, methodParams ?? {}, timeoutMs);
+    return this.getOrCreateClient().request<T>(
+      method,
+      methodParams ?? {},
+      timeoutMs,
+    );
   }
 
   async runSequence(

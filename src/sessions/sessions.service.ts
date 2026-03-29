@@ -1,8 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
-import { OpenClawService, type OpenClawSession } from '../openclaw/openclaw.service';
+import {
+  OpenClawService,
+  type OpenClawSession,
+} from '../openclaw/openclaw.service';
 import { LIST_SESSION_JSONL_MAX_SCAN_LINES } from '../openclaw/streaming-jsonl-reader';
-import { inferSessionTypeLabel, resolveDisplayUser } from '../common/session-user-resolver';
+import {
+  inferSessionTypeLabel,
+  resolveDisplayUser,
+} from '../common/session-user-resolver';
 
 export interface Session {
   sessionKey: string;
@@ -31,8 +37,21 @@ export interface Session {
 export interface SessionDetail extends Session {
   tokenUsage?: OpenClawSession['tokenUsage'];
   tokenUsageMeta?: OpenClawSession['tokenUsageMeta'];
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string; timestamp: number; sender?: string }>;
-  toolCalls: Array<{ name: string; input?: any; output?: any; durationMs: number; success: boolean; error?: string; timestamp?: number }>;
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: number;
+    sender?: string;
+  }>;
+  toolCalls: Array<{
+    name: string;
+    input?: any;
+    output?: any;
+    durationMs: number;
+    success: boolean;
+    error?: string;
+    timestamp?: number;
+  }>;
   invokedSkills?: Array<{ skillName: string; readCount: number }>;
   events: Array<{ type: string; timestamp: number; payload: any }>;
   transcriptFileSizeBytes?: number;
@@ -41,7 +60,12 @@ export interface SessionDetail extends Session {
   transcriptHeadJsonlLineCount?: number;
   transcriptTailJsonlLineCount?: number;
   archiveResetTimestamp?: string;
-  archiveEpochs?: Array<{ resetTimestamp: string; totalTokens: number; inputTokens: number; outputTokens: number }>;
+  archiveEpochs?: Array<{
+    resetTimestamp: string;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+  }>;
 }
 
 @Injectable()
@@ -60,36 +84,55 @@ export class SessionsService {
       const singleParticipant =
         s.participantIds?.length === 1 ? s.participantIds[0].trim() : '';
       return {
-      sessionKey: s.sessionKey,
-      sessionId: s.sessionId,
-      user:
-        s.participantSummary ||
-        singleParticipant ||
-        resolveDisplayUser(s.userId, typeLabel, s.systemSent),
-      ...(s.participantIds?.length ? { participants: [...s.participantIds], participantIds: [...s.participantIds] } : {}),
-      ...(s.participantSummary ? { participantSummary: s.participantSummary } : {}),
-      typeLabel,
-      status: s.status,
-      lastActive: s.lastActiveAt,
-      duration: Date.now() - s.createdAt,
-      model: s.model,
-      ...(s.totalTokens != null ? { totalTokens: s.totalTokens } : {}),
-      ...(s.tokenUsage ? { tokenUsage: s.tokenUsage } : {}),
-      ...(s.tokenUsageMeta ? { tokenUsageMeta: s.tokenUsageMeta } : {}),
-      ...(s.usageCost ? { usageCost: s.usageCost } : {}),
-      ...(s.messageCount != null ? { messageCount: s.messageCount } : {}),
-      ...(s.transcriptFileSizeBytes != null ? { transcriptFileSizeBytes: s.transcriptFileSizeBytes } : {}),
-      ...(s.messageCountCapped
-        ? {
-            messageCountCapped: true,
-            messageCountScanMaxLines: s.messageCountScanMaxLines ?? LIST_SESSION_JSONL_MAX_SCAN_LINES,
-          }
-        : {}),
-    };
+        sessionKey: s.sessionKey,
+        sessionId: s.sessionId,
+        user:
+          s.participantSummary ||
+          singleParticipant ||
+          resolveDisplayUser(s.userId, typeLabel, s.systemSent),
+        ...(s.participantIds?.length
+          ? {
+              participants: [...s.participantIds],
+              participantIds: [...s.participantIds],
+            }
+          : {}),
+        ...(s.participantSummary
+          ? { participantSummary: s.participantSummary }
+          : {}),
+        typeLabel,
+        status: s.status,
+        lastActive: s.lastActiveAt,
+        duration: Date.now() - s.createdAt,
+        model: s.model,
+        ...(s.totalTokens != null ? { totalTokens: s.totalTokens } : {}),
+        ...(s.tokenUsage ? { tokenUsage: s.tokenUsage } : {}),
+        ...(s.tokenUsageMeta ? { tokenUsageMeta: s.tokenUsageMeta } : {}),
+        ...(s.usageCost ? { usageCost: s.usageCost } : {}),
+        ...(s.messageCount != null ? { messageCount: s.messageCount } : {}),
+        ...(s.transcriptFileSizeBytes != null
+          ? { transcriptFileSizeBytes: s.transcriptFileSizeBytes }
+          : {}),
+        ...(s.messageCountCapped
+          ? {
+              messageCountCapped: true,
+              messageCountScanMaxLines:
+                s.messageCountScanMaxLines ?? LIST_SESSION_JSONL_MAX_SCAN_LINES,
+            }
+          : {}),
+      };
     });
   }
 
-  async listSessionsPaged(page: number, pageSize: number, filter: string = 'all'): Promise<{ items: Session[]; total: number; page: number; pageSize: number }> {
+  async listSessionsPaged(
+    page: number,
+    pageSize: number,
+    filter: string = 'all',
+  ): Promise<{
+    items: Session[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
     const all = await this.listSessions();
     let filtered = all;
     if (filter === 'archived' || filter === 'stale_index') {
@@ -98,16 +141,34 @@ export class SessionsService {
       filtered = all.filter((s) => s.status === filter);
     }
     const start = (Math.max(page, 1) - 1) * pageSize;
-    return { items: filtered.slice(start, start + pageSize), total: filtered.length, page: Math.max(page, 1), pageSize };
+    return {
+      items: filtered.slice(start, start + pageSize),
+      total: filtered.length,
+      page: Math.max(page, 1),
+      pageSize,
+    };
   }
 
-  async getSessionById(id: string, resetTimestamp?: string): Promise<SessionDetail | null> {
-    const detail = await this.openclawService.getSessionDetail(id, resetTimestamp?.trim() ? { resetTimestamp: resetTimestamp.trim() } : undefined);
+  async getSessionById(
+    id: string,
+    resetTimestamp?: string,
+  ): Promise<SessionDetail | null> {
+    const detail = await this.openclawService.getSessionDetail(
+      id,
+      resetTimestamp?.trim()
+        ? { resetTimestamp: resetTimestamp.trim() }
+        : undefined,
+    );
     if (!detail) return null;
 
-    const typeLabel = inferSessionTypeLabel(detail.sessionKey, detail.sessionId);
+    const typeLabel = inferSessionTypeLabel(
+      detail.sessionKey,
+      detail.sessionId,
+    );
     const singleParticipant =
-      detail.participantIds?.length === 1 ? detail.participantIds[0].trim() : '';
+      detail.participantIds?.length === 1
+        ? detail.participantIds[0].trim()
+        : '';
     return {
       sessionKey: detail.sessionKey,
       sessionId: detail.sessionId,
@@ -116,9 +177,14 @@ export class SessionsService {
         singleParticipant ||
         resolveDisplayUser(detail.userId, typeLabel, detail.systemSent),
       ...(detail.participantIds?.length
-        ? { participants: [...detail.participantIds], participantIds: [...detail.participantIds] }
+        ? {
+            participants: [...detail.participantIds],
+            participantIds: [...detail.participantIds],
+          }
         : {}),
-      ...(detail.participantSummary ? { participantSummary: detail.participantSummary } : {}),
+      ...(detail.participantSummary
+        ? { participantSummary: detail.participantSummary }
+        : {}),
       typeLabel,
       status: detail.status,
       lastActive: detail.lastActiveAt,
@@ -140,7 +206,9 @@ export class SessionsService {
     };
   }
 
-  async getSessionStatus(id: string): Promise<'active' | 'idle' | 'completed' | 'failed'> {
+  async getSessionStatus(
+    id: string,
+  ): Promise<'active' | 'idle' | 'completed' | 'failed'> {
     const session = await this.getSessionById(id);
     return session?.status || 'completed';
   }
@@ -149,11 +217,21 @@ export class SessionsService {
     return this.openclawService.killSession(id);
   }
 
-  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
+  async getConfiguredModels(): Promise<{
+    models: string[];
+    source?: string;
+  } | null> {
     return this.openclawService.getConfiguredModels();
   }
 
-  async listArchiveEpochs(id: string): Promise<Array<{ resetTimestamp: string; totalTokens: number; inputTokens: number; outputTokens: number }>> {
+  async listArchiveEpochs(id: string): Promise<
+    Array<{
+      resetTimestamp: string;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+    }>
+  > {
     const detail = await this.openclawService.getSessionDetail(id);
     return detail?.archiveEpochs || [];
   }

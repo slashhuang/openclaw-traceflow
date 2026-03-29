@@ -69,4 +69,3 @@ export class LogsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.cleanupByClientId.delete(client.id);
   }
 }
-

@@ -57,17 +57,24 @@ export async function rebuildSystemPromptMarkdown(params: {
   /** 优先使用：OpenClaw 实际注入的 skills 文本（name+description+location，非 SKILL 全文） */
   skillsPromptOverride?: string;
   /** 用于 fallback：name+description+location 格式 */
-  resolvedSkills?: Array<{ name: string; filePath?: string; description?: string }>;
+  resolvedSkills?: Array<{
+    name: string;
+    filePath?: string;
+    description?: string;
+  }>;
   tools: Array<string>;
   provider?: string;
   model?: string;
   agentId?: string;
 }): Promise<string> {
-  const toolsSorted = params.tools.toSorted((a, b) => String(a).localeCompare(String(b)));
+  const toolsSorted = params.tools.toSorted((a, b) =>
+    String(a).localeCompare(String(b)),
+  );
   const toolLines = toolsSorted.map((t) => `- ${String(t)}`).join('\n');
 
   // Tools list extraction markers must match system-prompt-probe.ts constants.
-  const TOOL_LIST_START = 'Tool names are case-sensitive. Call tools exactly as listed.\n';
+  const TOOL_LIST_START =
+    'Tool names are case-sensitive. Call tools exactly as listed.\n';
   const TOOL_LIST_END =
     '\nTOOLS.md does not control tool availability; it is user guidance for how to use external tools.';
 
@@ -106,7 +113,9 @@ export async function rebuildSystemPromptMarkdown(params: {
         .map((s) => {
           const name = String(s.name || '').trim();
           if (!name) return '';
-          const path_ = skillPaths[name] || path.join(params.workspaceDir, 'skills', name, 'SKILL.md');
+          const path_ =
+            skillPaths[name] ||
+            path.join(params.workspaceDir, 'skills', name, 'SKILL.md');
           return `<skill>\n<name>${name}</name>\n<description>(use read to load)</description>\n<location>${escapeXml(path_)}</location>\n</skill>`;
         })
         .filter(Boolean)
@@ -136,7 +145,9 @@ export async function rebuildSystemPromptMarkdown(params: {
   });
 
   const projectContextLines: string[] = [];
-  projectContextLines.push('The following project context files have been loaded:');
+  projectContextLines.push(
+    'The following project context files have been loaded:',
+  );
   if (hasSoul) {
     projectContextLines.push(
       'If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.',
@@ -149,7 +160,11 @@ export async function rebuildSystemPromptMarkdown(params: {
     projectContextLines.push(`## ${fp}`, '', file.content || '', '');
   }
 
-  const projectContextBlock = [`# Project Context`, '', ...projectContextLines].join('\n');
+  const projectContextBlock = [
+    `# Project Context`,
+    '',
+    ...projectContextLines,
+  ].join('\n');
 
   // Silent replies marker must exist for parseSystemPromptSections's end marker.
   const silentRepliesBlock = [
@@ -172,14 +187,17 @@ export async function rebuildSystemPromptMarkdown(params: {
     os: `${process.platform}`,
     arch: process.arch,
     node: process.version,
-    model: params.model && params.provider ? `${params.provider}/${params.model}` : params.model,
+    model:
+      params.model && params.provider
+        ? `${params.provider}/${params.model}`
+        : params.model,
     shell: process.env.SHELL ?? '',
     channel: '',
   });
 
   const safetyBlock = [
     '## Safety',
-    'You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user\'s request.',
+    "You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.",
     'Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards.',
     'Do not manipulate or persuade anyone to expand access or disable safeguards.',
     '',
@@ -240,4 +258,3 @@ export async function rebuildSystemPromptMarkdown(params: {
 
   return lines.join('\n');
 }
-

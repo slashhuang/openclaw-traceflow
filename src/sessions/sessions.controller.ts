@@ -15,7 +15,10 @@ export class SessionsController {
     @Query('page') pageQuery?: number,
     @Query('pageSize') pageSizeQuery?: number,
     @Query('filter') filterQuery?: string,
-  ): Promise<Session[] | { items: Session[]; total: number; page: number; pageSize: number }> {
+  ): Promise<
+    | Session[]
+    | { items: Session[]; total: number; page: number; pageSize: number }
+  > {
     const page = this.parsePage(pageQuery, 1);
     const pageSize = Math.min(200, this.parsePage(pageSizeQuery, 20));
     const filter = typeof filterQuery === 'string' ? filterQuery : 'all';
@@ -27,7 +30,10 @@ export class SessionsController {
 
   /** 静态子路径放在 :id 之前，避免被误匹配 */
   @Get('config/models')
-  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
+  async getConfiguredModels(): Promise<{
+    models: string[];
+    source?: string;
+  } | null> {
     return this.sessionsService.getConfiguredModels();
   }
 

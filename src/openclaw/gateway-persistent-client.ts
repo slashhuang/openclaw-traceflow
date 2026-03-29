@@ -92,7 +92,9 @@ export class TraceflowGatewayPersistentClient {
     const token = cfg.token?.trim();
     const password = cfg.password?.trim();
     const auth =
-      token || password ? { token: token || undefined, password: password || undefined } : undefined;
+      token || password
+        ? { token: token || undefined, password: password || undefined }
+        : undefined;
     return {
       minProtocol: GATEWAY_PROTOCOL_VERSION,
       maxProtocol: GATEWAY_PROTOCOL_VERSION,
@@ -202,7 +204,8 @@ export class TraceflowGatewayPersistentClient {
 
           if (msg.type === 'event' && msg.event === 'connect.challenge') {
             const nonce =
-              typeof (msg.payload as { nonce?: string } | undefined)?.nonce === 'string'
+              typeof (msg.payload as { nonce?: string } | undefined)?.nonce ===
+              'string'
                 ? String((msg.payload as { nonce: string }).nonce).trim()
                 : '';
             if (!nonce) {
@@ -239,12 +242,18 @@ export class TraceflowGatewayPersistentClient {
             this.snapshotStateDir =
               typeof snap?.stateDir === 'string' ? snap.stateDir.trim() : '';
             this.snapshotConfigPath =
-              typeof snap?.configPath === 'string' ? snap.configPath.trim() : null;
+              typeof snap?.configPath === 'string'
+                ? snap.configPath.trim()
+                : null;
             finishOk();
             return;
           }
 
-          if (msg.type === 'res' && typeof msg.id === 'string' && this.pending.has(msg.id)) {
+          if (
+            msg.type === 'res' &&
+            typeof msg.id === 'string' &&
+            this.pending.has(msg.id)
+          ) {
             const entry = this.pending.get(msg.id)!;
             this.pending.delete(msg.id);
             clearTimeout(entry.timeout);
@@ -294,7 +303,10 @@ export class TraceflowGatewayPersistentClient {
       } catch (e) {
         this.pending.delete(id);
         clearTimeout(t);
-        resolve({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        resolve({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     });
   }

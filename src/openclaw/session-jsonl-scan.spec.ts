@@ -147,7 +147,9 @@ describe('scanSessionJsonlLines', () => {
         timestamp: 1,
         message: {
           role: 'assistant',
-          content: [{ type: 'toolUse', id: 'u1', name: 'read', input: { path: '/a' } }],
+          content: [
+            { type: 'toolUse', id: 'u1', name: 'read', input: { path: '/a' } },
+          ],
           stopReason: 'toolUse',
         },
       }),
@@ -163,7 +165,9 @@ describe('scanSessionJsonlLines', () => {
         timestamp: 1,
         message: {
           role: 'assistant',
-          content: [{ type: 'functionCall', id: 'fc1', name: 'exec', arguments: '{}' }],
+          content: [
+            { type: 'functionCall', id: 'fc1', name: 'exec', arguments: '{}' },
+          ],
           stopReason: 'toolUse',
         },
       }),
@@ -198,7 +202,9 @@ describe('scanSessionJsonlLines', () => {
           timestamp: 1,
           message: {
             role: 'assistant',
-            content: [{ type: 'toolCall', id: 'id1', name: 'exec', arguments: {} }],
+            content: [
+              { type: 'toolCall', id: 'id1', name: 'exec', arguments: {} },
+            ],
             stopReason: 'toolUse',
           },
         },
@@ -227,7 +233,9 @@ describe('scanSessionJsonlLines', () => {
           timestamp: 1,
           message: {
             role: 'assistant',
-            content: [{ type: 'toolCall', id: 'call_x', name: 'read', arguments: {} }],
+            content: [
+              { type: 'toolCall', id: 'call_x', name: 'read', arguments: {} },
+            ],
             stopReason: 'toolUse',
           },
         },
@@ -256,7 +264,12 @@ describe('scanSessionJsonlLines', () => {
       lines(
         { type: 'session', id: 's1', version: 3, timestamp: 1 },
         { type: 'model_change', provider: 'p', modelId: 'm', timestamp: 2 },
-        { type: 'custom', customType: 'openclaw:prompt-error', id: 'x', timestamp: 3 },
+        {
+          type: 'custom',
+          customType: 'openclaw:prompt-error',
+          id: 'x',
+          timestamp: 3,
+        },
       ),
     );
     expect(scan.messages.map((m) => m.content)).toEqual([
@@ -318,7 +331,13 @@ describe('scanSessionJsonlLines', () => {
               input: 10,
               output: 20,
               totalTokens: 30,
-              cost: { input: 0.1, output: 0.2, cacheRead: 0, cacheWrite: 0, total: 0.3 },
+              cost: {
+                input: 0.1,
+                output: 0.2,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0.3,
+              },
             },
           },
         },
@@ -332,7 +351,13 @@ describe('scanSessionJsonlLines', () => {
               input: 5,
               output: 5,
               totalTokens: 40,
-              cost: { input: 0.05, output: 0.05, cacheRead: 0, cacheWrite: 0, total: 0.1 },
+              cost: {
+                input: 0.05,
+                output: 0.05,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0.1,
+              },
             },
           },
         },
@@ -394,7 +419,9 @@ describe('scanSessionJsonlLines', () => {
         timestamp: 5,
       }),
     );
-    expect(scan.messages.some((m) => m.content.includes('openclaw:prompt-error'))).toBe(true);
+    expect(
+      scan.messages.some((m) => m.content.includes('openclaw:prompt-error')),
+    ).toBe(true);
     expect(scan.events.some((e) => e.type === 'custom')).toBe(true);
   });
 });

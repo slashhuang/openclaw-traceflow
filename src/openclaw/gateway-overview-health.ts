@@ -8,11 +8,22 @@
 function mapHealthRecentEntry(raw: unknown): Record<string, unknown> {
   const r = raw as Record<string, unknown> | null;
   if (!r || typeof r !== 'object') {
-    return { key: '—', model: '?', totalTokens: 0, contextTokens: null, percentUsed: null };
+    return {
+      key: '—',
+      model: '?',
+      totalTokens: 0,
+      contextTokens: null,
+      percentUsed: null,
+    };
   }
   const key = typeof r.key === 'string' && r.key.trim() ? r.key.trim() : '—';
   const updatedAt = typeof r.updatedAt === 'number' ? r.updatedAt : undefined;
-  const age = typeof r.age === 'number' ? r.age : updatedAt != null ? Math.max(0, Date.now() - updatedAt) : null;
+  const age =
+    typeof r.age === 'number'
+      ? r.age
+      : updatedAt != null
+        ? Math.max(0, Date.now() - updatedAt)
+        : null;
   return {
     key,
     model: '?',
@@ -51,7 +62,9 @@ export function buildStatusOverviewFromHealth(
   }
 
   const sessionsBlock = (h.sessions as Record<string, unknown>) || {};
-  const recentRaw = Array.isArray(sessionsBlock.recent) ? sessionsBlock.recent : [];
+  const recentRaw = Array.isArray(sessionsBlock.recent)
+    ? sessionsBlock.recent
+    : [];
   const recent =
     recentRaw.length > 0
       ? recentRaw.map((r) => mapHealthRecentEntry(r))
@@ -65,7 +78,9 @@ export function buildStatusOverviewFromHealth(
         defaults: { model: '?', contextTokens: null },
         recent,
       },
-      queuedSystemEvents: Array.isArray(h.queuedSystemEvents) ? h.queuedSystemEvents : [],
+      queuedSystemEvents: Array.isArray(h.queuedSystemEvents)
+        ? h.queuedSystemEvents
+        : [],
     },
     usage: {},
   };
