@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 /** 开发时 /api 代理目标；若 3001 不是本项目的 Nest（例如跑了别的 Monitor），可设为 TraceFlow 实际端口 */
 const API_PROXY_TARGET = process.env.VITE_API_PROXY_TARGET || 'http://localhost:3001'
