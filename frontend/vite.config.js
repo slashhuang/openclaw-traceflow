@@ -29,11 +29,16 @@ export default defineConfig({
       '/api': {
         target: API_PROXY_TARGET,
         changeOrigin: true,
+        /** 避免 Gateway 慢时 health/overview 等长请求被代理提前掐断成 502 */
+        timeout: 120_000,
+        proxyTimeout: 120_000,
       },
       '/socket.io': {
         target: API_PROXY_TARGET,
         changeOrigin: true,
         ws: true,
+        timeout: 120_000,
+        proxyTimeout: 120_000,
       },
     },
     ws: {

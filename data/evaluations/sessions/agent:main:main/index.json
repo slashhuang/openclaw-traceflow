@@ -1,0 +1,60 @@
+{
+  "resourceId": "agent:main:main",
+  "resourceType": "session",
+  "evaluations": [
+    {
+      "evaluationId": "eval-1774804208405-doe5wm",
+      "evaluatedAt": "2026-03-29T17:10:08.405Z",
+      "overallScore": 57,
+      "grade": "D",
+      "evaluatedBy": "anonymous",
+      "status": "completed"
+    },
+    {
+      "evaluationId": "eval-1774803998332-k2sec5",
+      "evaluatedAt": "2026-03-29T17:06:38.332Z",
+      "overallScore": 57,
+      "grade": "D",
+      "evaluatedBy": "anonymous",
+      "status": "completed"
+    },
+    {
+      "evaluationId": "eval-1774803868230-cdx0hb",
+      "evaluatedAt": "2026-03-29T17:04:28.230Z",
+      "overallScore": 57,
+      "grade": "D",
+      "evaluatedBy": "anonymous",
+      "status": "completed"
+    },
+    {
+      "evaluationId": "eval-1774803855012-hkkl61",
+      "evaluatedAt": "2026-03-29T17:04:15.012Z",
+      "overallScore": 57,
+      "grade": "D",
+      "evaluatedBy": "anonymous",
+      "status": "completed"
+    },
+    {
+      "evaluationId": "eval-1774803771464-izdomz",
+      "evaluatedAt": "2026-03-29T17:02:51.464Z",
+      "overallScore": 57,
+      "grade": "D",
+      "evaluatedBy": "anonymous",
+      "status": "completed"
+    },
+    {
+      "evaluationId": "eval-1774803739620-ihqwaz",
+      "evaluatedAt": "2026-03-29T17:02:19.620Z",
+      "overallScore": 57,
+      "grade": "D",
+      "evaluatedBy": "anonymous",
+      "status": "completed"
+    }
+  ],
+  "latestEvaluation": {
+    "evaluationId": "eval-1774804208405-doe5wm",
+    "overallScore": 57,
+    "grade": "D",
+    "evaluatedAt": "2026-03-29T17:10:08.405Z"
+  }
+}

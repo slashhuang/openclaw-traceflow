@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   Card,
@@ -10,7 +10,6 @@ import {
   Typography,
   Spin,
   Tag,
-  Progress,
   Descriptions,
   Collapse,
   theme,
@@ -20,6 +19,8 @@ import {
   Input,
   Popover,
   Select,
+  Row,
+  Col,
 } from 'antd';
 import {
   QuestionCircleOutlined,
@@ -30,6 +31,8 @@ import {
 } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import { sessionsApi } from '../api';
+import { EvaluationButton } from '../components/evaluation/EvaluationButton';
+import { EvaluationResult } from '../components/evaluation/EvaluationResult';
 import { formatSessionParticipantDisplay } from '../utils/session-user';
 import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 import TokenMetricHint from '../components/TokenMetricHint';
@@ -76,8 +79,12 @@ function DetailParticipantField({ session, intl }) {
   return formatSessionParticipantDisplay(session);
 }
 
-/** 与会话详情其他 Tab 滚动区域高度一致 */
-const SESSION_DETAIL_LIST_HEIGHT = 520;
+/** 转录区各 Tab 共用：随视口增高，并设下限避免过矮 */
+const SESSION_DETAIL_TAB_SCROLL_STYLE = {
+  minHeight: 280,
+  height: 'clamp(280px, calc(100dvh - 260px), 1600px)',
+  overflow: 'auto',
+};
 
 function formatJsonForDisplay(val) {
   if (val == null) return '—';
@@ -116,7 +123,7 @@ function SkillsPanel({ skills, intl }) {
     return <Typography.Text type="secondary">—</Typography.Text>;
   }
   return (
-    <div style={{ maxHeight: 520, overflow: 'auto' }}>
+    <div style={SESSION_DETAIL_TAB_SCROLL_STYLE}>
       <Space wrap>
         {skills.map((s) => (
           <Tag key={s.skillName}>
@@ -138,7 +145,7 @@ function ToolCallsPanel({ toolCalls, token, intl }) {
   const outputLabel = intl?.formatMessage?.({ id: 'session.toolOutput' }) || '输出';
   const calledAtLabel = intl?.formatMessage?.({ id: 'session.toolCalledAt' }) || 'Called at';
   return (
-    <div style={{ maxHeight: 520, overflow: 'auto' }}>
+    <div style={SESSION_DETAIL_TAB_SCROLL_STYLE}>
       {toolCalls.map((tool, idx) => {
         const name = tool?.name || tool?.tool || 'unknown';
         const args = tool?.input && typeof tool.input === 'object' ? tool.input : {};
@@ -302,9 +309,6 @@ function SessionMessagesList({ messages, intl, token, listResetKey }) {
   return (
     <div
       style={{
-        maxHeight: SESSION_DETAIL_LIST_HEIGHT,
-        overflowY: 'auto',
-        overflowX: 'hidden',
         paddingRight: 4,
         display: 'flex',
         flexDirection: 'column',
@@ -443,6 +447,10 @@ export default function SessionDetail() {
   /** 消息 Tab：按展示分类筛选（user / assistant / boot，与 inferMessageLabel 一致） */
   const [messageRoleFilter, setMessageRoleFilter] = useState(() => 'all');
 
+  const sessionEvalBeforeIdRef = useRef(undefined);
+  const [sessionLatestEvaluation, setSessionLatestEvaluation] = useState(null);
+  const [sessionEvaluationPending, setSessionEvaluationPending] = useState(false);
+
   const { messagesFilteredReversed, messagesSearchMatchCount } = useMemo(() => {
     if (!session) {
       return { messagesFilteredReversed: [], messagesSearchMatchCount: 0 };
@@ -566,6 +574,93 @@ export default function SessionDetail() {
     loadSession(false);
   }, [loadSession]);
 
+  const tryFetchLatestSessionEvaluation = useCallback(
+    async (opts) => {
+      if (!session?.sessionId) return;
+      const silent = opts && opts.silent === true;
+      try {
+        const res = await fetch(
+          `/api/sessions/${encodeURIComponent(session.sessionId)}/evaluations/latest`,
+        );
+        const d = await res.json();
+        if (!d.success || !d.data) {
+          if (sessionEvaluationPending && !silent) {
+            message.info(intl.formatMessage({ id: 'sessionEvaluation.notReadyYet' }));
+          }
+          return;
+        }
+        const ev = d.data;
+        const newId = ev.evaluationId;
+        if (sessionEvaluationPending) {
+          if (sessionEvalBeforeIdRef.current === newId) {
+            if (!silent) {
+              message.info(intl.formatMessage({ id: 'sessionEvaluation.notReadyYet' }));
+            }
+            return;
+          }
+          setSessionLatestEvaluation(ev);
+          setSessionEvaluationPending(false);
+          sessionEvalBeforeIdRef.current = undefined;
+          message.success(intl.formatMessage({ id: 'sessionEvaluation.messageDone' }));
+          requestAnimationFrame(() => {
+            document
+              .getElementById('session-detail-evaluation-result')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          });
+        }
+      } catch {
+        if (sessionEvaluationPending && !silent) {
+          message.error(intl.formatMessage({ id: 'sessionEvaluation.fetchFailed' }));
+        }
+      }
+    },
+    [sessionEvaluationPending, intl, session?.sessionId],
+  );
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!sessionEvaluationPending) return;
+      tryFetchLatestSessionEvaluation({ silent: true });
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [sessionEvaluationPending, tryFetchLatestSessionEvaluation]);
+
+  /** pending 变为 true 后（状态已提交）先拉取一次，再定时轮询；静默避免重复 toast */
+  useEffect(() => {
+    if (!sessionEvaluationPending || !session?.sessionId) return undefined;
+    const first = setTimeout(() => {
+      tryFetchLatestSessionEvaluation({ silent: true });
+    }, 500);
+    const loop = setInterval(() => {
+      tryFetchLatestSessionEvaluation({ silent: true });
+    }, 5000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(loop);
+    };
+  }, [sessionEvaluationPending, session?.sessionId, tryFetchLatestSessionEvaluation]);
+
+  useEffect(() => {
+    if (!session?.sessionId) {
+      setSessionLatestEvaluation(null);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/sessions/${encodeURIComponent(session.sessionId)}/evaluations/latest`,
+        );
+        const d = await res.json();
+        if (d.success && d.data) setSessionLatestEvaluation(d.data);
+        else setSessionLatestEvaluation(null);
+      } catch {
+        setSessionLatestEvaluation(null);
+      }
+    })();
+  }, [session?.sessionId]);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash === '#toolCalls') {
       setTab('toolCalls');
@@ -673,7 +768,7 @@ export default function SessionDetail() {
           : (session.invokedSkills?.length ?? 0);
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 112px)' }}>
       <Space style={{ marginBottom: 16 }} wrap>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'session.detail' })}</Typography.Title>
@@ -743,27 +838,6 @@ export default function SessionDetail() {
         />
       )}
 
-      <div style={{ marginBottom: 16 }}>
-        <Space size="large" wrap>
-          <Typography.Text>
-            <Typography.Text type="secondary">{intl.formatMessage({ id: 'session.transcriptLogSize' })}: </Typography.Text>
-            <Typography.Text strong>{formatFileSize(resolveSessionLogBytes(session))}</Typography.Text>
-          </Typography.Text>
-          <Typography.Text>
-            <Tooltip title={intl.formatMessage({ id: 'session.messageCountTooltip' })}>
-              <span style={{ cursor: 'help' }}>
-                <Typography.Text type="secondary">
-                  {intl.formatMessage({ id: 'session.messageCount' })}
-                  <QuestionCircleOutlined style={{ marginLeft: 4, fontSize: 12, opacity: 0.55 }} />
-                  :{' '}
-                </Typography.Text>
-              </span>
-            </Tooltip>
-            <Typography.Text strong>{session.messages?.length ?? 0}</Typography.Text>
-          </Typography.Text>
-        </Space>
-      </div>
-
       {session.transcriptParseMode === 'head_tail' && (
         <Alert
           type="info"
@@ -813,52 +887,334 @@ export default function SessionDetail() {
         />
       )}
 
-      <RowCards
-        session={session}
-        formatDuration={formatDuration}
-        formatFileSize={formatFileSize}
-        resolveSessionLogBytes={resolveSessionLogBytes}
-        intl={intl}
-      />
+      <Card
+        size="small"
+        title={intl.formatMessage({ id: 'session.detailCollapseMeta' })}
+        style={{ marginBottom: 16 }}
+      >
+        <RowCards
+          session={session}
+          formatDuration={formatDuration}
+          formatFileSize={formatFileSize}
+          resolveSessionLogBytes={resolveSessionLogBytes}
+          intl={intl}
+        />
+      </Card>
+
+      <Row gutter={[16, 16]} wrap style={{ alignItems: 'flex-start' }}>
+        <Col xs={{ span: 24, order: 2 }} lg={{ span: 15, order: 1 }} xl={{ span: 16, order: 1 }} style={{ minWidth: 0 }}>
+      <Card
+        title={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {intl.formatMessage({ id: 'session.transcriptPanelTitle' })}
+            <SectionScopeHint intl={intl} messageId="session.transcriptPanelScopeDesc" />
+          </span>
+        }
+        style={{ marginBottom: 0 }}
+        styles={{ body: { paddingBottom: 12 } }}
+      >
+        <Input.Search
+          allowClear
+          placeholder={intl.formatMessage({ id: 'session.detailSearchPlaceholder' })}
+          value={detailSearch}
+          onChange={(e) => setDetailSearch(e.target.value)}
+          style={{ marginBottom: searchQ ? 8 : 12 }}
+        />
+        {tab === 'messages' && (
+          <div style={{ marginBottom: 12 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>
+              {intl.formatMessage({ id: 'session.msgRoleFilterLabel' })}
+            </Typography.Text>
+            <Segmented
+              size="small"
+              value={messageRoleFilter}
+              onChange={setMessageRoleFilter}
+              options={[
+                { label: intl.formatMessage({ id: 'session.msgRoleFilterAll' }), value: 'all' },
+                { label: 'user', value: 'user' },
+                { label: 'assistant', value: 'assistant' },
+                { label: 'boot', value: 'boot' },
+              ]}
+            />
+            <Tooltip title={intl.formatMessage({ id: 'session.msgRoleFilterTooltip' })}>
+              <QuestionCircleOutlined style={{ marginLeft: 8, fontSize: 12, opacity: 0.55, cursor: 'help' }} />
+            </Tooltip>
+          </div>
+        )}
+        {searchQ && (
+          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+            {intl.formatMessage(
+              { id: 'session.detailSearchMatch' },
+              { n: tabFilteredN, total: tabTotalN },
+            )}
+          </Typography.Text>
+        )}
+        <div
+          style={{
+            marginBottom: 12,
+            padding: '10px 12px',
+            borderRadius: token.borderRadius,
+            background: token.colorFillTertiary,
+            border: `1px solid ${token.colorBorderSecondary}`,
+          }}
+        >
+          <Space align="start" size={10}>
+            <VerticalAlignTopOutlined
+              style={{ color: token.colorPrimary, fontSize: 18, marginTop: 1 }}
+              aria-hidden
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Typography.Text style={{ fontSize: 13 }}>
+                {intl.formatMessage({ id: 'session.detailSortHint' })}
+              </Typography.Text>
+              <Tooltip title={intl.formatMessage({ id: 'session.detailSortTooltip' })}>
+                <QuestionCircleOutlined
+                  style={{ marginLeft: 8, fontSize: 12, opacity: 0.55, cursor: 'help' }}
+                  aria-label={intl.formatMessage({ id: 'session.detailSortTooltip' })}
+                />
+              </Tooltip>
+              <Typography.Paragraph type="secondary" style={{ margin: '6px 0 0', fontSize: 12, marginBottom: 0 }}>
+                {intl.formatMessage({ id: 'session.detailSortSubline' })}
+              </Typography.Paragraph>
+            </div>
+          </Space>
+        </div>
+        <Tabs
+          activeKey={tab}
+          onChange={setTab}
+          items={[
+            {
+              key: 'messages',
+              label: `${intl.formatMessage({ id: 'session.messages' })} (${messagesFilteredReversed.length})`,
+              children: (
+                <div style={SESSION_DETAIL_TAB_SCROLL_STYLE}>
+                  <SessionMessagesList
+                    messages={messagesFilteredReversed}
+                    intl={intl}
+                    token={token}
+                    listResetKey={`${id}-${messageRoleFilter}-${detailSearch.trim()}`}
+                  />
+                </div>
+              ),
+            },
+            {
+              key: 'toolCalls',
+              label: `${intl.formatMessage({ id: 'session.tools' })} (${session.toolCalls?.length || 0})`,
+              children: <ToolCallsPanel toolCalls={sortedTools} token={token} intl={intl} />,
+            },
+            {
+              key: 'events',
+              label: `${intl.formatMessage({ id: 'session.events' })} (${session.events?.length || 0})`,
+              children: (
+                <div style={SESSION_DETAIL_TAB_SCROLL_STYLE}>
+                  {eventsFilteredSorted.map((ev, idx) => (
+                    <Card key={`${ev.timestamp ?? 'e'}-${idx}`} size="small" style={{ marginBottom: 8 }}>
+                      <Space wrap align="center">
+                        {idx === 0 && (
+                          <Tag color="processing">{intl.formatMessage({ id: 'session.detailNewestBadge' })}</Tag>
+                        )}
+                        <Tag>{ev.type || 'event'}</Tag>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {ev.timestamp ? new Date(ev.timestamp).toLocaleString(intl.locale) : '—'}
+                        </Typography.Text>
+                      </Space>
+                      <pre style={{ fontSize: 12, marginTop: 8 }}>{JSON.stringify(ev.payload || ev, null, 2)}</pre>
+                    </Card>
+                  ))}
+                  {!eventsFilteredSorted.length && (
+                    <Typography.Text type="secondary">—</Typography.Text>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: 'skills',
+              label: `${intl.formatMessage({ id: 'session.skills' })} (${session.invokedSkills?.length || 0})`,
+              children: <SkillsPanel skills={skillsFilteredReversed} intl={intl} />,
+            },
+          ]}
+        />
+      </Card>
+        </Col>
+
+        <Col xs={{ span: 24, order: 1 }} lg={{ span: 9, order: 2 }} xl={{ span: 8, order: 2 }}>
+          <div
+            style={{
+              position: 'sticky',
+              top: 72,
+              alignSelf: 'flex-start',
+              maxHeight: 'calc(100dvh - 100px)',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}
+          >
+            <div
+              id="session-detail-evaluation-section"
+              style={{
+                marginBottom: 0,
+                padding: 16,
+                borderRadius: token.borderRadius,
+                border: `1px solid ${token.colorPrimaryBorder || token.colorBorder}`,
+                background: token.colorFillQuaternary,
+              }}
+            >
+              {sessionEvaluationPending && (
+                <Alert
+                  type="info"
+                  showIcon
+                  message={intl.formatMessage({ id: 'sessionEvaluation.pendingBanner' })}
+                  action={
+                    <Button size="small" type="primary" onClick={() => tryFetchLatestSessionEvaluation()}>
+                      {intl.formatMessage({ id: 'sessionEvaluation.fetchResult' })}
+                    </Button>
+                  }
+                  style={{ marginBottom: 12 }}
+                />
+              )}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  marginBottom: sessionLatestEvaluation ? 12 : 8,
+                }}
+              >
+                <Typography.Title level={5} style={{ margin: 0, flex: '1 1 200px' }}>
+                  {intl.formatMessage({ id: 'sessionEvaluation.sectionTitle' })}
+                </Typography.Title>
+                <EvaluationButton
+                  resourceId={session.sessionId}
+                  resourceType="session"
+                  evaluationUi="session"
+                  onEvaluationSubmitted={() => {
+                    sessionEvalBeforeIdRef.current = sessionLatestEvaluation?.evaluationId;
+                    setSessionEvaluationPending(true);
+                    requestAnimationFrame(() => {
+                      document
+                        .getElementById('session-detail-evaluation-section')
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    });
+                  }}
+                />
+              </div>
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+                <Link to="/settings#evaluation-prompt">
+                  {intl.formatMessage({ id: 'sessionEvaluation.editPromptLink' })}
+                </Link>
+              </Typography.Paragraph>
+              {sessionLatestEvaluation ? (
+                <div id="session-detail-evaluation-result">
+                  <EvaluationResult evaluation={sessionLatestEvaluation} />
+                  <Space style={{ marginTop: 12 }}>
+                    <Button onClick={() => setSessionLatestEvaluation(null)}>
+                      {intl.formatMessage({ id: 'sessionEvaluation.hideResult' })}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        (async () => {
+                          try {
+                            const res = await fetch(
+                              `/api/sessions/${encodeURIComponent(session.sessionId)}/evaluations/latest`,
+                            );
+                            const d = await res.json();
+                            if (d.success && d.data) setSessionLatestEvaluation(d.data);
+                          } catch {
+                            message.error(intl.formatMessage({ id: 'sessionEvaluation.fetchFailed' }));
+                          }
+                        })();
+                      }}
+                    >
+                      {intl.formatMessage({ id: 'sessionEvaluation.refresh' })}
+                    </Button>
+                  </Space>
+                </div>
+              ) : (
+                <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                  {intl.formatMessage({ id: 'sessionEvaluation.emptyHint' })}
+                </Typography.Paragraph>
+              )}
+            </div>
 
       {usage && limit != null && (
-        <Card
-          size="small"
-          title={
-            <Space wrap size={8}>
-              <span>{intl.formatMessage({ id: 'session.tokenCardTitleDual' })}</span>
-              {tokenUsageMeta?.totalTokensFresh === false && (
-                <Tooltip title={intl.formatMessage({ id: 'sessions.estimatedTokensDisclaimer' })}>
-                  <Tag color="volcano" style={{ margin: 0, fontSize: 11 }}>
-                    {intl.formatMessage({ id: 'sessions.staleIndexBadge' })}
-                  </Tag>
-                </Tooltip>
-              )}
-            </Space>
-          }
-          extra={<SectionScopeHint intl={intl} messageId="session.tokenCardScopeDesc" />}
-          style={{ marginBottom: 16 }}
-        >
-          {contextUnreliable && (
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 12 }}
-              message={intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' })}
-              description={intl.formatMessage({ id: 'session.tokenContextUnreliableDesc' })}
-            />
-          )}
-          <Descriptions size="small" column={{ xs: 1, sm: 2 }} style={{ marginBottom: 12 }}>
+      <Collapse
+        defaultActiveKey={['token']}
+        style={{ marginBottom: 0 }}
+        items={[
+                {
+                  key: 'token',
+                  label: intl.formatMessage({ id: 'session.detailCollapseToken' }),
+                  children: (
+                    <Card
+                      size="small"
+                      title={
+                        <Space wrap size={8}>
+                          <span>{intl.formatMessage({ id: 'session.tokenCardTitleDual' })}</span>
+                          {contextUnreliable && (
+                            <Tooltip
+                              title={
+                                <span>
+                                  <strong>{intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' })}</strong>
+                                  <br />
+                                  {intl.formatMessage({ id: 'session.tokenContextUnreliableDesc' })}
+                                </span>
+                              }
+                            >
+                              <Tag color="purple" style={{ margin: 0, fontSize: 11, cursor: 'help' }}>
+                                {intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' })}
+                              </Tag>
+                            </Tooltip>
+                          )}
+                          {tokenUsageMeta?.totalTokensFresh === false && (
+                            <Tooltip title={intl.formatMessage({ id: 'sessions.estimatedTokensDisclaimer' })}>
+                              <Tag color="volcano" style={{ margin: 0, fontSize: 11 }}>
+                                {intl.formatMessage({ id: 'sessions.staleIndexBadge' })}
+                              </Tag>
+                            </Tooltip>
+                          )}
+                        </Space>
+                      }
+                      extra={<SectionScopeHint intl={intl} messageId="session.tokenCardScopeDesc" />}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Descriptions
+                        size="small"
+                        column={1}
+                        layout="vertical"
+                        styles={{
+                          label: { width: '100%' },
+                          content: {
+                            width: '100%',
+                            maxWidth: '100%',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'break-word',
+                          },
+                        }}
+                        style={{ marginBottom: 12 }}
+                      >
             <Descriptions.Item
               label={
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   {intl.formatMessage({ id: 'session.tokenValidDataLabel' })}
                   <TokenMetricHint intl={intl} value={total} />
                 </span>
               }
             >
               <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                <Tooltip title={contextUnreliable ? intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' }) : undefined}>
+                <Tooltip
+                  title={
+                    contextUnreliable ? (
+                      <span>
+                        <strong>{intl.formatMessage({ id: 'session.tokenContextUnreliableTitle' })}</strong>
+                        <br />
+                        {intl.formatMessage({ id: 'session.tokenContextUnreliableDesc' })}
+                      </span>
+                    ) : undefined
+                  }
+                >
                   <Typography.Text type={contextUnreliable ? 'secondary' : undefined}>
                     {total.toLocaleString()} / {limit.toLocaleString()}
                     {contextUnreliable ? ' *' : ''}
@@ -1062,136 +1418,14 @@ export default function SessionDetail() {
             )}
           </Space>
         </Card>
+                  ),
+                },
+        ]}
+      />
       )}
-
-      <Card
-        title={
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            {intl.formatMessage({ id: 'session.transcriptPanelTitle' })}
-            <SectionScopeHint intl={intl} messageId="session.transcriptPanelScopeDesc" />
-          </span>
-        }
-      >
-        <Input.Search
-          allowClear
-          placeholder={intl.formatMessage({ id: 'session.detailSearchPlaceholder' })}
-          value={detailSearch}
-          onChange={(e) => setDetailSearch(e.target.value)}
-          style={{ marginBottom: searchQ ? 8 : 12 }}
-        />
-        {tab === 'messages' && (
-          <div style={{ marginBottom: 12 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>
-              {intl.formatMessage({ id: 'session.msgRoleFilterLabel' })}
-            </Typography.Text>
-            <Segmented
-              size="small"
-              value={messageRoleFilter}
-              onChange={setMessageRoleFilter}
-              options={[
-                { label: intl.formatMessage({ id: 'session.msgRoleFilterAll' }), value: 'all' },
-                { label: 'user', value: 'user' },
-                { label: 'assistant', value: 'assistant' },
-                { label: 'boot', value: 'boot' },
-              ]}
-            />
-            <Tooltip title={intl.formatMessage({ id: 'session.msgRoleFilterTooltip' })}>
-              <QuestionCircleOutlined style={{ marginLeft: 8, fontSize: 12, opacity: 0.55, cursor: 'help' }} />
-            </Tooltip>
           </div>
-        )}
-        {searchQ && (
-          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
-            {intl.formatMessage(
-              { id: 'session.detailSearchMatch' },
-              { n: tabFilteredN, total: tabTotalN },
-            )}
-          </Typography.Text>
-        )}
-        <div
-          style={{
-            marginBottom: 12,
-            padding: '10px 12px',
-            borderRadius: token.borderRadius,
-            background: token.colorFillTertiary,
-            border: `1px solid ${token.colorBorderSecondary}`,
-          }}
-        >
-          <Space align="start" size={10}>
-            <VerticalAlignTopOutlined
-              style={{ color: token.colorPrimary, fontSize: 18, marginTop: 1 }}
-              aria-hidden
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Typography.Text style={{ fontSize: 13 }}>
-                {intl.formatMessage({ id: 'session.detailSortHint' })}
-              </Typography.Text>
-              <Tooltip title={intl.formatMessage({ id: 'session.detailSortTooltip' })}>
-                <QuestionCircleOutlined
-                  style={{ marginLeft: 8, fontSize: 12, opacity: 0.55, cursor: 'help' }}
-                  aria-label={intl.formatMessage({ id: 'session.detailSortTooltip' })}
-                />
-              </Tooltip>
-              <Typography.Paragraph type="secondary" style={{ margin: '6px 0 0', fontSize: 12, marginBottom: 0 }}>
-                {intl.formatMessage({ id: 'session.detailSortSubline' })}
-              </Typography.Paragraph>
-            </div>
-          </Space>
-        </div>
-        <Tabs
-          activeKey={tab}
-          onChange={setTab}
-          items={[
-            {
-              key: 'messages',
-              label: `${intl.formatMessage({ id: 'session.messages' })} (${messagesFilteredReversed.length})`,
-              children: (
-                <SessionMessagesList
-                  messages={messagesFilteredReversed}
-                  intl={intl}
-                  token={token}
-                  listResetKey={`${id}-${messageRoleFilter}-${detailSearch.trim()}`}
-                />
-              ),
-            },
-            {
-              key: 'toolCalls',
-              label: `${intl.formatMessage({ id: 'session.tools' })} (${session.toolCalls?.length || 0})`,
-              children: <ToolCallsPanel toolCalls={sortedTools} token={token} intl={intl} />,
-            },
-            {
-              key: 'events',
-              label: `${intl.formatMessage({ id: 'session.events' })} (${session.events?.length || 0})`,
-              children: (
-                <div style={{ maxHeight: 520, overflow: 'auto' }}>
-                  {eventsFilteredSorted.map((ev, idx) => (
-                    <Card key={`${ev.timestamp ?? 'e'}-${idx}`} size="small" style={{ marginBottom: 8 }}>
-                      <Space wrap align="center">
-                        {idx === 0 && (
-                          <Tag color="processing">{intl.formatMessage({ id: 'session.detailNewestBadge' })}</Tag>
-                        )}
-                        <Tag>{ev.type || 'event'}</Tag>
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {ev.timestamp ? new Date(ev.timestamp).toLocaleString(intl.locale) : '—'}
-                        </Typography.Text>
-                      </Space>
-                      <pre style={{ fontSize: 12, marginTop: 8 }}>{JSON.stringify(ev.payload || ev, null, 2)}</pre>
-                    </Card>
-                  ))}
-                  {!eventsFilteredSorted.length && (
-                    <Typography.Text type="secondary">—</Typography.Text>
-                  )}
-                </div>
-              ),
-            },
-            {
-              key: 'skills',
-              label: `${intl.formatMessage({ id: 'session.skills' })} (${session.invokedSkills?.length || 0})`,
-              children: <SkillsPanel skills={skillsFilteredReversed} intl={intl} />,
-            },
-          ]}
-        />
-      </Card>
+        </Col>
+      </Row>
     </div>
   );
 }
@@ -1211,9 +1445,15 @@ function RowCards({ session, formatDuration, formatFileSize, resolveSessionLogBy
           { id: 'session.transcriptParseFullDetail' },
           { lines: session.transcriptJsonlLineCount ?? '—' },
         );
+  const descMb = invoked.length > 0 ? 16 : 0;
   return (
     <>
-      <Descriptions bordered size="small" column={{ xs: 1, sm: 2, md: 4 }} style={{ marginBottom: 16 }}>
+      <Descriptions
+        bordered
+        size="small"
+        column={{ xs: 1, sm: 2, md: 4 }}
+        style={{ marginBottom: descMb }}
+      >
         <Descriptions.Item label={intl.formatMessage({ id: 'session.transcriptLogSize' })}>
           {formatFileSize(resolveSessionLogBytes(session))}
         </Descriptions.Item>
@@ -1262,7 +1502,7 @@ function RowCards({ session, formatDuration, formatFileSize, resolveSessionLogBy
           size="small"
           title={intl?.formatMessage({ id: 'session.invokedSkills' }) || 'Skills invoked'}
           extra={<SectionScopeHint intl={intl} messageId="session.invokedSkillsCardScopeDesc" />}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 0 }}
         >
           <Space wrap>
             {invoked.map((s) => (

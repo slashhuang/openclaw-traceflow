@@ -91,6 +91,63 @@ export default {
   'settings.collapse': 'Collapse',
   'settings.stateDir': 'State dir (optional)',
   'settings.workspaceDir': 'Workspace dir (optional)',
+  'settings.evaluationPrompt.title': 'Session quality evaluation prompt',
+  'settings.evaluationPrompt.cardScopeDesc':
+    'GET/PUT/DELETE /api/evaluation-prompt; used for session detail “session quality” evaluation (eval-prompt-v1).',
+  'settings.evaluationPrompt.hint':
+    'The template must include the {context} placeholder (session metrics and summary are injected there). Large edits may break JSON-shaped LLM output—edit carefully.',
+  'settings.evaluationPrompt.version': 'Version',
+  'settings.evaluationPrompt.sourceBuiltin': 'Built-in',
+  'settings.evaluationPrompt.sourceOverride': 'Custom',
+  'settings.evaluationPrompt.save': 'Save',
+  'settings.evaluationPrompt.reset': 'Restore default',
+  'settings.evaluationPrompt.saveSuccess': 'Evaluation template saved',
+  'settings.evaluationPrompt.saveFailed': 'Save failed',
+  'settings.evaluationPrompt.resetSuccess': 'Restored built-in template',
+  'settings.evaluationPrompt.resetFailed': 'Restore failed',
+  'settings.evaluationPrompt.resetConfirmTitle':
+    'Remove the custom template and restore built-in eval-prompt-v1?',
+  'settings.evaluationPrompt.needContext': 'Template must contain {context}',
+  'settings.evaluationPrompt.loadFailed': 'Failed to load evaluation template',
+  'settings.workspaceEvaluationPrompt.title': 'Workspace bootstrap evaluation prompt',
+  'settings.workspaceEvaluationPrompt.cardScopeDesc':
+    'GET/PUT/DELETE /api/workspace-bootstrap-evaluation-prompt; used on the System Prompt page for workspace norms & bootstrap files (workspace-bootstrap-eval-v1).',
+  'settings.workspaceEvaluationPrompt.hint':
+    'The template must include {context} (filled from probed workspace files and system prompt excerpt). Edits may break JSON output—edit carefully.',
+  'settings.workspaceEvaluationPrompt.version': 'Version',
+  'settings.workspaceEvaluationPrompt.sourceBuiltin': 'Built-in',
+  'settings.workspaceEvaluationPrompt.sourceOverride': 'Custom',
+  'settings.workspaceEvaluationPrompt.save': 'Save',
+  'settings.workspaceEvaluationPrompt.reset': 'Restore default',
+  'settings.workspaceEvaluationPrompt.saveSuccess': 'Workspace evaluation template saved',
+  'settings.workspaceEvaluationPrompt.saveFailed': 'Save failed',
+  'settings.workspaceEvaluationPrompt.resetSuccess': 'Restored built-in template',
+  'settings.workspaceEvaluationPrompt.resetFailed': 'Restore failed',
+  'settings.workspaceEvaluationPrompt.resetConfirmTitle':
+    'Remove the custom template and restore built-in workspace-bootstrap-eval-v1?',
+  'settings.workspaceEvaluationPrompt.needContext': 'Template must contain {context}',
+  'settings.workspaceEvaluationPrompt.loadFailed': 'Failed to load workspace evaluation template',
+  'sessionEvaluation.sectionTitle': 'Session quality evaluation',
+  'sessionEvaluation.editPromptLink': 'Edit session quality prompt (eval-prompt-v1) in Settings',
+  'sessionEvaluation.emptyHint':
+    'Scores this conversation using transcript metrics and the eval-prompt-v1 template. This is not the same as the System Prompt page “workspace norms” evaluation. Click Run evaluation to start.',
+  'sessionEvaluation.confirmTitle': 'Run session quality evaluation?',
+  'sessionEvaluation.confirmDesc':
+    'Uses this session’s data and the eval-prompt-v1 template to call the LLM. May take tens of seconds.',
+  'sessionEvaluation.buttonRun': 'Run evaluation',
+  'sessionEvaluation.buttonSubmitting': 'Submitting…',
+  'sessionEvaluation.submittedAsync':
+    'Submitted. Refresh this page or switch tabs and back; or click “Refresh result”.',
+  'sessionEvaluation.submitFailed': 'Failed to submit evaluation',
+  'sessionEvaluation.pendingBanner': 'Session quality evaluation running. Refresh or click “Refresh result” when done.',
+  'sessionEvaluation.fetchResult': 'Refresh result',
+  'sessionEvaluation.notReadyYet': 'No new result yet. Try again in a moment.',
+  'sessionEvaluation.fetchFailed': 'Failed to fetch evaluation result',
+  'sessionEvaluation.messageDone': 'Evaluation finished',
+  'sessionEvaluation.hideResult': 'Hide result',
+  'sessionEvaluation.refresh': 'Refresh evaluation',
+  'evaluationResult.promptSourceBuiltin': 'Template source: built-in',
+  'evaluationResult.promptSourceOverride': 'Template source: custom',
   'confirm.restart': 'Restart Gateway? Active sessions may be interrupted.',
   'confirm.killSession': 'Kill this session?',
   'dashboard.title': 'Dashboard',
@@ -335,6 +392,8 @@ export default {
   'session.transcriptPanelTitle': 'Transcript',
   'session.transcriptPanelScopeDesc':
     'Tabs (Messages / Tools / Events / Skills) all use the same transcript version, reverse-chronological (newest at top).',
+  'session.detailCollapseMeta': 'Session summary & Skills',
+  'session.detailCollapseToken': 'Token usage',
   'session.tokenCardTitleDual': 'Token (valid data / estimate)',
   'session.tokenValidDataLabel': 'Valid data (recorded)',
   'session.tokenEstimateLabel': 'Token estimate (log)',
@@ -536,22 +595,38 @@ export default {
   'session.tokenZeroPoint4Desc': 'If you see different numbers here than what TraceFlow displays, the session log/index may not have been refreshed yet. Try re-running the session or restarting the service and check again.',
   'systemPrompt.harnessIntro':
     'Check your harness against OpenClaw docs: workspace bootstrap files and system prompt Structure (Tooling, Safety, Project Context, …)—missing md files, oversized Project Context, Skills (available_skills) vs Tooling.',
-  'systemPrompt.bootstrapHeaderTitle': 'OpenClaw bootstrap files (Project Context injection order)',
+  'systemPrompt.bootstrapHeaderTitle':
+    'OpenClaw workspace conventions & bootstrap files (user-defined · Project Context injection order)',
   'systemPrompt.bootstrapHeaderHint':
-    'Filenames follow OpenClaw “Workspace bootstrap injection”. Each panel: role, tips, and on-disk body.',
+    'These Markdown files capture how your agent should work in this repo—your workspace norms and guardrails. Names follow OpenClaw “Workspace bootstrap injection”.',
   'systemPrompt.harness.tierPrimaryTitle': 'Core bootstrap (AGENTS / SOUL / IDENTITY / USER)',
-  'systemPrompt.harness.tierPrimaryDesc': 'Expanded by default: persona, user profile, and operating instructions first.',
   'systemPrompt.harness.tierSecondaryTitle': 'Other bootstrap (TOOLS / HEARTBEAT / BOOTSTRAP / MEMORY)',
-  'systemPrompt.harness.tierSecondaryDesc': 'Collapsed by default: tool notes, heartbeat, one-time bootstrap, long-term memory.',
   'systemPrompt.harness.otherFilesTitle': 'Other workspace Markdown',
   'systemPrompt.harness.projectContextCollapseTitle': '# Project Context block (aggregated in system prompt)',
   'systemPrompt.harness.skillsCollapseTitle': 'Skills snapshot (available)',
+  'systemPrompt.bootstrapGoldenRulesTitle': 'Best practices for length and editing',
   'systemPrompt.bootstrapGoldenRules':
     'Best practices (per OpenClaw docs): (1) Bootstrap content is injected every turn—keep files short or tokens and compaction spike. (2) MEMORY.md grows fast; put durable facts there and workflows in AGENTS.md. (3) TOOLS.md is guidance only; it does not enable/disable tools. (4) Sub-agent sessions inject only AGENTS.md and TOOLS.md—do not expect SOUL etc. there. (5) Watch bootstrapMaxChars / bootstrapTotalMaxChars and truncation warnings.',
   'systemPrompt.bootstrap.tagInjected': 'injected',
   'systemPrompt.bootstrap.tagMissing': 'Not in disk snapshot',
   'systemPrompt.bootstrap.tagEmpty': 'Empty file',
   'systemPrompt.bootstrap.charsLabel': '{count} chars',
+  'systemPrompt.bootstrap.copyOk': 'Copied',
+  'systemPrompt.bootstrap.copyFail': 'Copy failed',
+  'systemPrompt.bootstrap.copyWorkspaceOk': 'Workspace path copied',
+  'systemPrompt.bootstrap.copyFilePathOk': 'File path copied',
+  'systemPrompt.bootstrap.copyWorkspacePath': 'Copy workspace path',
+  'systemPrompt.bootstrap.copyFilePath': 'Copy file path',
+  'systemPrompt.bootstrap.openInVscode': 'Open in VS Code',
+  'systemPrompt.bootstrap.edit': 'Edit',
+  'systemPrompt.bootstrap.cancelEdit': 'Cancel',
+  'systemPrompt.bootstrap.save': 'Save',
+  'systemPrompt.bootstrap.saveOk': 'Saved to workspace',
+  'systemPrompt.bootstrap.saveFail': 'Save failed',
+  'systemPrompt.bootstrap.noWorkspaceHint':
+    'Probe did not report a workspace path; saving may fail until OPENCLAW_WORKSPACE_DIR (or Gateway workspace) is available to TraceFlow.',
+  'systemPrompt.bootstrap.lengthWarning':
+    'Content exceeds the usual OpenClaw per-file bootstrap limit (~{count} chars); injection may truncate at runtime.',
 
   'systemPrompt.bootstrap.agents.role': 'Operating instructions and memory contract: rules, priorities, how the agent should work.',
   'systemPrompt.bootstrap.agents.tip':
@@ -571,7 +646,11 @@ export default {
   'systemPrompt.bootstrap.memory.role': 'Curated long-term memory; MEMORY.md preferred, else lowercase memory.md fallback.',
   'systemPrompt.bootstrap.memory.tip': 'Most likely to bloat—keep only facts you need across sessions; use memory/*.md or on-demand tools for the rest.',
   'systemPrompt.pageScopeDesc':
-    'Probe and analysis from GET /api/skills/system-prompt/probe, /analysis, /usage; aligned with the current Gateway session/report. Each ℹ describes that block’s data source.',
+    'This page pulls together what TraceFlow can see from your connected Gateway and local session/workspace: system prompt structure, token breakdown, bootstrap files, and more. Each section’s ℹ explains what that block shows and what it covers.',
+  'systemPrompt.pageAboutCollapse': 'About this page',
+  'systemPrompt.pageLead':
+    'With your Gateway and local sessions in context, review and tune workspace norms and bootstrap files; expand sections below for token breakdown and full system prompt. Use the ℹ hints for detailed scope.',
+  'systemPrompt.evaluationResultSummary': 'Last evaluation: {score} · grade {grade}',
   'systemPrompt.pageSubtitle':
     'Open-source observability: your Gateway / local sessions · systemPromptReport · sessions.json',
   'systemPrompt.fullCollapseScopeDesc':
@@ -591,6 +670,7 @@ export default {
   'systemPrompt.copy': 'Copy full text',
   'systemPrompt.copied': 'Copied',
   'systemPrompt.breakdownTitle': 'OpenClaw Structure · Token breakdown',
+  'systemPrompt.breakdownCollapseSummary': '~{total} tokens total',
   'systemPrompt.probe': 'Probe System Prompt',
   'systemPrompt.probing': 'Probing…',
   'systemPrompt.probeHint': 'Click "Probe" to fetch latest data.',
@@ -613,6 +693,39 @@ export default {
   'systemPrompt.injectedMergeHint': '{count} injectedWorkspaceFiles merged into the list below (📌)',
   'systemPrompt.sessionsJsonTitle': 'sessions.json summary (debug)',
   'systemPrompt.emptyFileHint': 'Empty file',
+  'systemPrompt.evaluationCardTitle': '💡 OpenClaw workspace conventions & bootstrap file evaluation',
+  'systemPrompt.evaluationSubsectionTitle': 'Evaluation & improvement suggestions',
+  'systemPrompt.evaluationConfirmTitle': 'Start evaluation?',
+  'systemPrompt.evaluationConfirmDesc':
+    'Uses probed workspace bootstrap files (AGENTS/SOUL/USER, etc.) and an excerpt of the assembled system prompt to judge clarity, token use, guidance quality, and whether cron vs heartbeats fit the described work (OpenClaw core is out of scope). May take tens of seconds.',
+  'systemPrompt.evaluationButtonRun': 'Run evaluation',
+  'systemPrompt.evaluationButtonSubmitting': 'Submitting…',
+  'systemPrompt.evaluationButtonRunning': 'Running…',
+  'systemPrompt.evaluationRunningBanner': 'Queued or analyzing workspace bootstrap content. Results will appear below when ready.',
+  'systemPrompt.evaluationSubmittedAsync':
+    'Evaluation submitted and running in the background. Refresh this page, or switch away and back to this tab; you can also click “Refresh result” below.',
+  'systemPrompt.evaluationPendingBanner':
+    'Evaluation is running. Refresh this page, switch tabs and return, or click “Refresh result” for the latest outcome.',
+  'systemPrompt.evaluationFetchResultButton': 'Refresh result',
+  'systemPrompt.evaluationNotReadyYet': 'No new result yet. Try again in a moment.',
+  'systemPrompt.evaluationFetchFailed': 'Failed to fetch evaluation result',
+  'systemPrompt.evaluationMessageSubmitted': 'Evaluation task submitted',
+  'systemPrompt.evaluationMessageDone': 'Evaluation finished',
+  'systemPrompt.evaluationSubmitFailed': 'Failed to submit evaluation',
+  'systemPrompt.evaluationPollTimeout': 'Timed out waiting for evaluation. Retry later or check server logs.',
+  'systemPrompt.evaluationWaitTimeout':
+    'Evaluation wait timed out (request aborted). Retry later or reduce evaluation duration.',
+  'systemPrompt.evaluationPollHttpError':
+    'Too many failed requests (e.g. 502). Polling stopped. Check the service or try again later.',
+  'systemPrompt.evaluationFailed': 'Evaluation failed: {detail}',
+  'systemPrompt.evaluationCardEmptyHint':
+    'This evaluates workspace norms & bootstrap file quality (clarity, tokens, guidance, cron vs heartbeats)—not single-session quality. For per-session scoring, use Session detail. Click Run evaluation to start.',
+  'systemPrompt.evaluationHideResult': 'Hide result',
+  'systemPrompt.evaluationRefresh': 'Refresh evaluation',
+  'systemPrompt.evaluationPromptEditLink': 'Edit workspace evaluation template in Settings',
+  'systemPrompt.evaluationPromptPreviewTitle': 'Current evaluation template (excerpt)',
+  'systemPrompt.evaluationPromptPreviewExpand': 'Show first 500 characters',
+  'systemPrompt.evaluationPromptPreviewEmpty': 'Could not load template',
   'pricing.title': 'Model Pricing Configuration',
   'pricing.pageScopeDesc':
     'Prices from GET /api/pricing and local config; “In use” merges session models with configured models. Values are $ per 1M tokens for estimates.',
