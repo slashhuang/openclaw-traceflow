@@ -12,6 +12,7 @@ import { SetupModule } from './setup/setup.module';
 import { PricingConfigModule } from './config/pricing-config.module';
 import { StorageModule } from './storage/storage.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { EvaluationController } from './evaluators/evaluation.controller';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     StorageModule,
     DashboardModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, EvaluationController],
   providers: [AppService],
 })
 export class AppModule {}
