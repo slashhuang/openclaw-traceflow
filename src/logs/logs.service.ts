@@ -13,7 +13,7 @@ export interface LogEntry {
 @Injectable()
 export class LogsService {
   private readonly logger = new Logger(LogsService.name);
-  private logTailer: any = null;
+  private logTailer: import('chokidar').FSWatcher | null = null;
   private logSubscribers: Set<(entry: LogEntry) => void> = new Set();
 
   // OpenClaw Gateway tail via `logs.tail` cursor protocol
@@ -22,7 +22,11 @@ export class LogsService {
   private gatewayPollInFlight = false;
   private gatewaySuppressNextEmit = false;
   private gatewaySubscribers: Set<(entry: LogEntry) => void> = new Set();
-  private gatewayPollOptions: { limit: number; pollIntervalMs: number; maxBytes: number } | null = null;
+  private gatewayPollOptions: {
+    limit: number;
+    pollIntervalMs: number;
+    maxBytes: number;
+  } | null = null;
   private gatewayCurrentPollMs = 1500;
   private gatewayFailureCount = 0;
   private gatewayNoNewDataCount = 0;
@@ -65,7 +69,10 @@ export class LogsService {
             fs.readSync(fd, buffer, 0, buffer.length, lastSize);
             fs.closeSync(fd);
 
-            const newLines = buffer.toString('utf-8').split('\n').filter(line => line.trim());
+            const newLines = buffer
+              .toString('utf-8')
+              .split('\n')
+              .filter((line) => line.trim());
             for (const line of newLines) {
               const entry = this.parseLogLine(line);
               this.notifySubscribers(entry);
@@ -80,7 +87,10 @@ export class LogsService {
 
       this.logger.log(`Started tailing logs from: ${logPath}`);
     } catch (error: any) {
-      console.error('[LogsService] Failed to start log tailing:', error?.message || error);
+      console.error(
+        '[LogsService] Failed to start log tailing:',
+        error?.message || error,
+      );
       // 不抛出错误，静默失败
     }
   }
@@ -116,13 +126,22 @@ export class LogsService {
     this.gatewaySubscribers.add(callback);
 
     if (!this.gatewayTimer) {
-      const limit = typeof opts?.limit === 'number' && Number.isFinite(opts.limit) && opts.limit > 0 ? Math.floor(opts.limit) : 200;
+      const limit =
+        typeof opts?.limit === 'number' &&
+        Number.isFinite(opts.limit) &&
+        opts.limit > 0
+          ? Math.floor(opts.limit)
+          : 200;
       const pollIntervalMs =
-        typeof opts?.pollIntervalMs === 'number' && Number.isFinite(opts.pollIntervalMs) && opts.pollIntervalMs > 0
+        typeof opts?.pollIntervalMs === 'number' &&
+        Number.isFinite(opts.pollIntervalMs) &&
+        opts.pollIntervalMs > 0
           ? Math.floor(opts.pollIntervalMs)
           : 1500;
       const maxBytes =
-        typeof opts?.maxBytes === 'number' && Number.isFinite(opts.maxBytes) && opts.maxBytes > 0
+        typeof opts?.maxBytes === 'number' &&
+        Number.isFinite(opts.maxBytes) &&
+        opts.maxBytes > 0
           ? Math.floor(opts.maxBytes)
           : 1_000_000;
 
@@ -196,7 +215,9 @@ export class LogsService {
           this.gatewayCursor = res.payload.cursor;
         }
         const rawLines = Array.isArray(res.payload.lines)
-          ? res.payload.lines.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+          ? res.payload.lines.filter(
+              (l): l is string => typeof l === 'string' && l.trim().length > 0,
+            )
           : [];
         // Fill dedupe so the websocket won't re-send the same lines.
         for (const line of rawLines) {
@@ -209,7 +230,9 @@ export class LogsService {
     // 2) Fallback to local file logs
     const logPath = config.openclawLogPath;
     if (!logPath) {
-      console.warn('[LogsService] Log file path not configured (OPENCLAW_LOG_PATH) and Gateway unavailable');
+      console.warn(
+        '[LogsService] Log file path not configured (OPENCLAW_LOG_PATH) and Gateway unavailable',
+      );
       return [];
     }
 
@@ -236,11 +259,16 @@ export class LogsService {
   /**
    * 与 getRecentLogs 的 Gateway 分支一致：更新 cursor、去重并解析（供仪表盘单次 WS 合并拉取复用）
    */
-  mapGatewayTailPayloadToEntries(payload: { cursor?: number; lines: string[] }): LogEntry[] {
+  mapGatewayTailPayloadToEntries(payload: {
+    cursor?: number;
+    lines: string[];
+  }): LogEntry[] {
     if (typeof payload.cursor === 'number') {
       this.gatewayCursor = payload.cursor;
     }
-    const rawLines = payload.lines.filter((l) => typeof l === 'string' && l.trim().length > 0);
+    const rawLines = payload.lines.filter(
+      (l) => typeof l === 'string' && l.trim().length > 0,
+    );
     for (const line of rawLines) {
       this.rememberGatewayLine(line);
     }
@@ -280,13 +308,17 @@ export class LogsService {
         this.gatewayNoNewDataCount = 0;
         const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
         // 连续失败时使用更激进冷却，避免无效 logs.tail 高频重试。
-        this.updateGatewayPollInterval(Math.min(60_000, base * (2 ** Math.min(this.gatewayFailureCount, 6))));
+        this.updateGatewayPollInterval(
+          Math.min(60_000, base * 2 ** Math.min(this.gatewayFailureCount, 6)),
+        );
         return;
       }
       if (this.gatewayFailureCount > 0 || this.gatewayNoNewDataCount > 0) {
         this.gatewayFailureCount = 0;
         this.gatewayNoNewDataCount = 0;
-        this.updateGatewayPollInterval(this.gatewayPollOptions?.pollIntervalMs || 1500);
+        this.updateGatewayPollInterval(
+          this.gatewayPollOptions?.pollIntervalMs || 1500,
+        );
       }
 
       if (typeof res.payload.cursor === 'number') {
@@ -294,20 +326,28 @@ export class LogsService {
       }
 
       const rawLines = Array.isArray(res.payload.lines)
-        ? res.payload.lines.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+        ? res.payload.lines.filter(
+            (l): l is string => typeof l === 'string' && l.trim().length > 0,
+          )
         : [];
 
       if (rawLines.length === 0) {
         this.gatewayNoNewDataCount += 1;
         const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
         // 无增量日志时渐进拉长轮询，降低空转 I/O 与 CPU。
-        this.updateGatewayPollInterval(Math.min(60_000, base * (2 ** Math.min(this.gatewayNoNewDataCount, 5))));
+        this.updateGatewayPollInterval(
+          Math.min(60_000, base * 2 ** Math.min(this.gatewayNoNewDataCount, 5)),
+        );
       } else if (this.gatewayNoNewDataCount > 0) {
         this.gatewayNoNewDataCount = 0;
-        this.updateGatewayPollInterval(this.gatewayPollOptions?.pollIntervalMs || 1500);
+        this.updateGatewayPollInterval(
+          this.gatewayPollOptions?.pollIntervalMs || 1500,
+        );
       }
 
-      const resetOrTruncated = Boolean(res.payload.reset || res.payload.truncated);
+      const resetOrTruncated = Boolean(
+        res.payload.reset || res.payload.truncated,
+      );
       if (resetOrTruncated) {
         // The cursor moved backwards or we only got a truncated chunk; safest is clearing dedupe.
         this.gatewayDedupeOrder = [];
@@ -369,17 +409,20 @@ export class LogsService {
       if (obj && typeof obj === 'object') {
         const o = obj as unknown as Record<string, unknown>;
         const meta =
-          o['_meta'] && typeof o['_meta'] === 'object' ? (o['_meta'] as Record<string, unknown>) : null;
+          o['_meta'] && typeof o['_meta'] === 'object'
+            ? (o['_meta'] as Record<string, unknown>)
+            : null;
 
         const timeStr =
           typeof o['time'] === 'string'
-            ? (o['time'] as string)
+            ? o['time']
             : meta && typeof meta['date'] === 'string'
-              ? (meta['date'] as string)
+              ? meta['date']
               : null;
 
         const rawLevel =
-          meta && (typeof meta['logLevelName'] === 'string'
+          meta &&
+          (typeof meta['logLevelName'] === 'string'
             ? meta['logLevelName']
             : typeof meta['level'] === 'string'
               ? meta['level']
@@ -388,15 +431,20 @@ export class LogsService {
                 : undefined);
 
         const normalizedLevel =
-          typeof rawLevel === 'string' ? this.normalizeLogLevel(rawLevel) : ('info' as LogEntry['level']);
+          typeof rawLevel === 'string'
+            ? this.normalizeLogLevel(rawLevel)
+            : ('info' as LogEntry['level']);
 
-        const parseMaybeJsonString = (value: unknown): Record<string, unknown> | null => {
+        const parseMaybeJsonString = (
+          value: unknown,
+        ): Record<string, unknown> | null => {
           if (typeof value !== 'string') return null;
           const v = value.trim();
           if (!v.startsWith('{') || !v.endsWith('}')) return null;
           try {
             const parsed = JSON.parse(v) as unknown;
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+              return parsed as Record<string, unknown>;
           } catch {
             // ignore
           }
@@ -405,26 +453,26 @@ export class LogsService {
 
         const contextCandidate =
           typeof o['0'] === 'string'
-            ? (o['0'] as string)
+            ? o['0']
             : meta && typeof meta['name'] === 'string'
-              ? (meta['name'] as string)
+              ? meta['name']
               : null;
 
         const contextObj = parseMaybeJsonString(contextCandidate);
         const subsystem =
           contextObj && typeof contextObj['subsystem'] === 'string'
-            ? (contextObj['subsystem'] as string)
+            ? contextObj['subsystem']
             : contextObj && typeof contextObj['module'] === 'string'
-              ? (contextObj['module'] as string)
+              ? contextObj['module']
               : null;
 
         const message =
           (typeof o['1'] === 'string'
-            ? (o['1'] as string)
+            ? o['1']
             : typeof o['2'] === 'string'
-              ? (o['2'] as string)
+              ? o['2']
               : typeof o['message'] === 'string'
-                ? (o['message'] as string)
+                ? o['message']
                 : null) ??
           (contextCandidate && !contextObj ? contextCandidate : null) ??
           trimmed;
@@ -432,7 +480,9 @@ export class LogsService {
         const timestamp = timeStr
           ? (() => {
               const dt = new Date(timeStr);
-              return Number.isNaN(dt.getTime()) ? new Date().toISOString() : dt.toISOString();
+              return Number.isNaN(dt.getTime())
+                ? new Date().toISOString()
+                : dt.toISOString();
             })()
           : new Date().toISOString();
 
@@ -458,7 +508,9 @@ export class LogsService {
     }
 
     // 尝试匹配简单格式：TIMESTAMP LEVEL content
-    const simpleMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[.\d]*)\s*(INFO|WARN|ERROR|DEBUG|LOG|VERBOSE)\s+(.*)$/i);
+    const simpleMatch = trimmed.match(
+      /^(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[.\d]*)\s*(INFO|WARN|ERROR|DEBUG|LOG|VERBOSE)\s+(.*)$/i,
+    );
 
     if (simpleMatch) {
       return {
@@ -483,7 +535,12 @@ export class LogsService {
     const normalized = level.toLowerCase();
     if (normalized === 'error' || normalized === 'fatal') return 'error';
     if (normalized === 'warn' || normalized === 'warning') return 'warn';
-    if (normalized === 'trace' || normalized === 'debug' || normalized === 'verbose') return 'debug';
+    if (
+      normalized === 'trace' ||
+      normalized === 'debug' ||
+      normalized === 'verbose'
+    )
+      return 'debug';
     return 'info';
   }
 }

@@ -26,7 +26,8 @@ function trySenderFromJsonFences(text: string): string | null {
       // Sender (untrusted) 等：无 sender 字段时，展示名优先于 id
       if (typeof o.name === 'string' && o.name.trim()) return o.name.trim();
       if (typeof o.label === 'string' && o.label.trim()) return o.label.trim();
-      if (typeof o.username === 'string' && o.username.trim()) return o.username.trim();
+      if (typeof o.username === 'string' && o.username.trim())
+        return o.username.trim();
       if (typeof o.e164 === 'string' && o.e164.trim()) return o.e164.trim();
       if (typeof o.id === 'string' && o.id.trim()) return o.id.trim();
     } catch {
@@ -66,10 +67,14 @@ export function extractSenderFromMessageContent(text: string): string | null {
   if (senderBlockMatch) {
     try {
       const obj = JSON.parse(senderBlockMatch[1]) as Record<string, unknown>;
-      if (typeof obj.name === 'string' && obj.name.trim()) return obj.name.trim();
-      if (typeof obj.label === 'string' && obj.label.trim()) return obj.label.trim();
-      if (typeof obj.username === 'string' && obj.username.trim()) return obj.username.trim();
-      if (typeof obj.e164 === 'string' && obj.e164.trim()) return obj.e164.trim();
+      if (typeof obj.name === 'string' && obj.name.trim())
+        return obj.name.trim();
+      if (typeof obj.label === 'string' && obj.label.trim())
+        return obj.label.trim();
+      if (typeof obj.username === 'string' && obj.username.trim())
+        return obj.username.trim();
+      if (typeof obj.e164 === 'string' && obj.e164.trim())
+        return obj.e164.trim();
       if (typeof obj.id === 'string' && obj.id.trim()) return obj.id.trim();
     } catch {
       /* ignore */

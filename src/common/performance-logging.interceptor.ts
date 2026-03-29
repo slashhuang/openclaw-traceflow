@@ -10,12 +10,12 @@ import { tap } from 'rxjs/operators';
 
 /**
  * 性能日志拦截器 — 统一拦截所有 HTTP REST API
- * 
+ *
  * 功能：
  * - 记录每个 API 请求的总耗时
  * - 慢查询警告（>1s）
  * - 结构化日志输出（JSON 格式）
- * 
+ *
  * @see PRD: docs/prd-traceflow-logging-2026-03-24.md
  */
 @Injectable()
@@ -27,7 +27,7 @@ export class PerformanceLoggingInterceptor implements NestInterceptor {
     const response = context.switchToHttp().getResponse();
     const startTime = Date.now();
     const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    
+
     // 请求开始日志
     this.logger.debug(
       JSON.stringify({
@@ -48,7 +48,7 @@ export class PerformanceLoggingInterceptor implements NestInterceptor {
       tap(() => {
         const durationMs = Date.now() - startTime;
         const statusCode = response.statusCode;
-        
+
         // 请求结束日志
         const logData: any = {
           timestamp: new Date().toISOString(),

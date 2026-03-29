@@ -11,7 +11,11 @@ export function estimateTokensFromTranscriptBytes(
   if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) {
     return undefined;
   }
-  if (typeof divisor !== 'number' || !Number.isFinite(divisor) || divisor <= 0) {
+  if (
+    typeof divisor !== 'number' ||
+    !Number.isFinite(divisor) ||
+    divisor <= 0
+  ) {
     return undefined;
   }
   return Math.ceil(bytes / divisor);
@@ -19,7 +23,12 @@ export function estimateTokensFromTranscriptBytes(
 
 /** 列表/详情是否展示「由日志大小推算」的 token（不覆盖官方非零用量） */
 export function shouldOfferLogSizeTokenEstimate(session: {
-  tokenUsage?: { input?: number; output?: number; total?: number; contextUtilizationReliable?: boolean };
+  tokenUsage?: {
+    input?: number;
+    output?: number;
+    total?: number;
+    contextUtilizationReliable?: boolean;
+  };
   tokenUsageMeta?: { totalTokensFresh?: boolean };
   transcriptFileSizeBytes?: number;
 }): boolean {

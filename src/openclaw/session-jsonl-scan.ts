@@ -87,23 +87,31 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
       }
 
       const msgObj = entry.message as Record<string, unknown> | undefined;
-      const usage = (msgObj?.usage ?? entry.tokenUsage) as Record<string, unknown> | undefined;
+      const usage = (msgObj?.usage ?? entry.tokenUsage) as
+        | Record<string, unknown>
+        | undefined;
       if (usage && typeof usage.totalTokens === 'number') {
         transcriptUsageObserved = true;
         const inp = typeof usage.input === 'number' ? usage.input : 0;
         const out = typeof usage.output === 'number' ? usage.output : 0;
         sumInput += inp;
         sumOutput += out;
-        lastTotal = usage.totalTokens as number;
+        lastTotal = usage.totalTokens;
 
         const cost = usage.cost as Record<string, unknown> | undefined;
-        if (cost && typeof cost === 'object' && typeof cost.total === 'number') {
+        if (
+          cost &&
+          typeof cost === 'object' &&
+          typeof cost.total === 'number'
+        ) {
           hasCostField = true;
           sumCostInput += typeof cost.input === 'number' ? cost.input : 0;
           sumCostOutput += typeof cost.output === 'number' ? cost.output : 0;
-          sumCostCacheRead += typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
-          sumCostCacheWrite += typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
-          sumCostTotal += cost.total as number;
+          sumCostCacheRead +=
+            typeof cost.cacheRead === 'number' ? cost.cacheRead : 0;
+          sumCostCacheWrite +=
+            typeof cost.cacheWrite === 'number' ? cost.cacheWrite : 0;
+          sumCostTotal += cost.total;
         }
         tokenUsage = {
           input: sumInput,
@@ -152,20 +160,27 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
             const toolCallId = msg.toolCallId as string | undefined;
             const toolName = msg.toolName as string | undefined;
             const isError = msg.isError === true;
-            const details = msg.details as { durationMs?: number; status?: string } | undefined;
+            const details = msg.details as
+              | { durationMs?: number; status?: string }
+              | undefined;
             const durationMs = details?.durationMs ?? 0;
 
             let output: any = {};
             if (Array.isArray(messageContent)) {
               const texts = collectTranscriptTextParts(messageContent);
-              output = texts.length === 1 ? texts[0] : texts.length > 1 ? texts : {};
+              output =
+                texts.length === 1 ? texts[0] : texts.length > 1 ? texts : {};
             }
             const isEmptyPlainObject =
               output !== null &&
               typeof output === 'object' &&
               !Array.isArray(output) &&
               Object.keys(output as object).length === 0;
-            if (details && Object.keys(details).length > 0 && isEmptyPlainObject) {
+            if (
+              details &&
+              Object.keys(details).length > 0 &&
+              isEmptyPlainObject
+            ) {
               output = details;
             }
 
@@ -177,9 +192,16 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
                 output,
                 durationMs,
                 success: !isError,
-                error: isError ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined,
+                error: isError
+                  ? typeof output === 'string'
+                    ? output
+                    : JSON.stringify(output)
+                  : undefined,
                 timestamp:
-                  prev.timestamp ?? (typeof entry.timestamp === 'number' ? entry.timestamp : undefined),
+                  prev.timestamp ??
+                  (typeof entry.timestamp === 'number'
+                    ? entry.timestamp
+                    : undefined),
               };
             } else {
               toolCalls.push({
@@ -188,8 +210,15 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
                 output,
                 durationMs,
                 success: !isError,
-                error: isError ? (typeof output === 'string' ? output : undefined) : undefined,
-                timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
+                error: isError
+                  ? typeof output === 'string'
+                    ? output
+                    : undefined
+                  : undefined,
+                timestamp:
+                  typeof entry.timestamp === 'number'
+                    ? entry.timestamp
+                    : Date.now(),
               });
             }
           }
@@ -200,7 +229,8 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
               if (!raw || typeof raw !== 'object') continue;
               const item = raw as Record<string, unknown>;
               if (isTranscriptToolCallBlock(item)) {
-                const { id, name, input } = extractTranscriptToolBlockMeta(item);
+                const { id, name, input } =
+                  extractTranscriptToolBlockMeta(item);
                 const idx = toolCalls.length;
                 toolCalls.push({
                   name,
@@ -209,19 +239,34 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
                   durationMs: 0,
                   success: true,
                   error: undefined,
-                  timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
+                  timestamp:
+                    typeof entry.timestamp === 'number'
+                      ? entry.timestamp
+                      : Date.now(),
                 });
                 if (id) toolCallIdToIndex.set(id, idx);
               } else if (item.type === 'thinking') {
                 // skip
               } else {
-                contentText = appendTranscriptTextFromContentBlock(item, contentText);
+                contentText = appendTranscriptTextFromContentBlock(
+                  item,
+                  contentText,
+                );
               }
             }
             if (!contentText && role === 'assistant') {
               const tcNames = messageContent
-                .filter((c: unknown) => c && typeof c === 'object' && isTranscriptToolCallBlock(c as { type?: unknown }))
-                .map((c: unknown) => extractTranscriptToolBlockMeta(c as Record<string, unknown>).name);
+                .filter(
+                  (c: unknown) =>
+                    c &&
+                    typeof c === 'object' &&
+                    isTranscriptToolCallBlock(c as { type?: unknown }),
+                )
+                .map(
+                  (c: unknown) =>
+                    extractTranscriptToolBlockMeta(c as Record<string, unknown>)
+                      .name,
+                );
               if (tcNames.length > 0) {
                 contentText = '[工具调用：' + tcNames.join(', ') + ']';
               } else if (!contentText) {
@@ -249,11 +294,18 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
           }
 
           if (role === 'assistant') {
-            contentText = resolveAssistantTranscriptDisplayText(msg, contentText);
+            contentText = resolveAssistantTranscriptDisplayText(
+              msg,
+              contentText,
+            );
           }
 
-          const sender = role === 'user' ? extractSenderFromMessageEntry(entry) : undefined;
-          const displayRole = role === 'toolResult' ? 'assistant' : (role as 'user' | 'assistant' | 'system');
+          const sender =
+            role === 'user' ? extractSenderFromMessageEntry(entry) : undefined;
+          const displayRole =
+            role === 'toolResult'
+              ? 'assistant'
+              : (role as 'user' | 'assistant' | 'system');
           messages.push({
             role: displayRole,
             content: contentText,
@@ -265,7 +317,14 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
       }
 
       if (entry.toolUse) {
-        const tu = entry.toolUse as { name?: string; input?: unknown; output?: unknown; durationMs?: number; success?: boolean; error?: string };
+        const tu = entry.toolUse as {
+          name?: string;
+          input?: unknown;
+          output?: unknown;
+          durationMs?: number;
+          success?: boolean;
+          error?: string;
+        };
         const legacyToolName = tu.name as string;
         if (!legacyToolUseNames.has(legacyToolName)) {
           legacyToolUseNames.add(legacyToolName);
@@ -276,7 +335,10 @@ export function scanSessionJsonlLines(lines: string[]): SessionJsonlScanResult {
             durationMs: tu.durationMs || 0,
             success: tu.success !== false,
             error: tu.error,
-            timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
+            timestamp:
+              typeof entry.timestamp === 'number'
+                ? entry.timestamp
+                : Date.now(),
           });
         }
       }

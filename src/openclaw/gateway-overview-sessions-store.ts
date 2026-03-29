@@ -4,7 +4,10 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import type { StatusOverviewResult, TraceflowGatewayStatusSource } from './gateway-rpc';
+import type {
+  StatusOverviewResult,
+  TraceflowGatewayStatusSource,
+} from './gateway-rpc';
 
 function agentFolderFromSessionKey(sessionKey: string): string | null {
   const parts = sessionKey.split(':');
@@ -29,12 +32,21 @@ function resolveModel(entry: Record<string, unknown>): string | undefined {
 /**
  * 读取 OpenClaw 会话索引中指定 sessionKey 的一行（与 Gateway health.recent[].key 对应）。
  */
-export function readSessionsStoreEntry(stateDir: string, sessionKey: string): Record<string, unknown> | null {
+export function readSessionsStoreEntry(
+  stateDir: string,
+  sessionKey: string,
+): Record<string, unknown> | null {
   const agentFolder = agentFolderFromSessionKey(sessionKey);
   if (!agentFolder) {
     return null;
   }
-  const storePath = path.join(stateDir, 'agents', agentFolder, 'sessions', 'sessions.json');
+  const storePath = path.join(
+    stateDir,
+    'agents',
+    agentFolder,
+    'sessions',
+    'sessions.json',
+  );
   if (!fs.existsSync(storePath)) {
     return null;
   }
@@ -51,21 +63,36 @@ export function readSessionsStoreEntry(stateDir: string, sessionKey: string): Re
   }
 }
 
-function overlayFromDiskEntry(entry: Record<string, unknown>): Record<string, unknown> {
-  const totalTokens = typeof entry.totalTokens === 'number' ? entry.totalTokens : undefined;
-  const contextTokens = typeof entry.contextTokens === 'number' ? entry.contextTokens : undefined;
+function overlayFromDiskEntry(
+  entry: Record<string, unknown>,
+): Record<string, unknown> {
+  const totalTokens =
+    typeof entry.totalTokens === 'number' ? entry.totalTokens : undefined;
+  const contextTokens =
+    typeof entry.contextTokens === 'number' ? entry.contextTokens : undefined;
   const totalTokensFresh = entry.totalTokensFresh;
   let percentUsed: number | null = null;
-  if (totalTokensFresh !== false && contextTokens != null && contextTokens > 0 && totalTokens != null) {
-    percentUsed = Math.min(999, Math.round((totalTokens / contextTokens) * 100));
+  if (
+    totalTokensFresh !== false &&
+    contextTokens != null &&
+    contextTokens > 0 &&
+    totalTokens != null
+  ) {
+    percentUsed = Math.min(
+      999,
+      Math.round((totalTokens / contextTokens) * 100),
+    );
   }
-  const updatedAt = typeof entry.updatedAt === 'number' ? entry.updatedAt : undefined;
+  const updatedAt =
+    typeof entry.updatedAt === 'number' ? entry.updatedAt : undefined;
   const age = updatedAt != null ? Math.max(0, Date.now() - updatedAt) : null;
   const chatType = entry.chatType;
   const kind = chatType === 'group' ? 'group' : 'direct';
   const thinkingRaw = entry.thinkingLevel;
   const thinkingLevel =
-    typeof thinkingRaw === 'string' && thinkingRaw.trim() ? thinkingRaw.trim() : 'off';
+    typeof thinkingRaw === 'string' && thinkingRaw.trim()
+      ? thinkingRaw.trim()
+      : 'off';
 
   const out: Record<string, unknown> = {};
   const model = resolveModel(entry);
@@ -105,7 +132,9 @@ function enrichDefaults(
   entry: Record<string, unknown>,
 ): Record<string, unknown> {
   const d =
-    defaults && typeof defaults === 'object' ? { ...(defaults as Record<string, unknown>) } : {};
+    defaults && typeof defaults === 'object'
+      ? { ...(defaults as Record<string, unknown>) }
+      : {};
   const model = resolveModel(entry);
   if (model) {
     d.model = model;
@@ -145,7 +174,7 @@ export function mergeGatewayOverviewFromSessionsStore(
   if (!status || typeof status !== 'object') {
     return attachTraceflowGatewayStatusSource(overview, false, true);
   }
-  const sessionsBlock = (status as Record<string, unknown>).sessions as Record<string, unknown> | undefined;
+  const sessionsBlock = status.sessions as Record<string, unknown> | undefined;
   if (!sessionsBlock) {
     return attachTraceflowGatewayStatusSource(overview, false, true);
   }
@@ -154,7 +183,8 @@ export function mergeGatewayOverviewFromSessionsStore(
     return attachTraceflowGatewayStatusSource(overview, false, true);
   }
   const first = recent[0] as Record<string, unknown>;
-  const rawKey = typeof first.key === 'string' && first.key.trim() ? first.key.trim() : '';
+  const rawKey =
+    typeof first.key === 'string' && first.key.trim() ? first.key.trim() : '';
   const sessionKey = rawKey && rawKey !== '—' ? rawKey : 'agent:main:main';
   const entry = readSessionsStoreEntry(stateDir.trim(), sessionKey);
   if (!entry) {

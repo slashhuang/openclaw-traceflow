@@ -2,7 +2,9 @@
  * Transcript JSONL 中 message.content[] 的多协议兼容（Pi / OpenAI Responses / Anthropic / Ollama 等）。
  */
 
-export function isTranscriptToolCallBlock(item: { type?: unknown } | null | undefined): boolean {
+export function isTranscriptToolCallBlock(
+  item: { type?: unknown } | null | undefined,
+): boolean {
   const t = item?.type;
   return (
     t === 'toolCall' ||
@@ -19,7 +21,12 @@ export function extractTranscriptToolBlockMeta(item: Record<string, unknown>): {
   input: Record<string, unknown>;
 } {
   const idRaw = item.id ?? item.toolCallId ?? item.call_id ?? item.tool_use_id;
-  const id = typeof idRaw === 'string' ? idRaw : idRaw != null ? String(idRaw) : undefined;
+  const id =
+    typeof idRaw === 'string'
+      ? idRaw
+      : idRaw != null
+        ? String(idRaw)
+        : undefined;
   const nameRaw = item.name ?? item.toolName;
   const name =
     typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim() : 'unknown';

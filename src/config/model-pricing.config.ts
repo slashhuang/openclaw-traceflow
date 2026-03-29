@@ -18,25 +18,105 @@ export interface ModelPricing {
  */
 export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
   // ========== Anthropic Claude 系列 ==========
-  'claude-opus-4-6': { input: 15.0, output: 75.0, cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-opus-4-5': { input: 15.0, output: 75.0, cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-opus-4': { input: 15.0, output: 75.0, cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-opus-3-5': { input: 15.0, output: 75.0, cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-sonnet-4-6': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-  'claude-sonnet-4-5': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-  'claude-sonnet-4': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-  'claude-sonnet-3-7': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-  'claude-sonnet-3-5': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-  'claude-3-5-haiku-latest': { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
-  'claude-3-5-haiku-20241022': { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
-  'claude-3-haiku-20240307': { input: 0.25, output: 1.25, cacheRead: 0.025, cacheWrite: 0.125 },
+  'claude-opus-4-6': {
+    input: 15.0,
+    output: 75.0,
+    cacheRead: 1.875,
+    cacheWrite: 18.75,
+  },
+  'claude-opus-4-5': {
+    input: 15.0,
+    output: 75.0,
+    cacheRead: 1.875,
+    cacheWrite: 18.75,
+  },
+  'claude-opus-4': {
+    input: 15.0,
+    output: 75.0,
+    cacheRead: 1.875,
+    cacheWrite: 18.75,
+  },
+  'claude-opus-3-5': {
+    input: 15.0,
+    output: 75.0,
+    cacheRead: 1.875,
+    cacheWrite: 18.75,
+  },
+  'claude-sonnet-4-6': {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'claude-sonnet-4-5': {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'claude-sonnet-4': {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'claude-sonnet-3-7': {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'claude-sonnet-3-5': {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'claude-3-5-haiku-latest': {
+    input: 0.8,
+    output: 4.0,
+    cacheRead: 0.08,
+    cacheWrite: 1.0,
+  },
+  'claude-3-5-haiku-20241022': {
+    input: 0.8,
+    output: 4.0,
+    cacheRead: 0.08,
+    cacheWrite: 1.0,
+  },
+  'claude-3-haiku-20240307': {
+    input: 0.25,
+    output: 1.25,
+    cacheRead: 0.025,
+    cacheWrite: 0.125,
+  },
 
   // ========== OpenAI GPT 系列 ==========
   'gpt-4o': { input: 2.5, output: 10.0, cacheRead: 0.25, cacheWrite: 2.5 },
-  'gpt-4o-2024-11-20': { input: 2.5, output: 10.0, cacheRead: 0.25, cacheWrite: 2.5 },
-  'gpt-4o-2024-08-06': { input: 2.5, output: 10.0, cacheRead: 0.25, cacheWrite: 2.5 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0.3 },
-  'gpt-4o-mini-2024-07-18': { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0.3 },
+  'gpt-4o-2024-11-20': {
+    input: 2.5,
+    output: 10.0,
+    cacheRead: 0.25,
+    cacheWrite: 2.5,
+  },
+  'gpt-4o-2024-08-06': {
+    input: 2.5,
+    output: 10.0,
+    cacheRead: 0.25,
+    cacheWrite: 2.5,
+  },
+  'gpt-4o-mini': {
+    input: 0.15,
+    output: 0.6,
+    cacheRead: 0.075,
+    cacheWrite: 0.3,
+  },
+  'gpt-4o-mini-2024-07-18': {
+    input: 0.15,
+    output: 0.6,
+    cacheRead: 0.075,
+    cacheWrite: 0.3,
+  },
   'gpt-4.1': { input: 2.0, output: 8.0, cacheRead: 0.2, cacheWrite: 2.0 },
   'gpt-4.1-mini': { input: 0.4, output: 1.6, cacheRead: 0.2, cacheWrite: 0.8 },
   'gpt-4.1-nano': { input: 0.1, output: 0.4, cacheRead: 0.01, cacheWrite: 0.1 },
@@ -44,9 +124,24 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
   'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
 
   // ========== Google Gemini 系列 ==========
-  'gemini-2.5-pro': { input: 1.25, output: 10.0, cacheRead: 0.31, cacheWrite: 4.5 },
-  'gemini-2.5-pro-preview': { input: 1.25, output: 10.0, cacheRead: 0.31, cacheWrite: 4.5 },
-  'gemini-2.5-pro-preview-03-25': { input: 1.25, output: 10.0, cacheRead: 0.31, cacheWrite: 4.5 },
+  'gemini-2.5-pro': {
+    input: 1.25,
+    output: 10.0,
+    cacheRead: 0.31,
+    cacheWrite: 4.5,
+  },
+  'gemini-2.5-pro-preview': {
+    input: 1.25,
+    output: 10.0,
+    cacheRead: 0.31,
+    cacheWrite: 4.5,
+  },
+  'gemini-2.5-pro-preview-03-25': {
+    input: 1.25,
+    output: 10.0,
+    cacheRead: 0.31,
+    cacheWrite: 4.5,
+  },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
   'gemini-2.0-flash-exp': { input: 0.1, output: 0.4 },
   'gemini-2.0-flash-lite': { input: 0.075, output: 0.3 },
@@ -85,11 +180,36 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
 
   // ========== 带 provider 前缀的格式（兼容不同 API 来源）==========
   // Anthropic
-  'anthropic/claude-opus-4-6': { input: 15.0, output: 75.0, cacheRead: 1.875, cacheWrite: 18.75 },
-  'anthropic/claude-opus-4-5': { input: 15.0, output: 75.0, cacheRead: 1.875, cacheWrite: 18.75 },
-  'anthropic/claude-sonnet-4-6': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-  'anthropic/claude-sonnet-4-5': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-  'anthropic/claude-3-5-haiku-latest': { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
+  'anthropic/claude-opus-4-6': {
+    input: 15.0,
+    output: 75.0,
+    cacheRead: 1.875,
+    cacheWrite: 18.75,
+  },
+  'anthropic/claude-opus-4-5': {
+    input: 15.0,
+    output: 75.0,
+    cacheRead: 1.875,
+    cacheWrite: 18.75,
+  },
+  'anthropic/claude-sonnet-4-6': {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'anthropic/claude-sonnet-4-5': {
+    input: 3.0,
+    output: 15.0,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  },
+  'anthropic/claude-3-5-haiku-latest': {
+    input: 0.8,
+    output: 4.0,
+    cacheRead: 0.08,
+    cacheWrite: 1.0,
+  },
 
   // OpenAI
   'openai/gpt-4o': { input: 2.5, output: 10.0 },
@@ -105,7 +225,11 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
   'google/gemini-1.5-flash': { input: 0.075, output: 0.3 },
 };
 
-const CONFIG_FILE_PATH = path.join(process.cwd(), 'config', 'model-pricing.json');
+const CONFIG_FILE_PATH = path.join(
+  process.cwd(),
+  'config',
+  'model-pricing.json',
+);
 
 /**
  * 加载模型价格配置
@@ -143,7 +267,11 @@ export function saveModelPricing(config: ModelPricingConfig): boolean {
       lastUpdated: Date.now(),
       version: config.version || 1,
     };
-    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(configToSave, null, 2), 'utf8');
+    fs.writeFileSync(
+      CONFIG_FILE_PATH,
+      JSON.stringify(configToSave, null, 2),
+      'utf8',
+    );
     return true;
   } catch (error) {
     console.error('Failed to save model pricing config:', error);

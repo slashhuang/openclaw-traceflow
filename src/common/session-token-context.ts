@@ -6,7 +6,11 @@ export function isIndexTotalTokensUsableForContext(
   totalTokens: number | undefined,
   totalTokensFresh: boolean | undefined,
 ): boolean {
-  if (typeof totalTokens !== 'number' || !Number.isFinite(totalTokens) || totalTokens < 0) {
+  if (
+    typeof totalTokens !== 'number' ||
+    !Number.isFinite(totalTokens) ||
+    totalTokens < 0
+  ) {
     return false;
   }
   if (totalTokensFresh === false) {
