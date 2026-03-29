@@ -11,7 +11,9 @@ export class ActionsController {
   }
 
   @Post('kill-session/:id')
-  async killSession(@Param('id') id: string): Promise<{ success: boolean; message: string }> {
+  async killSession(
+    @Param('id') id: string,
+  ): Promise<{ success: boolean; message: string }> {
     return this.actionsService.killSession(id);
   }
 

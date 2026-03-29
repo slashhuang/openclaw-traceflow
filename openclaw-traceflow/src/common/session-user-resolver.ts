@@ -6,7 +6,9 @@
 /**
  * 解析 OpenClaw canonical `agent:<agentId>:<rest>`（与 openclaw routing/session-key 语义一致）。
  */
-function parseAgentSessionKeyParts(sessionKey: string): { agentId: string; rest: string } | null {
+function parseAgentSessionKeyParts(
+  sessionKey: string,
+): { agentId: string; rest: string } | null {
   const raw = (sessionKey ?? '').trim().toLowerCase();
   if (!raw) return null;
   const parts = raw.split(':').filter(Boolean);
@@ -30,7 +32,10 @@ function isCanonicalAgentMainSessionKey(fullKey: string): boolean {
 }
 
 /** 从 sessionKey/sessionId 推断任务类型 */
-export function inferSessionTypeLabel(sessionKey: string, sessionId: string): string {
+export function inferSessionTypeLabel(
+  sessionKey: string,
+  sessionId: string,
+): string {
   const key = sessionKey || sessionId || '';
   const full = key.includes('/') ? key.split('/').pop() || key : key;
   if (isCanonicalAgentMainSessionKey(full)) return '主会话';

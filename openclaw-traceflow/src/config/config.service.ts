@@ -80,11 +80,13 @@ export class ConfigService {
       port: process.env.PORT ? parseInt(process.env.PORT) : undefined,
       openclawGatewayUrl: process.env.OPENCLAW_GATEWAY_URL || undefined,
       openclawGatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN || undefined,
-      openclawGatewayPassword: process.env.OPENCLAW_GATEWAY_PASSWORD || undefined,
+      openclawGatewayPassword:
+        process.env.OPENCLAW_GATEWAY_PASSWORD || undefined,
       openclawStateDir: process.env.OPENCLAW_STATE_DIR || undefined,
       openclawWorkspaceDir: process.env.OPENCLAW_WORKSPACE_DIR || undefined,
       accessToken: process.env.OPENCLAW_RUNTIME_ACCESS_TOKEN || undefined,
-      accessMode: process.env.OPENCLAW_ACCESS_MODE as Config['accessMode'] || undefined,
+      accessMode:
+        (process.env.OPENCLAW_ACCESS_MODE as Config['accessMode']) || undefined,
       dataDir: process.env.DATA_DIR || undefined,
       openclawLogPath: process.env.OPENCLAW_LOG_PATH || undefined,
       tokenEstimateBytesDivisor: process.env.TOKEN_ESTIMATE_BYTES_DIVISOR
@@ -96,7 +98,9 @@ export class ConfigService {
     const merged = {
       ...defaultConfig,
       ...fileConfig,
-      ...Object.fromEntries(Object.entries(envConfig).filter(([_, v]) => v !== undefined)),
+      ...Object.fromEntries(
+        Object.entries(envConfig).filter(([_, v]) => v !== undefined),
+      ),
     } as Config;
 
     if (
@@ -130,8 +134,12 @@ export class ConfigService {
     const safeConfig = {
       ...config,
       accessToken: config.accessToken ? '[REDACTED]' : undefined,
-      openclawGatewayToken: config.openclawGatewayToken ? '[REDACTED]' : undefined,
-      openclawGatewayPassword: config.openclawGatewayPassword ? '[REDACTED]' : undefined,
+      openclawGatewayToken: config.openclawGatewayToken
+        ? '[REDACTED]'
+        : undefined,
+      openclawGatewayPassword: config.openclawGatewayPassword
+        ? '[REDACTED]'
+        : undefined,
     };
 
     fs.writeFileSync(snapshotPath, JSON.stringify(safeConfig, null, 2));

@@ -3,13 +3,13 @@ import { Socket } from 'socket.io';
 
 /**
  * WebSocket 性能监控中间件 — 覆盖所有 WebSocket 事件
- * 
+ *
  * 功能：
  * - 记录连接建立/断开
  * - 记录消息收发时间、大小
  * - 心跳检测
  * - 慢事件警告（>500ms）
- * 
+ *
  * @see PRD: docs/prd-traceflow-logging-2026-03-24.md
  */
 @Injectable()
@@ -34,54 +34,56 @@ export class WsPerformanceMiddleware {
 
     // 拦截 emit（服务器→客户端）— 支持异步处理
     const originalEmit = socket.emit.bind(socket);
-    const self = this; // 保存 this 引用，避免 Promise 回调中丢失上下文
-    
+    const self = this;
+
     socket.emit = function (event: string, ...args: any[]) {
       const emitStart = Date.now();
       const result = originalEmit(event, ...args);
-      
+
       // 处理 Promise 情况（异步 emit）
       if (result instanceof Promise) {
-        return result.then(res => {
-          const durationMs = Date.now() - emitStart;
-          const dataSize = JSON.stringify(args).length;
-          
-          const logData = {
-            timestamp: new Date().toISOString(),
-            level: durationMs > 500 ? 'WARN' : 'DEBUG',
-            module: 'WsPerformanceMiddleware',
-            operation: 'ws_emit',
-            clientId,
-            event,
-            durationMs,
-            dataSize,
-          };
+        return result
+          .then((res) => {
+            const durationMs = Date.now() - emitStart;
+            const dataSize = JSON.stringify(args).length;
 
-          // 慢事件警告
-          if (durationMs > 500) {
-            self.logger.warn(
-              `Slow WS emit "${event}" to ${clientId}: ${durationMs}ms, ${dataSize}bytes`,
-            );
-          }
-
-          self.logger.debug(JSON.stringify(logData));
-          return res;
-        }).catch(err => {
-          self.logger.error(
-            JSON.stringify({
+            const logData = {
               timestamp: new Date().toISOString(),
-              level: 'ERROR',
+              level: durationMs > 500 ? 'WARN' : 'DEBUG',
               module: 'WsPerformanceMiddleware',
-              operation: 'ws_emit_error',
+              operation: 'ws_emit',
               clientId,
               event,
-              error: err.message,
-            }),
-          );
-          throw err;
-        });
+              durationMs,
+              dataSize,
+            };
+
+            // 慢事件警告
+            if (durationMs > 500) {
+              self.logger.warn(
+                `Slow WS emit "${event}" to ${clientId}: ${durationMs}ms, ${dataSize}bytes`,
+              );
+            }
+
+            self.logger.debug(JSON.stringify(logData));
+            return res;
+          })
+          .catch((err: Error) => {
+            self.logger.error(
+              JSON.stringify({
+                timestamp: new Date().toISOString(),
+                level: 'ERROR',
+                module: 'WsPerformanceMiddleware',
+                operation: 'ws_emit_error',
+                clientId,
+                event,
+                error: err.message,
+              }),
+            );
+            throw err;
+          });
       }
-      
+
       // 同步情况
       const durationMs = Date.now() - emitStart;
       const dataSize = JSON.stringify(args).length;

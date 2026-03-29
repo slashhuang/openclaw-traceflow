@@ -30,9 +30,7 @@ export interface HealthStatus {
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
 
-  constructor(
-    private openclawService: OpenClawService,
-  ) {}
+  constructor(private openclawService: OpenClawService) {}
 
   private async collectLocalRuntimeStats(): Promise<{
     memoryMb: number;
@@ -93,7 +91,9 @@ export class HealthService {
 
     if (!connectionResult.connected) {
       status.status = 'DEGRADED';
-      this.logger.warn(`OpenClaw Gateway not connected: ${connectionResult.error}`);
+      this.logger.warn(
+        `OpenClaw Gateway not connected: ${connectionResult.error}`,
+      );
       return status;
     }
 
@@ -107,7 +107,8 @@ export class HealthService {
       // 如果返回了详细信息，使用它
       if (health && typeof health === 'object' && 'status' in health) {
         status.gateway.uptime = (health as any).uptime ?? status.gateway.uptime;
-        status.gateway.memory = (health as any).memoryUsage ?? status.gateway.memory;
+        status.gateway.memory =
+          (health as any).memoryUsage ?? status.gateway.memory;
         status.gateway.pid = (health as any).pid;
         status.gateway.cpu = (health as any).cpu ?? status.gateway.cpu;
         status.skills = (health as any).skills || [];

@@ -80,7 +80,8 @@ export function fetchRuntimePathsFromGateway(params: {
 
         if (msg.type === 'event' && msg.event === 'connect.challenge') {
           const nonce =
-            typeof (msg.payload as { nonce?: string } | undefined)?.nonce === 'string'
+            typeof (msg.payload as { nonce?: string } | undefined)?.nonce ===
+            'string'
               ? String((msg.payload as { nonce: string }).nonce).trim()
               : '';
           if (!nonce) {
@@ -130,9 +131,12 @@ export function fetchRuntimePathsFromGateway(params: {
             snapshot?: { stateDir?: string; configPath?: string };
           };
           const snap = payload?.snapshot;
-          const stateDir = typeof snap?.stateDir === 'string' ? snap.stateDir.trim() : '';
+          const stateDir =
+            typeof snap?.stateDir === 'string' ? snap.stateDir.trim() : '';
           const configPath =
-            typeof snap?.configPath === 'string' ? snap.configPath.trim() : null;
+            typeof snap?.configPath === 'string'
+              ? snap.configPath.trim()
+              : null;
           if (!stateDir) {
             done({ ok: false, error: 'snapshot missing stateDir' });
             return;

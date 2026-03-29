@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import {
   resolveOpenClawPaths,
@@ -16,11 +21,24 @@ import {
 } from './system-prompt-probe';
 import { rebuildSystemPromptMarkdown } from './system-prompt-rebuild';
 import { inferInvokedSkillsFromToolCalls } from '../skill-invocation';
-import { loadModelPricing, type ModelPricing } from '../config/model-pricing.config';
-import { FileSystemSessionStorage, type SessionData, type SessionStorage } from '../storage/session-storage';
-import { readJsonlHeadTail, type HeadTailResult } from './streaming-jsonl-reader';
+import {
+  loadModelPricing,
+  type ModelPricing,
+} from '../config/model-pricing.config';
+import {
+  FileSystemSessionStorage,
+  type SessionData,
+  type SessionStorage,
+} from '../storage/session-storage';
+import {
+  readJsonlHeadTail,
+  type HeadTailResult,
+} from './streaming-jsonl-reader';
 import { extractSenderFromMessageEntry } from '../common/extract-sender-from-message';
-import { scanSessionJsonlLines, type SessionJsonlScanResult } from './session-jsonl-scan';
+import {
+  scanSessionJsonlLines,
+  type SessionJsonlScanResult,
+} from './session-jsonl-scan';
 import {
   formatParticipantSummary,
   mergeParticipantListsOrdered,
@@ -37,7 +55,11 @@ function extractModelFromSessionKey(sessionKey: string): string | null {
   const parts = sessionKey.split('/');
   for (const part of parts) {
     const lower = part.toLowerCase();
-    if (lower.includes('opus') || lower.includes('sonnet') || lower.includes('haiku')) {
+    if (
+      lower.includes('opus') ||
+      lower.includes('sonnet') ||
+      lower.includes('haiku')
+    ) {
       return part;
     }
     if (lower.includes('gpt-')) {
@@ -77,8 +99,12 @@ function calculateCost(
 
   const inputCost = (inputTokens / 1_000_000) * pricing.input;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  const cacheReadCost = cacheReadTokens ? (cacheReadTokens / 1_000_000) * (pricing.cacheRead || 0) : 0;
-  const cacheWriteCost = cacheWriteTokens ? (cacheWriteTokens / 1_000_000) * (pricing.cacheWrite || 0) : 0;
+  const cacheReadCost = cacheReadTokens
+    ? (cacheReadTokens / 1_000_000) * (pricing.cacheRead || 0)
+    : 0;
+  const cacheWriteCost = cacheWriteTokens
+    ? (cacheWriteTokens / 1_000_000) * (pricing.cacheWrite || 0)
+    : 0;
 
   return inputCost + outputCost + cacheReadCost + cacheWriteCost;
 }
@@ -187,7 +213,11 @@ export interface SkillsSnapshotData {
   prompt?: string;
   skills?: Array<{ name: string; primaryEnv?: string; requiredEnv?: string[] }>;
   skillFilter?: string[];
-  resolvedSkills?: Array<{ name?: string; description?: string; location?: string }>;
+  resolvedSkills?: Array<{
+    name?: string;
+    description?: string;
+    location?: string;
+  }>;
   version?: number;
   injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
 }
@@ -288,14 +318,19 @@ function inferSystemSentFromTranscript(lines: string[]): boolean {
   ];
   for (let i = 1; i < Math.min(lines.length, 20); i++) {
     try {
-      const entry = JSON.parse(lines[i]) as { type?: string; message?: { role?: string; content?: unknown } };
-      if (entry?.type !== 'message' || entry?.message?.role !== 'assistant') continue;
+      const entry = JSON.parse(lines[i]) as {
+        type?: string;
+        message?: { role?: string; content?: unknown };
+      };
+      if (entry?.type !== 'message' || entry?.message?.role !== 'assistant')
+        continue;
       const content = entry.message?.content;
       let text = '';
       if (typeof content === 'string') text = content;
       else if (Array.isArray(content)) {
         for (const item of content as Array<{ type?: string; text?: string }>) {
-          if (item?.type === 'text' && typeof item.text === 'string') text += item.text;
+          if (item?.type === 'text' && typeof item.text === 'string')
+            text += item.text;
         }
       }
       if (text.trim().length < 5) continue; // 跳过过短内容（如 "New session started"）
@@ -312,7 +347,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OpenClawService.name);
   private baseUrl: string;
   /** 解析缓存，避免每次请求都 exec openclaw */
-  private pathsCache: { at: number; paths: OpenClawResolvedPaths } | null = null;
+  private pathsCache: { at: number; paths: OpenClawResolvedPaths } | null =
+    null;
   private static readonly PATHS_TTL_MS = 60_000;
 
   /** 会话存储（KV 缓存 + 定时轮询） */
@@ -334,22 +370,18 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   /** Promise 级别缓存（防并发重复） */
   private pendingRefresh: Promise<void> | null = null;
   /** 归档 reset 文件快照缓存（增量复用：仅变更文件重读） */
-  private archivedResetSnapshot:
-    | {
-        stateDir: string;
-        scannedAt: number;
-        byFile: Map<string, ArchivedResetFileCacheEntry>;
-        all: ArchivedResetUsage[];
-      }
-    | null = null;
-  private pendingArchivedResetSnapshotRefresh:
-    | Promise<{
-        stateDir: string;
-        scannedAt: number;
-        byFile: Map<string, ArchivedResetFileCacheEntry>;
-        all: ArchivedResetUsage[];
-      }>
-    | null = null;
+  private archivedResetSnapshot: {
+    stateDir: string;
+    scannedAt: number;
+    byFile: Map<string, ArchivedResetFileCacheEntry>;
+    all: ArchivedResetUsage[];
+  } | null = null;
+  private pendingArchivedResetSnapshotRefresh: Promise<{
+    stateDir: string;
+    scannedAt: number;
+    byFile: Map<string, ArchivedResetFileCacheEntry>;
+    all: ArchivedResetUsage[];
+  }> | null = null;
   private static readonly ARCHIVE_RESET_SNAPSHOT_TTL_MS = 10_000;
 
   constructor(
@@ -365,7 +397,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('OpenClawService: starting background sync...');
     const paths = await this.getResolvedPaths();
     if (paths.stateDir) {
-      (this.sessionStorage as FileSystemSessionStorage).setStateDir(paths.stateDir);
+      (this.sessionStorage as FileSystemSessionStorage).setStateDir(
+        paths.stateDir,
+      );
       // 初始加载
       await this.refreshCache();
       // 启动定时轮询
@@ -388,7 +422,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Background sync failed:', err);
       });
     }, OpenClawService.SYNC_INTERVAL_MS);
-    this.logger.log(`OpenClawService: background sync started (interval=${OpenClawService.SYNC_INTERVAL_MS}ms)`);
+    this.logger.log(
+      `OpenClawService: background sync started (interval=${OpenClawService.SYNC_INTERVAL_MS}ms)`,
+    );
   }
 
   /** 刷新缓存（带 Promise 级别锁） */
@@ -401,13 +437,17 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       try {
         const paths = await this.getResolvedPaths();
         if (paths.stateDir) {
-          (this.sessionStorage as FileSystemSessionStorage).setStateDir(paths.stateDir);
+          (this.sessionStorage as FileSystemSessionStorage).setStateDir(
+            paths.stateDir,
+          );
         }
 
         if (this.sessionStorage instanceof FileSystemSessionStorage) {
           const sessions = await this.sessionStorage.loadFromFileSystem();
           await this.sessionStorage.upsertBatch(sessions);
-          this.logger.debug(`OpenClawService: cache refreshed (${sessions.size} sessions)`);
+          this.logger.debug(
+            `OpenClawService: cache refreshed (${sessions.size} sessions)`,
+          );
         }
       } finally {
         this.pendingRefresh = null;
@@ -428,7 +468,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    */
   async getSession(sessionKey: string): Promise<SessionData | null> {
     // 如果缓存过期，触发刷新
-    if (Date.now() - this.sessionStorage.getCacheTimestamp() > OpenClawService.CACHE_TTL_MS) {
+    if (
+      Date.now() - this.sessionStorage.getCacheTimestamp() >
+      OpenClawService.CACHE_TTL_MS
+    ) {
       await this.refreshCache();
     }
     return this.sessionStorage.get(sessionKey);
@@ -475,7 +518,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   /**
    * 从 OpenClaw 配置文件中读取 agents 配置的模型列表
    */
-  async getConfiguredModels(): Promise<{ models: string[]; source?: string } | null> {
+  async getConfiguredModels(): Promise<{
+    models: string[];
+    source?: string;
+  } | null> {
     try {
       const paths = await this.getResolvedPaths();
       if (!paths.configPath || !fs.existsSync(paths.configPath)) {
@@ -517,7 +563,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         source: paths.configPath,
       };
     } catch (error) {
-      this.logger.warn('Failed to read configured models from OpenClaw config:', error);
+      this.logger.warn(
+        'Failed to read configured models from OpenClaw config:',
+        error,
+      );
       return null;
     }
   }
@@ -616,9 +665,14 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     if (!gatewayUrl) {
       return null;
     }
-    const seq = await this.gatewayConnection.runSequence([{ method: 'health', methodParams: {} }]);
+    const seq = await this.gatewayConnection.runSequence([
+      { method: 'health', methodParams: {} },
+    ]);
     if (seq.ok) {
-      const overview = buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
+      const overview = buildStatusOverviewFromHealth(
+        seq.payloads[0],
+        seq.gatewayVersion,
+      );
       const dir = await this.stateDir();
       return mergeGatewayOverviewFromSessionsStore(overview, dir || null);
     }
@@ -632,7 +686,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * `logs.tail` 仍可能因 scope 失败，此时返回空日志并打 debug。
    */
   async getDashboardGatewayBundle(limit: number): Promise<
-    | { ok: true; statusOverview: StatusOverviewResult; logsTail: { cursor?: number; lines: string[] } }
+    | {
+        ok: true;
+        statusOverview: StatusOverviewResult;
+        logsTail: { cursor?: number; lines: string[] };
+      }
     | { ok: false; error: string }
   > {
     const cfg = this.configService.getConfig();
@@ -641,14 +699,22 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       return { ok: false, error: 'Gateway URL 未配置' };
     }
 
-    const seq = await this.gatewayConnection.runSequence([{ method: 'health', methodParams: {} }]);
+    const seq = await this.gatewayConnection.runSequence([
+      { method: 'health', methodParams: {} },
+    ]);
     if (!seq.ok) {
       return { ok: false, error: seq.error };
     }
 
-    let statusOverview = buildStatusOverviewFromHealth(seq.payloads[0], seq.gatewayVersion);
+    let statusOverview = buildStatusOverviewFromHealth(
+      seq.payloads[0],
+      seq.gatewayVersion,
+    );
     const dir = await this.stateDir();
-    statusOverview = mergeGatewayOverviewFromSessionsStore(statusOverview, dir || null);
+    statusOverview = mergeGatewayOverviewFromSessionsStore(
+      statusOverview,
+      dir || null,
+    );
 
     const tailParams = {
       limit,
@@ -660,7 +726,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     }>('logs.tail', tailParams, 20_000);
 
     if (!logsRes.ok) {
-      this.logger.debug(`Gateway logs.tail skipped (scope or other): ${logsRes.error}`);
+      this.logger.debug(
+        `Gateway logs.tail skipped (scope or other): ${logsRes.error}`,
+      );
       return {
         ok: true,
         statusOverview,
@@ -670,7 +738,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
     const tail = logsRes.payload ?? {};
     const rawLines = Array.isArray(tail.lines)
-      ? tail.lines.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+      ? tail.lines.filter(
+          (l): l is string => typeof l === 'string' && l.trim().length > 0,
+        )
       : [];
 
     return {
@@ -690,7 +760,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(`${this.baseUrl}/health`, { signal: controller.signal });
+      const response = await fetch(`${this.baseUrl}/health`, {
+        signal: controller.signal,
+      });
       clearTimeout(timer);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -706,12 +778,19 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * 从本地 sessions.json 读取 systemPromptReport（优先于 Gateway RPC，无需网络）
    * 扫描 agents/{agent}/sessions/sessions.json，优先 agent:main:main，其次按 updatedAt 取最新
    */
-  private loadSystemPromptFromSessionsJson(
-    dir: string,
-  ): {
-    chosen: { key: string; sessionId?: string; agentId?: string; entry?: Record<string, unknown> };
+  private loadSystemPromptFromSessionsJson(dir: string): {
+    chosen: {
+      key: string;
+      sessionId?: string;
+      agentId?: string;
+      entry?: Record<string, unknown>;
+    };
     report: Record<string, unknown>;
-    resolvedSkills?: Array<{ name: string; filePath?: string; description?: string }>;
+    resolvedSkills?: Array<{
+      name: string;
+      filePath?: string;
+      description?: string;
+    }>;
     /** OpenClaw 实际注入的 skills 文本（name+description+location，非全文） */
     skillsPrompt?: string;
     /** 完整 skillsSnapshot（prompt + skills 列表） */
@@ -729,14 +808,23 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         agentId: string;
         updatedAt: number;
         report: Record<string, unknown>;
-        resolvedSkills?: Array<{ name: string; filePath?: string; description?: string }>;
+        resolvedSkills?: Array<{
+          name: string;
+          filePath?: string;
+          description?: string;
+        }>;
         skillsPrompt?: string;
         skillsSnapshot?: SkillsSnapshotData;
         injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
         entry?: Record<string, unknown>;
       }> = [];
       for (const agent of agentDirs) {
-        const storePath = path.join(agentsDir, agent, 'sessions', 'sessions.json');
+        const storePath = path.join(
+          agentsDir,
+          agent,
+          'sessions',
+          'sessions.json',
+        );
         if (!fs.existsSync(storePath)) continue;
         const raw = fs.readFileSync(storePath, 'utf-8');
         const store = JSON.parse(raw) as Record<
@@ -747,7 +835,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
             updatedAt?: number;
             skillsSnapshot?: {
               prompt?: string;
-              resolvedSkills?: Array<{ name?: string; filePath?: string; description?: string }>;
+              resolvedSkills?: Array<{
+                name?: string;
+                filePath?: string;
+                description?: string;
+              }>;
               injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
             };
           }
@@ -761,23 +853,34 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
                   .filter((r) => r && typeof r.name === 'string')
                   .map((r) => ({
                     name: r.name!,
-                    filePath: typeof r.filePath === 'string' ? r.filePath : undefined,
-                    description: typeof r.description === 'string' ? r.description : undefined,
+                    filePath:
+                      typeof r.filePath === 'string' ? r.filePath : undefined,
+                    description:
+                      typeof r.description === 'string'
+                        ? r.description
+                        : undefined,
                   }))
               : undefined;
             const skillsPrompt =
-              typeof entry?.skillsSnapshot?.prompt === 'string' ? entry.skillsSnapshot.prompt : undefined;
+              typeof entry?.skillsSnapshot?.prompt === 'string'
+                ? entry.skillsSnapshot.prompt
+                : undefined;
             const skillsSnapshot =
-              entry?.skillsSnapshot && typeof entry.skillsSnapshot === 'object' ? entry.skillsSnapshot : undefined;
+              entry?.skillsSnapshot && typeof entry.skillsSnapshot === 'object'
+                ? entry.skillsSnapshot
+                : undefined;
             // injectedWorkspaceFiles 来自 systemPromptReport，不是 skillsSnapshot
-            const injectedWorkspaceFiles = Array.isArray((report as any)?.injectedWorkspaceFiles)
+            const injectedWorkspaceFiles = Array.isArray(
+              (report as any)?.injectedWorkspaceFiles,
+            )
               ? (report as any).injectedWorkspaceFiles
               : undefined;
             candidates.push({
               key,
               sessionId: entry.sessionId,
               agentId: agent,
-              updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : 0,
+              updatedAt:
+                typeof entry.updatedAt === 'number' ? entry.updatedAt : 0,
               report: report as Record<string, unknown>,
               resolvedSkills,
               skillsPrompt,
@@ -790,21 +893,25 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       }
       if (!candidates.length) return null;
       const preferred = candidates.find((c) => c.key === 'agent:main:main');
-      const chosen = preferred ?? [...candidates].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      const chosen =
+        preferred ??
+        [...candidates].sort((a, b) => b.updatedAt - a.updatedAt)[0];
       return {
-        chosen: { 
-          key: chosen.key, 
-          sessionId: chosen.sessionId, 
+        chosen: {
+          key: chosen.key,
+          sessionId: chosen.sessionId,
           agentId: chosen.agentId,
           entry: chosen.entry,
         },
         report: chosen.report,
         resolvedSkills: chosen.resolvedSkills,
         skillsPrompt: chosen.skillsPrompt,
-        skillsSnapshot: chosen.skillsSnapshot ? {
-          ...chosen.skillsSnapshot,
-          injectedWorkspaceFiles: chosen.injectedWorkspaceFiles,
-        } : undefined,
+        skillsSnapshot: chosen.skillsSnapshot
+          ? {
+              ...chosen.skillsSnapshot,
+              injectedWorkspaceFiles: chosen.injectedWorkspaceFiles,
+            }
+          : undefined,
         injectedWorkspaceFiles: chosen.injectedWorkspaceFiles,
       };
     } catch {
@@ -830,26 +937,58 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     systemSent?: boolean;
     totalTokensFresh?: boolean;
   } | null {
-    const storePath = path.join(dir, 'agents', agent, 'sessions', 'sessions.json');
+    const storePath = path.join(
+      dir,
+      'agents',
+      agent,
+      'sessions',
+      'sessions.json',
+    );
     if (!fs.existsSync(storePath)) return null;
     try {
       const raw = fs.readFileSync(storePath, 'utf-8');
       const store = JSON.parse(raw) as Record<
         string,
-        { sessionId?: string; totalTokens?: number; inputTokens?: number; outputTokens?: number; contextTokens?: number; model?: string; updatedAt?: number }
+        {
+          sessionId?: string;
+          totalTokens?: number;
+          inputTokens?: number;
+          outputTokens?: number;
+          contextTokens?: number;
+          model?: string;
+          updatedAt?: number;
+        }
       >;
       const toEntry = (key: string, entry: any) => ({
         storeKey: key,
-        totalTokens: typeof entry?.totalTokens === 'number' ? entry.totalTokens : undefined,
-        inputTokens: typeof entry?.inputTokens === 'number' ? entry.inputTokens : undefined,
-        outputTokens: typeof entry?.outputTokens === 'number' ? entry.outputTokens : undefined,
-        contextTokens: typeof entry?.contextTokens === 'number' ? entry.contextTokens : undefined,
+        totalTokens:
+          typeof entry?.totalTokens === 'number'
+            ? entry.totalTokens
+            : undefined,
+        inputTokens:
+          typeof entry?.inputTokens === 'number'
+            ? entry.inputTokens
+            : undefined,
+        outputTokens:
+          typeof entry?.outputTokens === 'number'
+            ? entry.outputTokens
+            : undefined,
+        contextTokens:
+          typeof entry?.contextTokens === 'number'
+            ? entry.contextTokens
+            : undefined,
         model: typeof entry?.model === 'string' ? entry.model : undefined,
-        totalTokensFresh: typeof entry?.totalTokensFresh === 'boolean' ? entry.totalTokensFresh : undefined,
+        totalTokensFresh:
+          typeof entry?.totalTokensFresh === 'boolean'
+            ? entry.totalTokensFresh
+            : undefined,
         // 保留 undefined 以便 transcript 推断：仅当 store 明确有值时才传递
-        systemSent: typeof entry?.systemSent === 'boolean' ? entry.systemSent : undefined,
+        systemSent:
+          typeof entry?.systemSent === 'boolean' ? entry.systemSent : undefined,
       });
-      const foundKey = Object.keys(store).find((key) => store[key]?.sessionId === sessionId);
+      const foundKey = Object.keys(store).find(
+        (key) => store[key]?.sessionId === sessionId,
+      );
       if (foundKey) {
         return toEntry(foundKey, store[foundKey]);
       }
@@ -866,13 +1005,20 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * 从 sessionStorage 扫描缓存读取 .jsonl 的 fileMeta.size（与列表页同源）。
    * 详情接口若顶层/ tokenUsageMeta 未带上字节数时，SessionsService 可据此兜底。
    */
-  async getTranscriptFileSizeFromSessionCache(idParam: string): Promise<number | undefined> {
+  async getTranscriptFileSizeFromSessionCache(
+    idParam: string,
+  ): Promise<number | undefined> {
     try {
-      if (Date.now() - this.sessionStorage.getCacheTimestamp() > OpenClawService.CACHE_TTL_MS) {
+      if (
+        Date.now() - this.sessionStorage.getCacheTimestamp() >
+        OpenClawService.CACHE_TTL_MS
+      ) {
         await this.refreshCache();
       }
       const map = await this.sessionStorage.getAll();
-      const bare = idParam.includes('/') ? idParam.slice(idParam.lastIndexOf('/') + 1) : idParam;
+      const bare = idParam.includes('/')
+        ? idParam.slice(idParam.lastIndexOf('/') + 1)
+        : idParam;
       for (const [, data] of map) {
         const sz = data.fileMeta?.size;
         if (typeof sz !== 'number' || !Number.isFinite(sz)) continue;
@@ -890,7 +1036,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * 直接对 transcript .jsonl 做一次 stat（不解析内容）。
    * 当详情对象里 transcriptFileSizeBytes / tokenUsageMeta / 缓存均缺失时兜底。
    */
-  async getTranscriptFileStatBytes(idParam: string): Promise<number | undefined> {
+  async getTranscriptFileStatBytes(
+    idParam: string,
+  ): Promise<number | undefined> {
     try {
       const f = await this.findSessionFile(idParam);
       if (!f) return undefined;
@@ -905,7 +1053,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    */
   async listSessions(): Promise<OpenClawSession[]> {
     // 如果缓存过期，触发刷新
-    if (Date.now() - this.sessionStorage.getCacheTimestamp() > OpenClawService.CACHE_TTL_MS) {
+    if (
+      Date.now() - this.sessionStorage.getCacheTimestamp() >
+      OpenClawService.CACHE_TTL_MS
+    ) {
       await this.refreshCache();
     }
 
@@ -926,20 +1077,31 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     return sessions.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
   }
 
-  private parseTokenUsage(val: unknown): OpenClawSession['tokenUsage'] | undefined {
+  private parseTokenUsage(
+    val: unknown,
+  ): OpenClawSession['tokenUsage'] | undefined {
     if (!val || typeof val !== 'object') return undefined;
     const o = val as Record<string, unknown>;
-    if (typeof o.input !== 'number' || typeof o.output !== 'number' || typeof o.total !== 'number') return undefined;
+    if (
+      typeof o.input !== 'number' ||
+      typeof o.output !== 'number' ||
+      typeof o.total !== 'number'
+    )
+      return undefined;
     return {
       input: o.input,
       output: o.output,
       total: o.total,
       limit: typeof o.limit === 'number' ? o.limit : undefined,
-      utilization: typeof o.utilization === 'number' ? o.utilization : undefined,
+      utilization:
+        typeof o.utilization === 'number' ? o.utilization : undefined,
     };
   }
 
-  private inferSessionStatus(lastMessage: any, mtimeMs: number): 'active' | 'idle' | 'completed' | 'failed' {
+  private inferSessionStatus(
+    lastMessage: any,
+    mtimeMs: number,
+  ): 'active' | 'idle' | 'completed' | 'failed' {
     const now = Date.now();
     const fiveMinutesAgo = now - 5 * 60 * 1000;
 
@@ -959,13 +1121,22 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * 每个 .reset. 文件代表 OpenClaw 的一次归档 epoch，全部纳入；用量取最后一条带 totalTokens 的消息（无则 0）
    */
   async getArchivedTokenUsageFromResetFiles(): Promise<
-    Array<{ sessionId: string; resetTimestamp: string; inputTokens: number; outputTokens: number; totalTokens: number }>
+    Array<{
+      sessionId: string;
+      resetTimestamp: string;
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    }>
   > {
     try {
       const snapshot = await this.getArchivedResetSnapshot();
       return snapshot.all;
     } catch (error) {
-      this.logger.error('Failed to get archived token usage from reset files', error);
+      this.logger.error(
+        'Failed to get archived token usage from reset files',
+        error,
+      );
       return [];
     }
   }
@@ -974,9 +1145,16 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * 列出某会话线程在磁盘上的归档轮次（与 getArchivedTokenUsageFromResetFiles 口径一致）
    */
   async listSessionArchiveEpochs(sessionId: string): Promise<
-    Array<{ resetTimestamp: string; totalTokens: number; inputTokens: number; outputTokens: number }>
+    Array<{
+      resetTimestamp: string;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+    }>
   > {
-    const bareId = sessionId.includes('/') ? sessionId.slice(sessionId.lastIndexOf('/') + 1) : sessionId;
+    const bareId = sessionId.includes('/')
+      ? sessionId.slice(sessionId.lastIndexOf('/') + 1)
+      : sessionId;
     if (!bareId) return [];
     const all = await this.getArchivedTokenUsageFromResetFiles();
     return all
@@ -1011,7 +1189,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       !forceRefresh &&
       cached &&
       cached.stateDir === dir &&
-      Date.now() - cached.scannedAt < OpenClawService.ARCHIVE_RESET_SNAPSHOT_TTL_MS
+      Date.now() - cached.scannedAt <
+        OpenClawService.ARCHIVE_RESET_SNAPSHOT_TTL_MS
     ) {
       return cached;
     }
@@ -1021,7 +1200,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.pendingArchivedResetSnapshotRefresh = (async () => {
-      const prevByFile = cached?.stateDir === dir ? cached.byFile : new Map<string, ArchivedResetFileCacheEntry>();
+      const prevByFile =
+        cached?.stateDir === dir
+          ? cached.byFile
+          : new Map<string, ArchivedResetFileCacheEntry>();
       const nextByFile = new Map<string, ArchivedResetFileCacheEntry>();
       const agentsDir = path.join(dir, 'agents');
 
@@ -1053,12 +1235,20 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           }
 
           const prev = prevByFile.get(filePath);
-          if (prev && prev.mtimeMs === stats.mtimeMs && prev.size === stats.size) {
+          if (
+            prev &&
+            prev.mtimeMs === stats.mtimeMs &&
+            prev.size === stats.size
+          ) {
             nextByFile.set(filePath, prev);
             continue;
           }
 
-          const usage = this.parseArchivedResetUsage(filePath, sessionId, resetTimestamp);
+          const usage = this.parseArchivedResetUsage(
+            filePath,
+            sessionId,
+            resetTimestamp,
+          );
           if (!usage) continue;
           nextByFile.set(filePath, {
             mtimeMs: stats.mtimeMs,
@@ -1068,10 +1258,13 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      const all = Array.from(nextByFile.values(), (v) => v.usage).sort((a, b) => {
-        if (a.sessionId === b.sessionId) return b.resetTimestamp.localeCompare(a.resetTimestamp);
-        return a.sessionId.localeCompare(b.sessionId);
-      });
+      const all = Array.from(nextByFile.values(), (v) => v.usage).sort(
+        (a, b) => {
+          if (a.sessionId === b.sessionId)
+            return b.resetTimestamp.localeCompare(a.resetTimestamp);
+          return a.sessionId.localeCompare(b.sessionId);
+        },
+      );
       const snapshot = {
         stateDir: dir,
         scannedAt: Date.now(),
@@ -1097,7 +1290,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n').filter((l) => l.trim());
-      let lastUsage: { input: number; output: number; total: number } | null = null;
+      let lastUsage: { input: number; output: number; total: number } | null =
+        null;
 
       for (const line of lines) {
         try {
@@ -1127,7 +1321,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private readFileUtf8Slice(filePath: string, position: number, length: number): string {
+  private readFileUtf8Slice(
+    filePath: string,
+    position: number,
+    length: number,
+  ): string {
     const fd = fs.openSync(filePath, 'r');
     try {
       const n = Math.max(0, length | 0);
@@ -1159,7 +1357,12 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const resetTs = options?.resetTimestamp?.trim();
       let sessionFile: SessionFile | null = null;
       if (resetTs) {
-        if (resetTs.length > 512 || resetTs.includes('..') || resetTs.includes('/') || resetTs.includes('\\')) {
+        if (
+          resetTs.length > 512 ||
+          resetTs.includes('..') ||
+          resetTs.includes('/') ||
+          resetTs.includes('\\')
+        ) {
           return null;
         }
         sessionFile = await this.findSessionResetFile(sessionId, resetTs);
@@ -1182,7 +1385,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       let scan: SessionJsonlScanResult;
 
       // 先快速估算行数（通过读取文件头部 64KB）
-      const headBuffer = this.readFileUtf8Slice(sessionFile.filePath, 0, 64 * 1024);
+      const headBuffer = this.readFileUtf8Slice(
+        sessionFile.filePath,
+        0,
+        64 * 1024,
+      );
       const headLines = headBuffer.split('\n').filter((l) => l.trim());
       const avgLineSize = headBuffer.length / (headLines.length || 1);
       const estimatedTotalLines = Math.round(size / avgLineSize);
@@ -1200,13 +1407,16 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       } else {
         // 行数多：使用流式首尾分片读取
         transcriptParseMode = 'head_tail';
-        
+
         try {
-          const result: HeadTailResult = await readJsonlHeadTail(sessionFile.filePath, {
-            headLines: 15,
-            tailLines: 10,
-            scanForUser: 100,
-          });
+          const result: HeadTailResult = await readJsonlHeadTail(
+            sessionFile.filePath,
+            {
+              headLines: 15,
+              tailLines: 10,
+              scanForUser: 100,
+            },
+          );
 
           transcriptHeadJsonlLineCount = result.headLines.length;
           transcriptTailJsonlLineCount = result.tailLines.length;
@@ -1216,7 +1426,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           const allLines = [...result.headLines, ...result.tailLines];
           scan = scanSessionJsonlLines(allLines);
         } catch (error) {
-          this.logger.error(`Stream read failed, fallback to full read: ${error.message}`);
+          this.logger.error(
+            `Stream read failed, fallback to full read: ${error.message}`,
+          );
           // 降级：全量读取
           const content = fs.readFileSync(sessionFile.filePath, 'utf-8');
           const lines = content.split('\n').filter((line) => line.trim());
@@ -1248,7 +1460,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const sessionIdForStore = sessionId.includes('/')
         ? sessionId.slice(sessionId.lastIndexOf('/') + 1)
         : sessionId;
-      const storeEntry = dir ? this.loadStoreEntryForSession(dir, agent, sessionIdForStore) : null;
+      const storeEntry = dir
+        ? this.loadStoreEntryForSession(dir, agent, sessionIdForStore)
+        : null;
       if (hasCostField) {
         usageCost = {
           input: sumCostInput,
@@ -1259,9 +1473,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         };
       } else {
         // 降级方案：当 transcript 中没有 usage.cost 数据时，使用配置价格进行估算
-        const model = storeEntry?.model || extractModelFromSessionKey(sessionId);
-        const input = storeEntry?.inputTokens ?? (tokenUsage?.input ?? 0);
-        const output = storeEntry?.outputTokens ?? (tokenUsage?.output ?? 0);
+        const model =
+          storeEntry?.model || extractModelFromSessionKey(sessionId);
+        const input = storeEntry?.inputTokens ?? tokenUsage?.input ?? 0;
+        const output = storeEntry?.outputTokens ?? tokenUsage?.output ?? 0;
         const estimatedCost = calculateCost(input, output, model);
         if (estimatedCost > 0) {
           usageCost = {
@@ -1283,12 +1498,17 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
       const transcriptHasNonZero =
         !!tokenUsage &&
-        (((tokenUsage.input ?? 0) + (tokenUsage.output ?? 0)) > 0 || (tokenUsage.total ?? 0) > 0);
+        ((tokenUsage.input ?? 0) + (tokenUsage.output ?? 0) > 0 ||
+          (tokenUsage.total ?? 0) > 0);
 
-      let tokenUsageSource: NonNullable<OpenClawSession['tokenUsageMeta']>['source'] = 'unknown';
+      let tokenUsageSource: NonNullable<
+        OpenClawSession['tokenUsageMeta']
+      >['source'] = 'unknown';
       if (transcriptUsageObserved && storeTokenFieldsPresent) {
         // 代码实现里：当 transcript 有非零 tokens 时优先使用 transcript，否则再用 store
-        tokenUsageSource = transcriptHasNonZero ? 'transcript' : 'sessions.json';
+        tokenUsageSource = transcriptHasNonZero
+          ? 'transcript'
+          : 'sessions.json';
       } else if (transcriptUsageObserved) {
         tokenUsageSource = 'transcript';
       } else if (storeTokenFieldsPresent) {
@@ -1301,7 +1521,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           : sessionFile.filePath;
 
       const sessionsIndexRelativePath =
-        dir && agent ? path.join('agents', agent, 'sessions', 'sessions.json').replace(/\\/g, '/') : undefined;
+        dir && agent
+          ? path
+              .join('agents', agent, 'sessions', 'sessions.json')
+              .replace(/\\/g, '/')
+          : undefined;
 
       const tokenUsageMeta: OpenClawSession['tokenUsageMeta'] = {
         source: tokenUsageSource,
@@ -1318,17 +1542,22 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const base = { ...tokenUsage };
       if (storeEntry) {
         // transcript 有数据时优先用 transcript（多轮会话更准确），store 仅补 limit
-        const fromTranscript = (base.input ?? 0) + (base.output ?? 0) > 0 || (base.total ?? 0) > 0;
+        const fromTranscript =
+          (base.input ?? 0) + (base.output ?? 0) > 0 || (base.total ?? 0) > 0;
         if (!fromTranscript) {
           const storeTotalOk =
-            typeof storeEntry.totalTokens === 'number' && storeEntry.totalTokensFresh !== false;
+            typeof storeEntry.totalTokens === 'number' &&
+            storeEntry.totalTokensFresh !== false;
           if (storeTotalOk && storeEntry.totalTokens != null) {
             base.total = storeEntry.totalTokens;
           }
-          if (storeEntry.inputTokens != null) base.input = storeEntry.inputTokens;
-          if (storeEntry.outputTokens != null) base.output = storeEntry.outputTokens;
+          if (storeEntry.inputTokens != null)
+            base.input = storeEntry.inputTokens;
+          if (storeEntry.outputTokens != null)
+            base.output = storeEntry.outputTokens;
         }
-        if (storeEntry.contextTokens != null) base.limit = storeEntry.contextTokens;
+        if (storeEntry.contextTokens != null)
+          base.limit = storeEntry.contextTokens;
       }
 
       const utilDen = base.limit ?? tokenUsage?.limit;
@@ -1342,7 +1571,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         typeof base.total === 'number' &&
         (transcriptHasNonZero || storeTotalOkForUtil)
       );
-      if (contextUtilizationReliable && typeof base.total === 'number' && typeof utilDen === 'number') {
+      if (
+        contextUtilizationReliable &&
+        typeof base.total === 'number' &&
+        typeof utilDen === 'number'
+      ) {
         base.utilization = Math.round((base.total / utilDen) * 100);
       } else {
         delete base.utilization;
@@ -1357,10 +1590,19 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const userId = firstUserData?.user || 'unknown';
       // 若 store 无 systemSent 且 userId 仍 unknown，从 transcript 推断 greeting
       let systemSent = storeEntry?.systemSent;
-      if (systemSent === undefined && userId === 'unknown' && transcriptParseMode === 'full' && transcriptJsonlLineCount != null && transcriptJsonlLineCount > 1) {
+      if (
+        systemSent === undefined &&
+        userId === 'unknown' &&
+        transcriptParseMode === 'full' &&
+        transcriptJsonlLineCount != null &&
+        transcriptJsonlLineCount > 1
+      ) {
         // 仅在 full 模式下推断 systemSent（head_tail 模式跳过）
         const headText = this.readFileUtf8Slice(sessionFile.filePath, 0, 8192);
-        const linesForInfer = headText.split('\n').filter((l) => l.trim()).slice(0, 20);
+        const linesForInfer = headText
+          .split('\n')
+          .filter((l) => l.trim())
+          .slice(0, 20);
         systemSent = inferSystemSentFromTranscript(linesForInfer);
       }
 
@@ -1374,16 +1616,23 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       } catch {
         /* 缓存未就绪时仅使用消息推导 */
       }
-      const mergedParticipants = mergeParticipantListsOrdered(fromMsgs, cachedParticipantIds);
+      const mergedParticipants = mergeParticipantListsOrdered(
+        fromMsgs,
+        cachedParticipantIds,
+      );
       const participantSummaryComputed =
-        mergedParticipants.length > 0 ? formatParticipantSummary(mergedParticipants) : undefined;
+        mergedParticipants.length > 0
+          ? formatParticipantSummary(mergedParticipants)
+          : undefined;
 
       return {
         sessionKey,
         sessionId: sessionFile.sessionId,
         userId,
         systemSent,
-        status: resetTs ? 'completed' : this.inferSessionStatus(firstUserData, stats.mtimeMs),
+        status: resetTs
+          ? 'completed'
+          : this.inferSessionStatus(firstUserData, stats.mtimeMs),
         createdAt: stats.birthtimeMs,
         lastActiveAt: stats.mtimeMs,
         totalTokens:
@@ -1416,8 +1665,12 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           : {}),
         ...(archiveEpochs.length ? { archiveEpochs } : {}),
         ...(resetTs ? { archiveResetTimestamp: resetTs } : {}),
-        ...(mergedParticipants.length > 0 ? { participantIds: mergedParticipants } : {}),
-        ...(participantSummaryComputed ? { participantSummary: participantSummaryComputed } : {}),
+        ...(mergedParticipants.length > 0
+          ? { participantIds: mergedParticipants }
+          : {}),
+        ...(participantSummaryComputed
+          ? { participantSummary: participantSummaryComputed }
+          : {}),
       };
     } catch (error) {
       this.logger.error('Failed to get session detail:', error);
@@ -1458,10 +1711,14 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       const rel = String(f.path || f.name || '').trim();
       if (!rel) continue;
       try {
-        const candidate = path.isAbsolute(rel) ? path.resolve(rel) : path.resolve(wsReal, rel);
+        const candidate = path.isAbsolute(rel)
+          ? path.resolve(rel)
+          : path.resolve(wsReal, rel);
         let targetReal: string;
         try {
-          targetReal = fs.existsSync(candidate) ? fs.realpathSync(candidate) : candidate;
+          targetReal = fs.existsSync(candidate)
+            ? fs.realpathSync(candidate)
+            : candidate;
         } catch {
           targetReal = candidate;
         }
@@ -1512,7 +1769,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     return out;
   }
 
-  private buildSessionFile(filePath: string, agent: string, fileStem: string): SessionFile {
+  private buildSessionFile(
+    filePath: string,
+    agent: string,
+    fileStem: string,
+  ): SessionFile {
     const stats = fs.statSync(filePath);
     return {
       sessionId: `${agent}/${fileStem}`,
@@ -1522,7 +1783,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async findSessionFile(sessionId: string): Promise<SessionFile | null> {
+  private async findSessionFile(
+    sessionId: string,
+  ): Promise<SessionFile | null> {
     const dir = await this.stateDir();
     const agentsDir = path.join(dir, 'agents');
     if (!fs.existsSync(agentsDir)) {
@@ -1571,16 +1834,27 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 定位 *.jsonl.reset.<resetTimestamp> 归档文件 */
-  private async findSessionResetFile(sessionId: string, resetTimestamp: string): Promise<SessionFile | null> {
+  private async findSessionResetFile(
+    sessionId: string,
+    resetTimestamp: string,
+  ): Promise<SessionFile | null> {
     const dir = await this.stateDir();
     if (!dir) return null;
-    const bareId = sessionId.includes('/') ? sessionId.slice(sessionId.lastIndexOf('/') + 1) : sessionId;
+    const bareId = sessionId.includes('/')
+      ? sessionId.slice(sessionId.lastIndexOf('/') + 1)
+      : sessionId;
     if (!bareId) return null;
 
     const main = await this.findSessionFile(sessionId);
     if (main) {
       const agent = main.sessionId.split('/')[0];
-      const fp = path.join(dir, 'agents', agent, 'sessions', `${bareId}.jsonl.reset.${resetTimestamp}`);
+      const fp = path.join(
+        dir,
+        'agents',
+        agent,
+        'sessions',
+        `${bareId}.jsonl.reset.${resetTimestamp}`,
+      );
       if (fs.existsSync(fp)) {
         return this.buildSessionFile(fp, agent, bareId);
       }
@@ -1589,7 +1863,12 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     const agentsDir = path.join(dir, 'agents');
     if (!fs.existsSync(agentsDir)) return null;
     for (const agent of fs.readdirSync(agentsDir)) {
-      const fp = path.join(agentsDir, agent, 'sessions', `${bareId}.jsonl.reset.${resetTimestamp}`);
+      const fp = path.join(
+        agentsDir,
+        agent,
+        'sessions',
+        `${bareId}.jsonl.reset.${resetTimestamp}`,
+      );
       if (fs.existsSync(fp)) {
         return this.buildSessionFile(fp, agent, bareId);
       }
@@ -1639,7 +1918,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       }
 
       const content = await fs.promises.readFile(logPath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim());
+      const lines = content.split('\n').filter((line) => line.trim());
 
       // 返回最后 N 行
       return lines.slice(-limit);
@@ -1702,15 +1981,28 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       },
     };
 
-    let chosen: { key: string; sessionId?: string; agentId?: string; entry?: Record<string, unknown> } | null = null;
+    let chosen: {
+      key: string;
+      sessionId?: string;
+      agentId?: string;
+      entry?: Record<string, unknown>;
+    } | null = null;
     let report: Record<string, unknown> | null = null;
-    let resolvedSkills: Array<{ name: string; filePath?: string; description?: string }> | undefined;
+    let resolvedSkills:
+      | Array<{ name: string; filePath?: string; description?: string }>
+      | undefined;
     let skillsPrompt: string | undefined;
-    let skillsSnapshot: (SystemPromptProbeResult['skillsSnapshot'] & {
-      resolvedSkills?: Array<{ name?: string; description?: string; location?: string }>;
-      version?: number;
-      injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
-    }) | undefined;
+    let skillsSnapshot:
+      | (SystemPromptProbeResult['skillsSnapshot'] & {
+          resolvedSkills?: Array<{
+            name?: string;
+            description?: string;
+            location?: string;
+          }>;
+          version?: number;
+          injectedWorkspaceFiles?: Array<{ path?: string; name?: string }>;
+        })
+      | undefined;
     let sessionMeta: Record<string, unknown> | undefined;
     let sessionsJsonEntry: Record<string, unknown> | undefined;
 
@@ -1733,7 +2025,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
             injectedWorkspaceFiles: local.injectedWorkspaceFiles,
           };
         }
-        
+
         // 读取 transcript 首行获取 session 元数据
         if (chosen.sessionId) {
           try {
@@ -1759,8 +2051,10 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
             /* ignore */
           }
         }
-        
-        this.logger.debug(`probeSystemPrompt: 使用本地 sessions.json (${chosen.key})`);
+
+        this.logger.debug(
+          `probeSystemPrompt: 使用本地 sessions.json (${chosen.key})`,
+        );
       }
     }
 
@@ -1824,7 +2118,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         if (!r.ok) {
           return {
             ...empty,
-            error: r.error || 'sessions.usage RPC 失败（请检查 Gateway 与 Token）',
+            error:
+              r.error || 'sessions.usage RPC 失败（请检查 Gateway 与 Token）',
           };
         }
         usageChosen = pickReportFromSessions(r.payload?.sessions) || null;
@@ -1838,34 +2133,56 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         };
       }
 
-      chosen = { key: usageChosen.key, sessionId: usageChosen.sessionId, agentId: usageChosen.agentId };
-      report = usageChosen.contextWeight as Record<string, unknown>;
+      chosen = {
+        key: usageChosen.key,
+        sessionId: usageChosen.sessionId,
+        agentId: usageChosen.agentId,
+      };
+      report = usageChosen.contextWeight;
     }
 
     if (!report || !chosen) {
       return { ...empty, error: '未找到 systemPromptReport' };
     }
     const breakdown = buildBreakdownFromReport(report);
-    const workspaceFiles = (Array.isArray(report.injectedWorkspaceFiles)
-      ? report.injectedWorkspaceFiles
-      : []) as SystemPromptProbeResult['workspaceFiles'];
-    const skills = (report.skills as { entries?: Array<{ name: string; blockChars: number }> }) || {};
+    const workspaceFiles = (
+      Array.isArray(report.injectedWorkspaceFiles)
+        ? report.injectedWorkspaceFiles
+        : []
+    ) as SystemPromptProbeResult['workspaceFiles'];
+    const skills =
+      (report.skills as {
+        entries?: Array<{ name: string; blockChars: number }>;
+      }) || {};
     const skillsDetail = Array.isArray(skills.entries) ? skills.entries : [];
-    const tools = (report.tools as { listChars?: number; schemaChars?: number; entries?: unknown[] }) || {};
+    const tools =
+      (report.tools as {
+        listChars?: number;
+        schemaChars?: number;
+        entries?: unknown[];
+      }) || {};
     const toolsDetail = Array.isArray(tools.entries)
-      ? (tools.entries as Array<{
-          name?: string;
-          summaryChars?: number;
-          schemaChars?: number;
-          propertiesCount?: number | null;
-        }>)
+      ? (
+          tools.entries as Array<{
+            name?: string;
+            summaryChars?: number;
+            schemaChars?: number;
+            propertiesCount?: number | null;
+          }>
+        )
           .map((t) => ({
             name: String(t.name || '-'),
             summaryChars: Number(t.summaryChars) || 0,
             schemaChars: Number(t.schemaChars) || 0,
-            propertiesCount: typeof t.propertiesCount === 'number' ? t.propertiesCount : t.propertiesCount ?? null,
+            propertiesCount:
+              typeof t.propertiesCount === 'number'
+                ? t.propertiesCount
+                : (t.propertiesCount ?? null),
           }))
-          .sort((a, b) => a.schemaChars + a.summaryChars - (b.schemaChars + b.summaryChars))
+          .sort(
+            (a, b) =>
+              a.schemaChars + a.summaryChars - (b.schemaChars + b.summaryChars),
+          )
           .reverse()
       : [];
     const toolsSummary = {
@@ -1874,14 +2191,17 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       entryCount: Array.isArray(tools.entries) ? tools.entries.length : 0,
     };
 
-    const workspaceDirStr = report.workspaceDir ? String(report.workspaceDir) : '';
+    const workspaceDirStr = report.workspaceDir
+      ? String(report.workspaceDir)
+      : '';
     const workspaceFileContents = workspaceDirStr
       ? this.readWorkspaceInjectedContents(workspaceDirStr, workspaceFiles)
       : [];
 
     // 仅离线重建：不读取 transcript、不调用工具目录，以避免任何"真实请求链路"。
     let systemPromptMarkdown = '';
-    let systemPromptSource: SystemPromptProbeResult['systemPromptSource'] = 'none';
+    let systemPromptSource: SystemPromptProbeResult['systemPromptSource'] =
+      'none';
     if (workspaceDirStr) {
       try {
         systemPromptMarkdown = await rebuildSystemPromptMarkdown({
@@ -1916,7 +2236,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       sessionId: chosen.sessionId,
       agentId: chosen.agentId,
       reportSource: String(report.source || ''),
-      reportGeneratedAt: report.generatedAt ? Number(report.generatedAt) : undefined,
+      reportGeneratedAt: report.generatedAt
+        ? Number(report.generatedAt)
+        : undefined,
       model: report.model ? String(report.model) : undefined,
       provider: report.provider ? String(report.provider) : undefined,
       workspaceDir: workspaceDirStr || undefined,
@@ -1932,7 +2254,8 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       skillsSnapshot,
       sessionMeta,
       sessionsJsonEntry,
-      injectedWorkspaceFiles: (chosen?.entry?.systemPromptReport as any)?.injectedWorkspaceFiles,
+      injectedWorkspaceFiles: (chosen?.entry?.systemPromptReport as any)
+        ?.injectedWorkspaceFiles,
     };
   }
 
@@ -1948,23 +2271,29 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     recommendations: string[];
   }> {
     const probe = await this.probeSystemPrompt();
-    
+
     const skillBlocks = probe.sections?.skillBlocks || [];
     const hasToolsList = !!probe.sections?.toolsListText;
     const hasProjectContext = !!probe.sections?.projectContextText;
-    
+
     // 生成简单建议（不含 token 优化建议）
     const recommendations: string[] = [];
     if (skillBlocks.length === 0) {
-      recommendations.push('未检测到 skill blocks，建议在 system prompt 中添加 skill 配置');
+      recommendations.push(
+        '未检测到 skill blocks，建议在 system prompt 中添加 skill 配置',
+      );
     }
     if (!hasToolsList) {
-      recommendations.push('未检测到 tools list，建议确认 Gateway 是否正确注入 tools');
+      recommendations.push(
+        '未检测到 tools list，建议确认 Gateway 是否正确注入 tools',
+      );
     }
     if (!hasProjectContext) {
-      recommendations.push('未检测到 project context，建议添加 .claw/ 或 .cursor/ 配置');
+      recommendations.push(
+        '未检测到 project context，建议添加 .claw/ 或 .cursor/ 配置',
+      );
     }
-    
+
     return {
       hasSkillBlocks: skillBlocks.length > 0,
       skillBlockCount: skillBlocks.length,

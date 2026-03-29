@@ -18,7 +18,9 @@ export class DashboardController {
 
   @Get('overview')
   async getOverview() {
-    const bundleResult = await this.openclawService.getDashboardGatewayBundle(10).catch(() => ({ ok: false as const, error: 'bundle failed' }));
+    const bundleResult = await this.openclawService
+      .getDashboardGatewayBundle(10)
+      .catch(() => ({ ok: false as const, error: 'bundle failed' }));
 
     let statusOverview: StatusOverviewResult | null;
     let logs: Awaited<ReturnType<LogsService['getRecentLogs']>>;
@@ -26,23 +28,34 @@ export class DashboardController {
 
     if (bundleResult.ok) {
       statusOverview = bundleResult.statusOverview;
-      logs = this.logsService.mapGatewayTailPayloadToEntries(bundleResult.logsTail);
+      logs = this.logsService.mapGatewayTailPayloadToEntries(
+        bundleResult.logsTail,
+      );
       connectionOverride = { connected: true };
     } else {
       const [statusO, recentLogs, chk] = await Promise.all([
         this.openclawService.getStatusOverview().catch(() => null),
         this.logsService.getRecentLogs(10).catch(() => []),
-        this.openclawService.checkConnection().catch(() => ({ connected: false, error: undefined })),
+        this.openclawService
+          .checkConnection()
+          .catch(() => ({ connected: false, error: undefined })),
       ]);
       statusOverview = statusO;
       logs = recentLogs;
-      connectionOverride = statusO != null ? { connected: true } : { connected: chk.connected, error: chk.error };
+      connectionOverride =
+        statusO != null
+          ? { connected: true }
+          : { connected: chk.connected, error: chk.error };
     }
 
     const [health, sessions, latency] = await Promise.all([
-      this.healthService.getHealthStatus({ connectionOverride }).catch(() => null),
+      this.healthService
+        .getHealthStatus({ connectionOverride })
+        .catch(() => null),
       this.sessionsService.listSessions().catch(() => []),
-      this.metricsService.getLatencyMetrics().catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
+      this.metricsService
+        .getLatencyMetrics()
+        .catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
     ]);
 
     return {

@@ -37,9 +37,15 @@ describe('transcript-message-content', () => {
 
   it('appendTranscriptTextFromContentBlock handles output_text and reasoning', () => {
     let s = '';
-    s = appendTranscriptTextFromContentBlock({ type: 'output_text', text: 'hi' }, s);
+    s = appendTranscriptTextFromContentBlock(
+      { type: 'output_text', text: 'hi' },
+      s,
+    );
     expect(s).toBe('hi');
-    s = appendTranscriptTextFromContentBlock({ type: 'reasoning', summary: 'plan' }, s);
+    s = appendTranscriptTextFromContentBlock(
+      { type: 'reasoning', summary: 'plan' },
+      s,
+    );
     expect(s).toBe('hiplan');
   });
 
@@ -59,8 +65,15 @@ describe('transcript-message-content', () => {
         '[无内容]',
       ),
     ).toBe('[错误] Connection error.');
-    expect(resolveAssistantTranscriptDisplayText({ stopReason: 'aborted' }, '')).toBe('[已中止]');
-    expect(resolveAssistantTranscriptDisplayText({ stopReason: 'error' }, '[无内容]')).toBe('[错误]（无详情）');
+    expect(
+      resolveAssistantTranscriptDisplayText({ stopReason: 'aborted' }, ''),
+    ).toBe('[已中止]');
+    expect(
+      resolveAssistantTranscriptDisplayText(
+        { stopReason: 'error' },
+        '[无内容]',
+      ),
+    ).toBe('[错误]（无详情）');
     expect(resolveAssistantTranscriptDisplayText({}, 'hello')).toBe('hello');
   });
 });

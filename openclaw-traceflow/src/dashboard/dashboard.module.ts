@@ -7,7 +7,13 @@ import { LogsModule } from '../logs/logs.module';
 import { MetricsModule } from '../metrics/metrics.module';
 
 @Module({
-  imports: [HealthModule, OpenClawModule, SessionsModule, LogsModule, MetricsModule],
+  imports: [
+    HealthModule,
+    OpenClawModule,
+    SessionsModule,
+    LogsModule,
+    MetricsModule,
+  ],
   controllers: [DashboardController],
 })
 export class DashboardModule {}

@@ -21,7 +21,9 @@ async function listenWithDevRetry(
     try {
       await app.listen(port, host);
       if (i > 0) {
-        console.log(`[bootstrap] Port ${port} available after ${i} retry(ies).`);
+        console.log(
+          `[bootstrap] Port ${port} available after ${i} retry(ies).`,
+        );
       }
       return;
     } catch (e: unknown) {
@@ -59,7 +61,9 @@ async function bootstrap() {
 
   // ========== 性能日志拦截器（100% 覆盖所有 HTTP API）==========
   app.useGlobalInterceptors(new PerformanceLoggingInterceptor());
-  console.log('[bootstrap] PerformanceLoggingInterceptor enabled (HTTP API logging)');
+  console.log(
+    '[bootstrap] PerformanceLoggingInterceptor enabled (HTTP API logging)',
+  );
 
   // 注：WebSocket 性能日志需要在 WebSocketGateway 中实现，NestJS 不支持全局 WS 中间件
 
@@ -75,14 +79,20 @@ async function bootstrap() {
   app.use(express.static(staticPath));
 
   // 添加 SPA 回退路由 - 所有非 API 路径都返回 index.html
-  app.use((req, res, next) => {
-    // 如果是 API 路径，跳过
-    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
-      return next();
-    }
-    // 返回 index.html
-    res.sendFile(path.join(staticPath, 'index.html'));
-  });
+  app.use(
+    (
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction,
+    ) => {
+      // 如果是 API 路径，跳过
+      if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+        return next();
+      }
+      // 返回 index.html
+      res.sendFile(path.join(staticPath, 'index.html'));
+    },
+  );
 
   // 获取配置
   const configService = app.get(ConfigService);

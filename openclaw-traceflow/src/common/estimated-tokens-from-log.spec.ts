@@ -11,7 +11,9 @@ describe('estimateTokensFromTranscriptBytes', () => {
   });
 
   it('uses default divisor', () => {
-    expect(estimateTokensFromTranscriptBytes(8)).toBe(Math.ceil(8 / DEFAULT_TOKEN_BYTES_DIVISOR));
+    expect(estimateTokensFromTranscriptBytes(8)).toBe(
+      Math.ceil(8 / DEFAULT_TOKEN_BYTES_DIVISOR),
+    );
   });
 
   it('returns undefined for invalid bytes', () => {
@@ -27,7 +29,12 @@ describe('shouldOfferLogSizeTokenEstimate', () => {
       shouldOfferLogSizeTokenEstimate({
         transcriptFileSizeBytes: 400,
         tokenUsageMeta: { totalTokensFresh: false },
-        tokenUsage: { input: 0, output: 0, total: 0, contextUtilizationReliable: false },
+        tokenUsage: {
+          input: 0,
+          output: 0,
+          total: 0,
+          contextUtilizationReliable: false,
+        },
       }),
     ).toBe(true);
   });
@@ -37,7 +44,12 @@ describe('shouldOfferLogSizeTokenEstimate', () => {
       shouldOfferLogSizeTokenEstimate({
         transcriptFileSizeBytes: 400,
         tokenUsageMeta: { totalTokensFresh: false },
-        tokenUsage: { input: 1, output: 0, total: 1, contextUtilizationReliable: false },
+        tokenUsage: {
+          input: 1,
+          output: 0,
+          total: 1,
+          contextUtilizationReliable: false,
+        },
       }),
     ).toBe(false);
   });
@@ -46,7 +58,12 @@ describe('shouldOfferLogSizeTokenEstimate', () => {
     expect(
       shouldOfferLogSizeTokenEstimate({
         transcriptFileSizeBytes: 400,
-        tokenUsage: { input: 0, output: 0, total: 0, contextUtilizationReliable: true },
+        tokenUsage: {
+          input: 0,
+          output: 0,
+          total: 0,
+          contextUtilizationReliable: true,
+        },
       }),
     ).toBe(false);
   });
