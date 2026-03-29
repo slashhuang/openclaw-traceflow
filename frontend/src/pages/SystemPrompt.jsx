@@ -13,11 +13,16 @@ import {
   Tag,
   theme,
   Space,
-  Tabs,
 } from 'antd';
-import { CopyOutlined, FileTextOutlined, FolderOutlined } from '@ant-design/icons';
+import { CopyOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import SectionScopeHint from '../components/SectionScopeHint';
+
+/** 避免 undefined/非数字调用 toLocaleString 导致运行时崩溃 */
+function safeLocaleNum(n) {
+  const x = Number(n);
+  return (Number.isFinite(x) ? x : 0).toLocaleString();
+}
 
 /** OpenClaw buildAgentSystemPrompt 组装顺序，用于摘要锚点 */
 const ASSEMBLY_ORDER = [
@@ -34,9 +39,9 @@ const ASSEMBLY_ORDER = [
   { id: 'runtime', label: 'Runtime' },
 ];
 
-/** breakdown 优先级排序：用户自定义文件（AGENTS.md、identity.md 等）优先 */
+/** breakdown 优先级排序：OpenClaw Project Context / 引导文件优先 */
 const BREAKDOWN_PRIORITY_MAP = {
-  'project': 1,      // Project Context: AGENTS.md, identity.md 等用户自定义文件，最重要
+  'project': 1,      // Project Context: AGENTS.md、IDENTITY.md 等
   'workspace': 2,    // Workspace Files: 其他工作区文件
   'core': 3,         // Core: 核心系统提示
   'skills': 4,       // Skills
@@ -50,6 +55,518 @@ function sortBreakdownItems(items) {
     const priorityB = BREAKDOWN_PRIORITY_MAP[b.id] || 999;
     return priorityA - priorityB;
   });
+}
+
+/** 与 OpenClaw docs/concepts/system-prompt.md「Workspace bootstrap injection」顺序一致 */
+function workspaceBasename(p) {
+  const s = String(p || '').replace(/\\/g, '/').split('/').pop() || '';
+  return s.toLowerCase();
+}
+
+/** 与 OpenClaw 注入顺序对齐；前四为核心引导（默认展开），后四为其余（默认收起） */
+const BOOTSTRAP_CATALOG = [
+  { id: 'agents', label: 'AGENTS.md', match: (bn) => bn === 'agents.md' },
+  { id: 'soul', label: 'SOUL.md', match: (bn) => bn === 'soul.md' },
+  { id: 'identity', label: 'IDENTITY.md', match: (bn) => bn === 'identity.md' },
+  { id: 'user', label: 'USER.md', match: (bn) => bn === 'user.md' },
+  { id: 'tools', label: 'TOOLS.md', match: (bn) => bn === 'tools.md' },
+  { id: 'heartbeat', label: 'HEARTBEAT.md', match: (bn) => bn === 'heartbeat.md' },
+  { id: 'bootstrap', label: 'BOOTSTRAP.md', match: (bn) => bn === 'bootstrap.md' },
+  { id: 'memory', label: 'MEMORY.md / memory.md', match: (bn) => bn === 'memory.md' },
+];
+
+const TIER_A_IDS = ['agents', 'soul', 'identity', 'user'];
+const TIER_B_IDS = ['tools', 'heartbeat', 'bootstrap', 'memory'];
+
+function mergeWorkspaceFileContentsForProbe(probe) {
+  const workspaceFileContents = Array.isArray(probe?.workspaceFileContents) ? probe.workspaceFileContents : [];
+  if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
+    return workspaceFileContents;
+  }
+  const injectedMap = new Map(probe.injectedWorkspaceFiles.map((f) => [f.name || f.path, f]));
+  return workspaceFileContents.map((wf) => {
+    const injected = injectedMap.get(wf.name || wf.path);
+    if (injected) {
+      return {
+        ...wf,
+        content: `// sessions.json injectedWorkspaceFiles\n// Path: ${injected.path || wf.path}\n\n${wf.content}`,
+        injected: true,
+      };
+    }
+    return wf;
+  });
+}
+
+function resolveBootstrapRow(entry, mergedContents, injectedWorkspaceFiles) {
+  let hit = null;
+  for (const wf of mergedContents) {
+    const bn = workspaceBasename(wf.name || wf.path);
+    if (entry.match(bn)) {
+      hit = wf;
+      break;
+    }
+  }
+  const injectedFromList =
+    Array.isArray(injectedWorkspaceFiles) &&
+    injectedWorkspaceFiles.some((f) => entry.match(workspaceBasename(f.name || f.path)));
+  const injected = !!(hit?.injected || injectedFromList);
+  const chars = hit?.content != null ? String(hit.content).length : 0;
+  const missing = !hit;
+  const empty = !!(hit && !String(hit.content || '').trim());
+  return { hit, injected, chars, missing, empty };
+}
+
+function PreBlock({ text, emptyHint, token }) {
+  const t = typeof text === 'string' ? text : '';
+  if (!t.trim()) {
+    return (
+      <Alert type="warning" message={emptyHint || 'Empty'} style={{ fontSize: 12 }} />
+    );
+  }
+  return (
+    <pre
+      style={{
+        fontSize: 12,
+        fontFamily: 'monospace',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        maxHeight: 'min(50vh, 420px)',
+        overflow: 'auto',
+        padding: 12,
+        borderRadius: token.borderRadius,
+        border: `1px solid ${token.colorBorder}`,
+        background: token.colorFillQuaternary,
+        color: token.colorText,
+      }}
+    >
+      {t}
+    </pre>
+  );
+}
+
+function buildBootstrapTierPanels(tierIds, merged, injectedWorkspaceFiles, intl, token) {
+  return tierIds
+    .map((id) => BOOTSTRAP_CATALOG.find((c) => c.id === id))
+    .filter(Boolean)
+    .map((entry) => {
+      const { hit, injected, chars, missing, empty } = resolveBootstrapRow(
+        entry,
+        merged,
+        injectedWorkspaceFiles,
+      );
+      const role = intl.formatMessage({ id: `systemPrompt.bootstrap.${entry.id}.role` });
+      const tip = intl.formatMessage({ id: `systemPrompt.bootstrap.${entry.id}.tip` });
+      return {
+        key: entry.id,
+        label: (
+          <Space wrap size="small">
+            <Typography.Text strong style={{ fontFamily: 'monospace', fontSize: 13 }}>
+              {entry.label}
+            </Typography.Text>
+            {injected && (
+              <Tag color="blue">
+                📌 {intl.formatMessage({ id: 'systemPrompt.bootstrap.tagInjected' })}
+              </Tag>
+            )}
+            {missing && (
+              <Tag color="default">{intl.formatMessage({ id: 'systemPrompt.bootstrap.tagMissing' })}</Tag>
+            )}
+            {empty && !missing && (
+              <Tag color="orange">{intl.formatMessage({ id: 'systemPrompt.bootstrap.tagEmpty' })}</Tag>
+            )}
+            {!missing && (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {intl.formatMessage({ id: 'systemPrompt.bootstrap.charsLabel' }, { count: safeLocaleNum(chars) })}
+              </Typography.Text>
+            )}
+          </Space>
+        ),
+        children: (
+          <div>
+            <Typography.Paragraph style={{ marginBottom: 8 }}>{role}</Typography.Paragraph>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 12, fontSize: 13 }}>
+              {tip}
+            </Typography.Paragraph>
+            {hit?.readError && (
+              <Typography.Text type="danger" style={{ display: 'block', marginBottom: 8 }}>
+                {hit.readError}
+              </Typography.Text>
+            )}
+            {hit && !missing ? (
+              <PreBlock
+                text={hit.content}
+                token={token}
+                emptyHint={intl.formatMessage({ id: 'systemPrompt.emptyFileHint' })}
+              />
+            ) : (
+              <Alert type="warning" message={intl.formatMessage({ id: 'systemPrompt.bootstrap.tagMissing' })} />
+            )}
+          </div>
+        ),
+      };
+    });
+}
+
+/** 引导 Markdown → # Project Context 汇总 → Skills 快照（均无跳转） */
+function HarnessBootstrapStack({
+  probe,
+  probeLoading,
+  sections,
+  token,
+  intl,
+  skillsSnapshot,
+  copied,
+  onCopySkillsPrompt,
+}) {
+  const workspaceFiles = Array.isArray(probe?.workspaceFiles) ? probe.workspaceFiles : [];
+  const workspaceFileContents = Array.isArray(probe?.workspaceFileContents) ? probe.workspaceFileContents : [];
+
+  const mergedWorkspaceFiles = useMemo(() => {
+    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
+      return workspaceFiles;
+    }
+    const injectedMap = new Map(probe.injectedWorkspaceFiles.map((f) => [f.name || f.path, f]));
+    return workspaceFiles.map((f) => {
+      const injected = injectedMap.get(f.name || f.path);
+      return injected ? { ...f, ...injected, injected: true } : f;
+    });
+  }, [probe?.injectedWorkspaceFiles, workspaceFiles]);
+
+  const mergedWorkspaceFileContents = useMemo(() => {
+    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
+      return workspaceFileContents;
+    }
+    const injectedMap = new Map(probe.injectedWorkspaceFiles.map((f) => [f.name || f.path, f]));
+    return workspaceFileContents.map((wf) => {
+      const injected = injectedMap.get(wf.name || wf.path);
+      if (injected) {
+        return {
+          ...wf,
+          content: `// 来自 sessions.json injectedWorkspaceFiles\n// Path: ${injected.path || wf.path}\n\n${wf.content}`,
+          injected: true,
+        };
+      }
+      return wf;
+    });
+  }, [probe?.injectedWorkspaceFiles, workspaceFileContents]);
+
+  const mergedForBootstrap = useMemo(() => {
+    if (!probe?.ok) return [];
+    return mergeWorkspaceFileContentsForProbe(probe);
+  }, [probe]);
+
+  const tierAPanels = useMemo(
+    () =>
+      buildBootstrapTierPanels(
+        TIER_A_IDS,
+        mergedForBootstrap,
+        probe?.injectedWorkspaceFiles,
+        intl,
+        token,
+      ),
+    [mergedForBootstrap, probe?.injectedWorkspaceFiles, intl, token],
+  );
+
+  const tierBPanels = useMemo(
+    () =>
+      buildBootstrapTierPanels(
+        TIER_B_IDS,
+        mergedForBootstrap,
+        probe?.injectedWorkspaceFiles,
+        intl,
+        token,
+      ),
+    [mergedForBootstrap, probe?.injectedWorkspaceFiles, intl, token],
+  );
+
+  const otherFiles = useMemo(() => {
+    if (!probe?.ok) return [];
+    return mergedWorkspaceFileContents.filter(
+      (wf) => !BOOTSTRAP_CATALOG.some((c) => c.match(workspaceBasename(wf.name || wf.path))),
+    );
+  }, [probe?.ok, mergedWorkspaceFileContents]);
+
+  const projectBreakdown = probe?.ok ? probe.breakdown?.find((b) => b.id === 'project') : undefined;
+  const workspaceBreakdown = probe?.ok ? probe.breakdown?.find((b) => b.id === 'workspace') : undefined;
+  const totalFiles = mergedWorkspaceFileContents.length;
+  const totalTokensRaw =
+    (Number(projectBreakdown?.tokens) || 0) + (Number(workspaceBreakdown?.tokens) || 0);
+  const totalTokens = Number.isFinite(totalTokensRaw) ? totalTokensRaw : 0;
+
+  const projectContextText = sections?.projectContextText || '';
+  const hasSkills = !!(skillsSnapshot && (skillsSnapshot.skills?.length > 0 || skillsSnapshot.prompt));
+
+  if (probeLoading) {
+    return (
+      <Card style={{ marginBottom: 16 }}>
+        <Spin style={{ display: 'block', margin: '24px 0' }} />
+      </Card>
+    );
+  }
+
+  if (!probe?.ok) {
+    return (
+      <Card style={{ marginBottom: 16 }}>
+        <Alert type="warning" showIcon message={probe?.error || 'Probe failed'} />
+      </Card>
+    );
+  }
+
+  const otherFilesCollapseItems =
+    otherFiles.length > 0
+      ? [
+          {
+            key: 'other-md',
+            label: `${intl.formatMessage({ id: 'systemPrompt.harness.otherFilesTitle' })} (${otherFiles.length})`,
+            children: (
+              <div>
+                {probe.injectedWorkspaceFiles && probe.injectedWorkspaceFiles.length > 0 && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={intl.formatMessage(
+                      { id: 'systemPrompt.injectedMergeHint' },
+                      { count: probe.injectedWorkspaceFiles.length },
+                    )}
+                    style={{ marginBottom: 12 }}
+                  />
+                )}
+                {otherFiles.map((wf, i) => (
+                  <Collapse
+                    key={`${wf.name || wf.path}-${i}`}
+                    style={{ marginBottom: 8 }}
+                    defaultActiveKey={[]}
+                    items={[
+                      {
+                        key: '1',
+                        label: (
+                          <Space wrap>
+                            <Typography.Text strong>{wf.name || wf.path}</Typography.Text>
+                            {wf.injected && (
+                              <Tag color="blue">
+                                📌 {intl.formatMessage({ id: 'systemPrompt.bootstrap.tagInjected' })}
+                              </Tag>
+                            )}
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              {intl.formatMessage(
+                                { id: 'systemPrompt.bootstrap.charsLabel' },
+                                { count: safeLocaleNum(String(wf.content || '').length) },
+                              )}
+                            </Typography.Text>
+                          </Space>
+                        ),
+                        children: wf.readError ? (
+                          <Typography.Text type="danger">{wf.readError}</Typography.Text>
+                        ) : (
+                          <PreBlock
+                            text={wf.content}
+                            token={token}
+                            emptyHint={intl.formatMessage({ id: 'systemPrompt.emptyFileHint' })}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
+                ))}
+                <Table
+                  size="small"
+                  pagination={false}
+                  dataSource={mergedWorkspaceFiles.map((f, j) => ({ ...f, key: j }))}
+                  columns={[
+                    {
+                      title: 'File',
+                      dataIndex: 'name',
+                      render: (_, r) => (
+                        <Space>
+                          <span>{r.name || r.path}</span>
+                          {r.injected && <Tag color="blue" style={{ fontSize: 10 }}>📌</Tag>}
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: 'Chars',
+                      dataIndex: 'injectedChars',
+                      align: 'right',
+                      render: (v) => safeLocaleNum(v),
+                    },
+                    { title: 'Trunc', dataIndex: 'truncated', render: (v) => (v ? 'Y' : '') },
+                    {
+                      title: 'Source',
+                      render: (_, r) => (r.injected ? 'sessions.json' : 'workspace'),
+                    },
+                  ]}
+                  style={{ marginTop: 12 }}
+                />
+              </div>
+            ),
+          },
+        ]
+      : [];
+
+  return (
+    <>
+      <Card
+        title={
+          <Typography.Text strong>
+            {intl.formatMessage({ id: 'systemPrompt.bootstrapHeaderTitle' })}
+          </Typography.Text>
+        }
+        extra={
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            📁 {totalFiles} files · ~{safeLocaleNum(totalTokens)} tok
+          </Typography.Text>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
+          {intl.formatMessage({ id: 'systemPrompt.bootstrapHeaderHint' })}
+        </Typography.Paragraph>
+        <Alert
+          type="info"
+          showIcon
+          message={intl.formatMessage({ id: 'systemPrompt.bootstrapGoldenRules' })}
+          style={{ marginBottom: 16 }}
+        />
+        <Typography.Text strong>
+          {intl.formatMessage({ id: 'systemPrompt.harness.tierPrimaryTitle' })}
+        </Typography.Text>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+          {intl.formatMessage({ id: 'systemPrompt.harness.tierPrimaryDesc' })}
+        </Typography.Paragraph>
+        <Collapse defaultActiveKey={TIER_A_IDS} items={tierAPanels} style={{ marginBottom: 20 }} />
+        <Typography.Text strong>
+          {intl.formatMessage({ id: 'systemPrompt.harness.tierSecondaryTitle' })}
+        </Typography.Text>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+          {intl.formatMessage({ id: 'systemPrompt.harness.tierSecondaryDesc' })}
+        </Typography.Paragraph>
+        <Collapse defaultActiveKey={[]} items={tierBPanels} style={{ marginBottom: otherFiles.length ? 16 : 0 }} />
+        {otherFilesCollapseItems.length > 0 && <Collapse defaultActiveKey={[]} items={otherFilesCollapseItems} />}
+      </Card>
+
+      <Collapse
+        style={{ marginBottom: 16 }}
+        defaultActiveKey={['project-context']}
+        items={[
+          {
+            key: 'project-context',
+            label: (
+              <Space align="center" wrap>
+                <Typography.Text strong>
+                  {intl.formatMessage({ id: 'systemPrompt.harness.projectContextCollapseTitle' })}
+                </Typography.Text>
+                <SectionScopeHint intl={intl} messageId="systemPrompt.projectContextHint" />
+              </Space>
+            ),
+            children:
+              projectContextText.trim().length > 0 ? (
+                <PreBlock
+                  text={projectContextText}
+                  token={token}
+                  emptyHint={intl.formatMessage({ id: 'systemPrompt.noContent' })}
+                />
+              ) : (
+                <Alert type="warning" message={intl.formatMessage({ id: 'systemPrompt.noContent' })} />
+              ),
+          },
+        ]}
+      />
+
+      {hasSkills && (
+        <Collapse
+          style={{ marginBottom: 16 }}
+          defaultActiveKey={[]}
+          items={[
+            {
+              key: 'skills-snapshot',
+              label: (
+                <Space
+                  style={{ width: '100%', justifyContent: 'space-between' }}
+                  align="center"
+                  wrap
+                >
+                  <Space wrap align="center">
+                    <Typography.Text strong>
+                      {intl.formatMessage({ id: 'systemPrompt.harness.skillsCollapseTitle' })}
+                    </Typography.Text>
+                    <SectionScopeHint intl={intl} messageId="systemPrompt.skillsSnapshotDesc" />
+                  </Space>
+                  {skillsSnapshot.prompt && (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCopySkillsPrompt();
+                      }}
+                    >
+                      {copied
+                        ? intl.formatMessage({ id: 'systemPrompt.copied' })
+                        : intl.formatMessage({ id: 'systemPrompt.copy' })}
+                    </Button>
+                  )}
+                </Space>
+              ),
+              children: (
+                <div>
+                  <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 16 }}>
+                    {intl.formatMessage({ id: 'systemPrompt.skillsSnapshotDesc' })}
+                  </Typography.Paragraph>
+                  {skillsSnapshot.skills?.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Typography.Text strong style={{ fontSize: 13 }}>
+                        {intl.formatMessage({ id: 'systemPrompt.skillsList' })}
+                      </Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+                        {intl.locale === 'zh-CN'
+                          ? `共 ${skillsSnapshot.skills.length} 个`
+                          : `${skillsSnapshot.skills.length} skills`}
+                      </Typography.Text>
+                      <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {skillsSnapshot.skills.map((s) => (
+                          <Tag key={s.name}>{s.name}</Tag>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {skillsSnapshot.prompt && (
+                    <div>
+                      <Typography.Text strong style={{ fontSize: 13 }}>
+                        {intl.formatMessage({ id: 'systemPrompt.skillsPrompt' })}
+                      </Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+                        {intl.locale === 'zh-CN'
+                          ? '注入到 system prompt 的 XML 文本，含 name/description/location'
+                          : 'XML injected into system prompt (name, description, location)'}
+                      </Typography.Text>
+                      <pre
+                        style={{
+                          margin: '10px 0 0',
+                          padding: 12,
+                          fontSize: 11,
+                          maxHeight: 360,
+                          overflow: 'auto',
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
+                          borderRadius: token.borderRadius,
+                          border: `1px solid ${token.colorBorder}`,
+                          background: token.colorFillQuaternary,
+                        }}
+                      >
+                        {skillsSnapshot.prompt}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
+    </>
+  );
 }
 
 function slugify(text) {
@@ -136,7 +653,7 @@ function TokenDistributionBar({ items, token }) {
                 position: 'relative',
                 transition: 'all 0.3s ease',
               }}
-              title={`${item.label}: ${item.tokens?.toLocaleString()} tok (${item.percent}%)`}
+              title={`${item.label}: ${safeLocaleNum(item.tokens)} tok (${item.percent}%)`}
             >
               {percent >= 8 && (
                 <Typography.Text
@@ -171,291 +688,13 @@ function TokenDistributionBar({ items, token }) {
             <Typography.Text style={{ fontSize: 12 }}>
               {item.label}
               <Typography.Text type="secondary" style={{ marginLeft: 4 }}>
-                {item.tokens?.toLocaleString()} tok · {item.percent}%
+                {safeLocaleNum(item.tokens)} tok · {item.percent}%
               </Typography.Text>
             </Typography.Text>
           </div>
         ))}
       </div>
     </div>
-  );
-}
-
-/** Workspace & Project Context 独立展示组件 */
-function WorkspaceProjectCard({ probe, sections, token, intl }) {
-  const [activeTab, setActiveTab] = useState('project');
-
-  // 合并 injectedWorkspaceFiles 和 workspaceFiles
-  const workspaceFiles = Array.isArray(probe?.workspaceFiles) ? probe.workspaceFiles : [];
-  const workspaceFileContents = Array.isArray(probe?.workspaceFileContents) ? probe.workspaceFileContents : [];
-
-  const mergedWorkspaceFiles = useMemo(() => {
-    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
-      return workspaceFiles;
-    }
-    const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
-    return workspaceFiles.map(f => {
-      const injected = injectedMap.get(f.name || f.path);
-      return injected ? { ...f, ...injected, injected: true } : f;
-    });
-  }, [probe?.injectedWorkspaceFiles, workspaceFiles]);
-
-  const mergedWorkspaceFileContents = useMemo(() => {
-    if (!probe?.injectedWorkspaceFiles || probe.injectedWorkspaceFiles.length === 0) {
-      return workspaceFileContents;
-    }
-    const injectedMap = new Map(probe.injectedWorkspaceFiles.map(f => [f.name || f.path, f]));
-    return workspaceFileContents.map(wf => {
-      const injected = injectedMap.get(wf.name || wf.path);
-      if (injected) {
-        return {
-          ...wf,
-          content: `// 来自 sessions.json injectedWorkspaceFiles\n// Path: ${injected.path || wf.path}\n\n${wf.content}`,
-          injected: true,
-        };
-      }
-      return wf;
-    });
-  }, [probe?.injectedWorkspaceFiles, workspaceFileContents]);
-
-  // Early return after all hooks
-  if (!probe?.ok) return null;
-
-  // 提取 Project Context 相关数据
-  const projectBreakdown = probe.breakdown?.find(b => b.id === 'project');
-  const workspaceBreakdown = probe.breakdown?.find(b => b.id === 'workspace');
-
-  // 区分 Project Context 和 Workspace Files
-  // Project Context: AGENTS.md, identity.md, CLAUDE.md 等项目级文档
-  // Workspace Files: 其他工作区文件
-  const projectFiles = mergedWorkspaceFileContents.filter(f => {
-    const name = (f.name || f.path || '').toLowerCase();
-    return name.includes('agents.md') ||
-           name.includes('identity.md') ||
-           name.includes('claude.md') ||
-           name.includes('readme') ||
-           name.includes('.md') && !name.includes('node_modules');
-  });
-
-  const workspaceOnlyFiles = mergedWorkspaceFileContents.filter(f => {
-    const name = (f.name || f.path || '').toLowerCase();
-    return !(name.includes('agents.md') ||
-             name.includes('identity.md') ||
-             name.includes('claude.md') ||
-             name.includes('readme'));
-  });
-
-  const totalFiles = mergedWorkspaceFileContents.length;
-  const totalTokens = (projectBreakdown?.tokens || 0) + (workspaceBreakdown?.tokens || 0);
-
-  const projectContextText = sections?.projectContextText || '';
-
-  const tabItems = [
-    {
-      key: 'project',
-      label: (
-        <span>
-          <FileTextOutlined style={{ marginRight: 6 }} />
-          Project Context
-          <Tag color="blue" style={{ marginLeft: 8, fontSize: 10 }}>
-            {projectFiles.length}
-          </Tag>
-        </span>
-      ),
-      children: (
-        <div>
-          {/* 显示 sections.projectContextText */}
-          {projectContextText && (
-            <Alert
-              type="info"
-              showIcon
-              message={intl.formatMessage({ id: 'systemPrompt.projectContextHint' })}
-              description={
-                <PreBlock
-                  text={projectContextText}
-                  token={token}
-                  emptyHint={intl.formatMessage({ id: 'systemPrompt.noContent' })}
-                />
-              }
-              style={{ marginBottom: 12 }}
-            />
-          )}
-
-          {/* 文件列表 */}
-          {projectFiles.length > 0 ? (
-            projectFiles.map((wf, i) => (
-              <Collapse
-                key={i}
-                style={{ marginBottom: 8 }}
-                items={[
-                  {
-                    key: '1',
-                    label: (
-                      <Space>
-                        <FileTextOutlined />
-                        <span style={{ fontWeight: 500 }}>{wf.name || wf.path}</span>
-                        {wf.injected && <Tag color="blue">📌 injected</Tag>}
-                        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                          {(wf.content?.length || 0).toLocaleString()} chars
-                        </Typography.Text>
-                      </Space>
-                    ),
-                    children: wf.readError ? (
-                      <Typography.Text type="danger">{wf.readError}</Typography.Text>
-                    ) : (
-                      <PreBlock text={wf.content} token={token} emptyHint="Empty file" />
-                    ),
-                  },
-                ]}
-              />
-            ))
-          ) : (
-            <Alert type="warning" message="No project context files found" />
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'workspace',
-      label: (
-        <span>
-          <FolderOutlined style={{ marginRight: 6 }} />
-          Workspace Files
-          <Tag color="green" style={{ marginLeft: 8, fontSize: 10 }}>
-            {workspaceOnlyFiles.length}
-          </Tag>
-        </span>
-      ),
-      children: (
-        <div>
-          {probe.injectedWorkspaceFiles && probe.injectedWorkspaceFiles.length > 0 && (
-            <Alert
-              type="info"
-              showIcon
-              message={`${probe.injectedWorkspaceFiles.length} 个 injectedWorkspaceFiles 已合并到下方列表（带 📌 标记）`}
-              style={{ marginBottom: 12 }}
-            />
-          )}
-
-          {/* 文件列表 */}
-          {workspaceOnlyFiles.length > 0 ? (
-            <>
-              {workspaceOnlyFiles.map((wf, i) => (
-                <Collapse
-                  key={i}
-                  style={{ marginBottom: 8 }}
-                  items={[
-                    {
-                      key: '1',
-                      label: (
-                        <Space>
-                          <span>{wf.name || wf.path}</span>
-                          {wf.injected && <Tag color="blue">📌 injected</Tag>}
-                          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                            {(wf.content?.length || 0).toLocaleString()} chars
-                          </Typography.Text>
-                        </Space>
-                      ),
-                      children: wf.readError ? (
-                        <Typography.Text type="danger">{wf.readError}</Typography.Text>
-                      ) : (
-                        <PreBlock text={wf.content} token={token} emptyHint="Empty file" />
-                      ),
-                    },
-                  ]}
-                />
-              ))}
-
-              {/* 文件统计表格 */}
-              <Table
-                size="small"
-                pagination={false}
-                dataSource={mergedWorkspaceFiles.map((f, j) => ({ ...f, key: j }))}
-                columns={[
-                  {
-                    title: 'File',
-                    dataIndex: 'name',
-                    render: (_, r) => (
-                      <Space>
-                        <span>{r.name || r.path}</span>
-                        {r.injected && <Tag color="blue" style={{ fontSize: 10 }}>📌</Tag>}
-                      </Space>
-                    )
-                  },
-                  { title: 'Chars', dataIndex: 'injectedChars', align: 'right', render: (v) => (v ?? 0).toLocaleString() },
-                  { title: 'Trunc', dataIndex: 'truncated', render: (v) => (v ? 'Y' : '') },
-                  {
-                    title: 'Source',
-                    render: (_, r) => r.injected ? 'sessions.json' : 'workspace'
-                  },
-                ]}
-                style={{ marginTop: 12 }}
-              />
-            </>
-          ) : (
-            <Alert type="warning" message="No workspace files found" />
-          )}
-        </div>
-      ),
-    },
-  ];
-
-  if (totalFiles === 0) return null;
-
-  return (
-    <Card
-      title={
-        <Space>
-          <Typography.Text strong>
-            {intl.formatMessage({ id: 'systemPrompt.workspaceProjectTitle' })}
-          </Typography.Text>
-          <SectionScopeHint intl={intl} messageId="systemPrompt.workspaceProjectCardScopeDesc" />
-        </Space>
-      }
-      extra={
-        <Space size="small">
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            📁 {totalFiles} files · ~{totalTokens.toLocaleString()} tokens
-          </Typography.Text>
-        </Space>
-      }
-      style={{ marginBottom: 16 }}
-    >
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={tabItems}
-        size="small"
-      />
-    </Card>
-  );
-}
-
-function PreBlock({ text, emptyHint, token }) {
-  const t = typeof text === 'string' ? text : '';
-  if (!t.trim()) {
-    return (
-      <Alert type="warning" message={emptyHint || 'Empty'} style={{ fontSize: 12 }} />
-    );
-  }
-  return (
-    <pre
-      style={{
-        fontSize: 12,
-        fontFamily: 'monospace',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-        maxHeight: 'min(50vh, 420px)',
-        overflow: 'auto',
-        padding: 12,
-        borderRadius: token.borderRadius,
-        border: `1px solid ${token.colorBorder}`,
-        background: token.colorFillQuaternary,
-        color: token.colorText,
-      }}
-    >
-      {t}
-    </pre>
   );
 }
 
@@ -538,7 +777,10 @@ export default function SystemPromptPage() {
   const skillsDetail = Array.isArray(probe?.skillsDetail) ? probe.skillsDetail : [];
   const toolsDetail = Array.isArray(probe?.toolsDetail) ? probe.toolsDetail : [];
   const workspaceFileContents = Array.isArray(probe?.workspaceFileContents) ? probe.workspaceFileContents : [];
-  const probeTotalTok = probe?.breakdown?.reduce((s, x) => s + (x.tokens || 0), 0) || 0;
+  const probeTotalTok = Array.isArray(probe?.breakdown)
+    ? probe.breakdown.reduce((s, x) => s + (Number(x?.tokens) || 0), 0)
+    : 0;
+  const probeTotalTokSafe = Number.isFinite(probeTotalTok) ? probeTotalTok : 0;
   const skillsSnapshot = probe?.skillsSnapshot;
   const skillsPreviewLimit = 30;
   const toolsPreviewLimit = 30;
@@ -586,7 +828,7 @@ export default function SystemPromptPage() {
     [breakdownItems]
   );
 
-  // 过滤掉 workspace 和 project，它们将在独立的 WorkspaceProjectCard 中展示
+  // 过滤掉 workspace 与 project：引导文件与 # Project Context 已在 HarnessBootstrapStack 展示
   const filteredBreakdownItems = useMemo(
     () => sortedBreakdownItems.filter(b => b.id !== 'workspace' && b.id !== 'project'),
     [sortedBreakdownItems]
@@ -630,7 +872,7 @@ export default function SystemPromptPage() {
                 dataSource={skillsShown.map((s, i) => ({ ...s, key: i }))}
                 columns={[
                   { title: 'Skill', dataIndex: 'name' },
-                  { title: 'Chars', dataIndex: 'blockChars', align: 'right', render: (v) => v?.toLocaleString() },
+                  { title: 'Chars', dataIndex: 'blockChars', align: 'right', render: (v) => safeLocaleNum(v) },
                 ]}
                 pagination={false}
               />
@@ -679,7 +921,7 @@ export default function SystemPromptPage() {
         children: (
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {b.chars?.toLocaleString()} chars
+              {safeLocaleNum(b.chars)} chars
             </Typography.Text>
             {children}
           </div>
@@ -729,11 +971,141 @@ export default function SystemPromptPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'menu.systemPrompt' })}</Typography.Title>
         <SectionScopeHint intl={intl} messageId="systemPrompt.pageScopeDesc" />
       </div>
-      <Typography.Paragraph type="secondary">
-        Gateway · systemPromptReport · sessions.json.
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+        {intl.formatMessage({ id: 'systemPrompt.pageSubtitle' })}
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+        {intl.formatMessage({ id: 'systemPrompt.harnessIntro' })}
       </Typography.Paragraph>
 
-      {/* 完整 System Prompt 默认收起，点击展开 */}
+      <HarnessBootstrapStack
+        probe={probe}
+        probeLoading={probeLoading}
+        sections={sections}
+        token={token}
+        intl={intl}
+        skillsSnapshot={skillsSnapshot}
+        copied={copied}
+        onCopySkillsPrompt={copySkillsPrompt}
+      />
+
+      <Card
+        title={intl.formatMessage({ id: 'systemPrompt.breakdownTitle' })}
+        extra={<SectionScopeHint intl={intl} messageId="systemPrompt.breakdownCardScopeDesc" />}
+        style={{ marginBottom: 16 }}
+      >
+        {probeLoading ? (
+          <Spin style={{ display: 'block', margin: '8px 0' }} />
+        ) : !probe?.ok ? (
+          <Alert type="warning" showIcon message={probe?.error || 'Error'} style={{ marginBottom: 16 }} />
+        ) : (
+          <>
+            <Space wrap size="middle" style={{ marginBottom: 16 }}>
+              {probe.sessionKey && <Typography.Text code>{probe.sessionKey}</Typography.Text>}
+              {probe.model && <span>Model: {probe.model}</span>}
+              {probe.workspaceDir && (
+                <Typography.Text
+                  code
+                  title={probe.workspaceDir}
+                  style={{ wordBreak: 'break-all' }}
+                >
+                  WS: {probe.workspaceDir}
+                </Typography.Text>
+              )}
+              <Typography.Text type="secondary">Total ~{safeLocaleNum(probeTotalTokSafe)} tokens</Typography.Text>
+            </Space>
+
+            {/* Token 分布横向比例柱 */}
+            <TokenDistributionBar items={sortedBreakdownItems} token={token} />
+
+            <Row gutter={[16, 16]}>
+              <Col xs={24} lg={12}>
+                <Row gutter={[16, 16]}>
+                  {collapseItems.slice(0, 2).map((item, i) => {
+                    const b = filteredBreakdownItems[i];
+                    return (
+                      <Col xs={24} key={item.key}>
+                        <Card
+                          size="small"
+                          title={
+                            <Typography.Text style={{ wordBreak: 'break-word' }}>
+                              {b?.label}
+                            </Typography.Text>
+                          }
+                          extra={
+                            <Typography.Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                              ~{b?.tokens ?? 0} tok · {b?.percent ?? 0}%
+                            </Typography.Text>
+                          }
+                        >
+                          <Collapse
+                            size="small"
+                            items={[
+                              {
+                                key: item.key,
+                                label: (
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {safeLocaleNum(b?.chars)} chars · {intl.formatMessage({ id: 'systemPrompt.expandHint' })}
+                                  </Typography.Text>
+                                ),
+                                children: item.children,
+                              },
+                            ]}
+                            defaultActiveKey={[]}
+                          />
+                        </Card>
+                      </Col>
+                    );
+                  })}
+                </Row>
+              </Col>
+              <Col xs={24} lg={12}>
+                <Row gutter={[16, 16]}>
+                  {collapseItems.slice(2, 4).map((item, i) => {
+                    const idx = i + 2;
+                    const b = filteredBreakdownItems[idx];
+                    return (
+                      <Col xs={24} key={item.key}>
+                        <Card
+                          size="small"
+                          title={
+                            <Typography.Text style={{ wordBreak: 'break-word' }}>
+                              {b?.label}
+                            </Typography.Text>
+                          }
+                          extra={
+                            <Typography.Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                              ~{b?.tokens ?? 0} tok · {b?.percent ?? 0}%
+                            </Typography.Text>
+                          }
+                        >
+                          <Collapse
+                            size="small"
+                            items={[
+                              {
+                                key: item.key,
+                                label: (
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {safeLocaleNum(b?.chars)} chars · {intl.formatMessage({ id: 'systemPrompt.expandHint' })}
+                                  </Typography.Text>
+                                ),
+                                children: item.children,
+                              },
+                            ]}
+                            defaultActiveKey={[]}
+                          />
+                        </Card>
+                      </Col>
+                    );
+                  })}
+                </Row>
+              </Col>
+            </Row>
+          </>
+        )}
+      </Card>
+
+      {/* 完整 System Prompt：高级全文，默认收起 */}
       {(probeLoading || probe?.ok) && (
         <Collapse
           style={{ marginBottom: 16 }}
@@ -763,11 +1135,18 @@ export default function SystemPromptPage() {
                 <>
                   {probeLoading ? (
                     <Spin style={{ display: 'block', margin: '8px 0' }} />
-                  ) : probe.systemPromptSource === 'rebuild' ? (
+                  ) : probe?.systemPromptSource === 'rebuild' ? (
                     <Alert
                       type="info"
                       showIcon
                       message={intl.formatMessage({ id: 'systemPrompt.fromRebuild' })}
+                      style={{ marginBottom: 12 }}
+                    />
+                  ) : probe?.systemPromptSource === 'transcript' ? (
+                    <Alert
+                      type="success"
+                      showIcon
+                      message={intl.formatMessage({ id: 'systemPrompt.fromTranscript' })}
                       style={{ marginBottom: 12 }}
                     />
                   ) : (
@@ -857,7 +1236,6 @@ export default function SystemPromptPage() {
         />
       )}
 
-      {/* sessions.json 详情 */}
       {probe?.ok && (
         <Collapse
           style={{ marginBottom: 16 }}
@@ -866,7 +1244,7 @@ export default function SystemPromptPage() {
               key: 'sessions-json',
               label: (
                 <Space>
-                  <Typography.Text strong>sessions.json Summary</Typography.Text>
+                  <Typography.Text strong>{intl.formatMessage({ id: 'systemPrompt.sessionsJsonTitle' })}</Typography.Text>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>{sessionsJsonSummary}</Typography.Text>
                 </Space>
               ),
@@ -965,130 +1343,6 @@ export default function SystemPromptPage() {
         />
       )}
 
-      <Card
-        title={intl.formatMessage({ id: 'systemPrompt.breakdownTitle' })}
-        extra={<SectionScopeHint intl={intl} messageId="systemPrompt.breakdownCardScopeDesc" />}
-        style={{ marginBottom: 16 }}
-      >
-        {probeLoading ? (
-          <Spin style={{ display: 'block', margin: '8px 0' }} />
-        ) : !probe?.ok ? (
-          <Alert type="warning" showIcon message={probe?.error || 'Error'} style={{ marginBottom: 16 }} />
-        ) : (
-          <>
-            <Space wrap size="middle" style={{ marginBottom: 16 }}>
-              {probe.sessionKey && <Typography.Text code>{probe.sessionKey}</Typography.Text>}
-              {probe.model && <span>Model: {probe.model}</span>}
-              {probe.workspaceDir && (
-                <Typography.Text
-                  code
-                  title={probe.workspaceDir}
-                  style={{ wordBreak: 'break-all' }}
-                >
-                  WS: {probe.workspaceDir}
-                </Typography.Text>
-              )}
-              <Typography.Text type="secondary">Total ~{probeTotalTok.toLocaleString()} tokens</Typography.Text>
-            </Space>
-
-            {/* Token 分布横向比例柱 */}
-            <TokenDistributionBar items={sortedBreakdownItems} token={token} />
-
-            <Row gutter={[16, 16]}>
-              <Col xs={24} lg={12}>
-                <Row gutter={[16, 16]}>
-                  {collapseItems.slice(0, 2).map((item, i) => {
-                    const b = filteredBreakdownItems[i];
-                    return (
-                      <Col xs={24} key={item.key}>
-                        <Card
-                          size="small"
-                          title={
-                            <Typography.Text style={{ wordBreak: 'break-word' }}>
-                              {b?.label}
-                            </Typography.Text>
-                          }
-                          extra={
-                            <Typography.Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                              ~{b?.tokens ?? 0} tok · {b?.percent ?? 0}%
-                            </Typography.Text>
-                          }
-                        >
-                          <Collapse
-                            size="small"
-                            items={[
-                              {
-                                key: item.key,
-                                label: (
-                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                    {b?.chars?.toLocaleString()} chars · {intl.formatMessage({ id: 'systemPrompt.expandHint' })}
-                                  </Typography.Text>
-                                ),
-                                children: item.children,
-                              },
-                            ]}
-                            defaultActiveKey={[]}
-                          />
-                        </Card>
-                      </Col>
-                    );
-                  })}
-                </Row>
-              </Col>
-              <Col xs={24} lg={12}>
-                <Row gutter={[16, 16]}>
-                  {collapseItems.slice(2, 4).map((item, i) => {
-                    const idx = i + 2;
-                    const b = filteredBreakdownItems[idx];
-                    return (
-                      <Col xs={24} key={item.key}>
-                        <Card
-                          size="small"
-                          title={
-                            <Typography.Text style={{ wordBreak: 'break-word' }}>
-                              {b?.label}
-                            </Typography.Text>
-                          }
-                          extra={
-                            <Typography.Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                              ~{b?.tokens ?? 0} tok · {b?.percent ?? 0}%
-                            </Typography.Text>
-                          }
-                        >
-                          <Collapse
-                            size="small"
-                            items={[
-                              {
-                                key: item.key,
-                                label: (
-                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                    {b?.chars?.toLocaleString()} chars · {intl.formatMessage({ id: 'systemPrompt.expandHint' })}
-                                  </Typography.Text>
-                                ),
-                                children: item.children,
-                              },
-                            ]}
-                            defaultActiveKey={[]}
-                          />
-                        </Card>
-                      </Col>
-                    );
-                  })}
-                </Row>
-              </Col>
-            </Row>
-          </>
-        )}
-      </Card>
-
-      {/* Workspace & Project Context 独立展示区域 */}
-      <WorkspaceProjectCard
-        probe={probe}
-        sections={sections}
-        token={token}
-        intl={intl}
-      />
-
       {zombieSkills.length > 0 && (
         <Card
           title="Zombie skills"
@@ -1118,69 +1372,6 @@ export default function SystemPromptPage() {
               <strong>{s.name}</strong> ↔ {s.duplicateWith?.join(', ')}
             </Typography.Paragraph>
           ))}
-        </Card>
-      )}
-
-      {/* Skills 快照：页面底部，来自 sessions.json，展示当前注入的 skills 列表与提示词 */}
-      {skillsSnapshot && (skillsSnapshot.skills?.length > 0 || skillsSnapshot.prompt) && (
-        <Card
-          title={intl.formatMessage({ id: 'systemPrompt.skillsSnapshotTitle' })}
-          extra={
-            <Space size="small">
-              {skillsSnapshot.prompt && (
-                <Button type="text" size="small" icon={<CopyOutlined />} onClick={copySkillsPrompt}>
-                  {copied ? intl.formatMessage({ id: 'systemPrompt.copied' }) : intl.formatMessage({ id: 'systemPrompt.copy' })}
-                </Button>
-              )}
-              <SectionScopeHint intl={intl} messageId="systemPrompt.skillsSnapshotDesc" />
-            </Space>
-          }
-        >
-          <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 16 }}>
-            {intl.formatMessage({ id: 'systemPrompt.skillsSnapshotDesc' })}
-          </Typography.Paragraph>
-          {skillsSnapshot.skills?.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <Typography.Text strong style={{ fontSize: 13 }}>
-                {intl.formatMessage({ id: 'systemPrompt.skillsList' })}
-              </Typography.Text>
-              <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
-                {intl.locale === 'zh-CN' ? `共 ${skillsSnapshot.skills.length} 个` : `${skillsSnapshot.skills.length} skills`}
-              </Typography.Text>
-              <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {skillsSnapshot.skills.map((s) => (
-                  <Tag key={s.name}>{s.name}</Tag>
-                ))}
-              </div>
-            </div>
-          )}
-          {skillsSnapshot.prompt && (
-            <div>
-              <Typography.Text strong style={{ fontSize: 13 }}>
-                {intl.formatMessage({ id: 'systemPrompt.skillsPrompt' })}
-              </Typography.Text>
-              <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
-                {intl.locale === 'zh-CN' ? '注入到 system prompt 的 XML 文本，含 name/description/location' : 'XML injected into system prompt (name, description, location)'}
-              </Typography.Text>
-              <pre
-                style={{
-                  margin: '10px 0 0',
-                  padding: 12,
-                  fontSize: 11,
-                  maxHeight: 360,
-                  overflow: 'auto',
-                  fontFamily: 'monospace',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                  borderRadius: token.borderRadius,
-                  border: `1px solid ${token.colorBorder}`,
-                  background: token.colorFillQuaternary,
-                }}
-              >
-                {skillsSnapshot.prompt}
-              </pre>
-            </div>
-          )}
         </Card>
       )}
     </div>
