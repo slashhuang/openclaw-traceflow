@@ -73,7 +73,7 @@ export class AsyncTaskQueue {
       // 更新任务状态
       const result = this.results.get(task.id);
       if (result) {
-        this.results.set(id, {
+        this.results.set(task.id, {
           ...result,
           status: 'running',
         });
