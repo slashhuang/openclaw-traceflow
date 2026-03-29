@@ -24,7 +24,9 @@ export function LocaleThemeProvider({ children }) {
     try {
       const v = localStorage.getItem(STORAGE_LOCALE);
       if (v === 'en-US' || v === 'zh-CN') return v;
-    } catch (_) {}
+    } catch {
+      // ignore
+    }
     return navigator.language?.startsWith('zh') ? 'zh-CN' : 'en-US';
   });
 
@@ -32,7 +34,9 @@ export function LocaleThemeProvider({ children }) {
     try {
       const v = localStorage.getItem(STORAGE_THEME);
       if (v === 'light' || v === 'dark' || v === 'system') return v;
-    } catch (_) {}
+    } catch {
+      // ignore
+    }
     return 'dark';
   });
 
@@ -58,14 +62,18 @@ export function LocaleThemeProvider({ children }) {
     setLocaleState(l);
     try {
       localStorage.setItem(STORAGE_LOCALE, l);
-    } catch (_) {}
+    } catch {
+      // ignore
+    }
   }, []);
 
   const setThemeMode = useCallback((m) => {
     setThemeModeState(m);
     try {
       localStorage.setItem(STORAGE_THEME, m);
-    } catch (_) {}
+    } catch {
+      // ignore
+    }
   }, []);
 
   useEffect(() => {

@@ -984,21 +984,20 @@ export default function Dashboard() {
 
       {metrics.tokenSummary && (() => {
         const ts = metrics.tokenSummary;
-        const d = dashboardDualStats;
         const chartData = [
           {
             name: intl.formatMessage({ id: 'dashboard.tokenCategoryActive' }),
             recorded: ts.activeTokens ?? 0,
             recordedIn: ts.activeInput ?? 0,
             recordedOut: ts.activeOutput ?? 0,
-            estimated: d.estimatedSumActive ?? 0,
+            estimated: ts.activeTokens ?? 0,
           },
           {
             name: intl.formatMessage({ id: 'dashboard.tokenCategoryArchived' }),
             recorded: ts.archivedTokens ?? 0,
             recordedIn: ts.archivedInput ?? 0,
             recordedOut: ts.archivedOutput ?? 0,
-            estimated: d.estimatedSumArchived ?? 0,
+            estimated: ts.archivedTokens ?? 0,
           },
         ];
         return (
@@ -1027,7 +1026,7 @@ export default function Dashboard() {
                       message={intl.formatMessage({ id: 'dashboard.tokenArchivedZeroBannerTitle' })}
                       description={intl.formatMessage(
                         { id: 'dashboard.tokenArchivedZeroBannerDesc' },
-                        { estArchived: (d.estimatedSumArchived ?? 0).toLocaleString() },
+                        { estArchived: (ts.archivedTokens ?? 0).toLocaleString() },
                       )}
                     />
                   );
@@ -1106,7 +1105,7 @@ export default function Dashboard() {
                           <SectionScopeHint intl={intl} messageId="token.overviewStaleCountDesc" />
                         </span>
                       }
-                      value={d.staleCount}
+                      value={0}
                     />
                   </Col>
                   <Col xs={12} sm={6} md={6}>
@@ -1117,7 +1116,7 @@ export default function Dashboard() {
                           <SectionScopeHint intl={intl} messageId="token.overviewStaleWithActiveDesc" />
                         </span>
                       }
-                      value={d.staleWithActive}
+                      value={0}
                     />
                   </Col>
                   <Col xs={12} sm={6} md={6}>
@@ -1128,7 +1127,7 @@ export default function Dashboard() {
                           <SectionScopeHint intl={intl} messageId="token.overviewEstimatedSumDesc" />
                         </span>
                       }
-                      value={d.estimatedSum}
+                      value={ts.activeTokens ?? 0}
                     />
                   </Col>
                   <Col xs={12} sm={6} md={6}>
@@ -1139,7 +1138,7 @@ export default function Dashboard() {
                           <SectionScopeHint intl={intl} messageId="dashboard.estimatedOrphanHint" />
                         </span>
                       }
-                      value={d.estimatedSumOrphan ?? 0}
+                      value={0}
                     />
                   </Col>
                 </Row>
