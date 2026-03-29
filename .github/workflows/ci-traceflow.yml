@@ -34,10 +34,12 @@ jobs:
         run: pnpm install
 
       - name: Run lint (backend)
+        working-directory: ./openclaw-traceflow
         run: pnpm run lint
 
       - name: Run lint (frontend)
-        run: pnpm run lint:frontend
+        working-directory: ./openclaw-traceflow/frontend
+        run: pnpm run lint
 
   build:
     name: Build (TraceFlow)
@@ -63,10 +65,12 @@ jobs:
         run: pnpm install
 
       - name: Build backend
+        working-directory: ./openclaw-traceflow
         run: pnpm run build
 
       - name: Build frontend
-        run: pnpm run build:frontend
+        working-directory: ./openclaw-traceflow/frontend
+        run: pnpm run build
 
   test:
     name: Test (TraceFlow)
@@ -92,4 +96,5 @@ jobs:
         run: pnpm install
 
       - name: Run tests
+        working-directory: ./openclaw-traceflow
         run: pnpm run test --passWithNoTests
