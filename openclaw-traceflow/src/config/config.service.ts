@@ -31,10 +31,24 @@ export interface Config {
    * 可通过环境变量 TOKEN_ESTIMATE_BYTES_DIVISOR 覆盖，默认 4。
    */
   tokenEstimateBytesDivisor: number;
+
+  /**
+   * accessMode 为 none 时是否允许通过 API 写入工作区引导文件（默认关闭）。
+   * 环境变量 OPENCLAW_WORKSPACE_WRITE=1 / true 开启。
+   */
+  workspaceWriteWhenAccessNoneEnabled: boolean;
+}
+
+/**
+ * 仅依赖 `getConfig()` 的读接口，便于测试与 Setup 里注入临时配置，
+ * 避免对完整 `ConfigService` 类做 `as any`。
+ */
+export interface ConfigReader {
+  getConfig(): Config;
 }
 
 @Injectable()
-export class ConfigService {
+export class ConfigService implements ConfigReader {
   private config: Config;
   private configPath: string;
 
@@ -61,6 +75,7 @@ export class ConfigService {
       /** OpenClaw 日志路径，需用户配置（OpenClaw 输出到该文件） */
       openclawLogPath: undefined,
       tokenEstimateBytesDivisor: 4,
+      workspaceWriteWhenAccessNoneEnabled: false,
     };
 
     // 2. 从配置文件加载（如果存在）
@@ -87,11 +102,17 @@ export class ConfigService {
       accessToken: process.env.OPENCLAW_RUNTIME_ACCESS_TOKEN || undefined,
       accessMode:
         (process.env.OPENCLAW_ACCESS_MODE as Config['accessMode']) || undefined,
-      dataDir: process.env.DATA_DIR || undefined,
+      dataDir:
+        process.env.TRACEFLOW_DATA_DIR ||
+        process.env.DATA_DIR ||
+        undefined,
       openclawLogPath: process.env.OPENCLAW_LOG_PATH || undefined,
       tokenEstimateBytesDivisor: process.env.TOKEN_ESTIMATE_BYTES_DIVISOR
         ? parseFloat(process.env.TOKEN_ESTIMATE_BYTES_DIVISOR)
         : undefined,
+      workspaceWriteWhenAccessNoneEnabled:
+        process.env.OPENCLAW_WORKSPACE_WRITE === '1' ||
+        process.env.OPENCLAW_WORKSPACE_WRITE === 'true',
     };
 
     // 4. 合并配置
@@ -109,6 +130,10 @@ export class ConfigService {
       merged.tokenEstimateBytesDivisor <= 0
     ) {
       merged.tokenEstimateBytesDivisor = 4;
+    }
+
+    if (typeof merged.workspaceWriteWhenAccessNoneEnabled !== 'boolean') {
+      merged.workspaceWriteWhenAccessNoneEnabled = false;
     }
 
     // 5. 确保数据目录存在（dataDir 由 cwd + 配置文件 + DATA_DIR 等合并决定，不写死）
@@ -184,5 +209,14 @@ export class ConfigService {
 
   getAccessMode(): 'local-only' | 'token' | 'none' {
     return this.config.accessMode;
+  }
+
+  /** 是否允许写入工作区核心引导文件（PUT /api/skills/system-prompt/workspace-file） */
+  isWorkspaceBootstrapWriteAllowed(): boolean {
+    const c = this.config;
+    if (c.accessMode === 'token' || c.accessMode === 'local-only') {
+      return true;
+    }
+    return c.workspaceWriteWhenAccessNoneEnabled === true;
   }
 }

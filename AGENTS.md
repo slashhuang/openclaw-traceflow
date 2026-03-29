@@ -43,8 +43,6 @@ pnpm install
 pnpm run start:dev
 ```
 
-- Docker：根目录 `docker-compose.yml` 构建上下文为 `./openclaw-traceflow`；或 `cd openclaw-traceflow && docker compose up -d`。
-
 ---
 
 ## TraceFlow × OpenClaw Gateway（必读）

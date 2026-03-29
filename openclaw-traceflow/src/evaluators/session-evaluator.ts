@@ -4,20 +4,29 @@
  * @see PRD: docs/PRD-openclaw-audit-system.md Section 11.2.3
  */
 
-import {
-  SessionEvaluation,
-  EvaluationGrade,
-  UserSatisfaction,
-} from '../types/evaluation';
+import { Logger } from '@nestjs/common';
+import { SessionEvaluation } from '../types/evaluation';
 import { EvaluationStore } from '../stores/evaluation-store';
-import {
-  SESSION_EVALUATION_PROMPT_V1,
-  buildSessionEvaluationContext,
-} from './evaluation-prompt';
+import { buildSessionEvaluationContext } from './evaluation-prompt';
+import type { EffectiveEvaluationPrompt } from './evaluation-prompt-config.service';
+import { EvaluationPromptConfigService } from './evaluation-prompt-config.service';
 import { scanSessionJsonlLines, SessionJsonlScanResult } from '../openclaw/session-jsonl-scan';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
+import type { GatewayRpcResult } from '../openclaw/gateway-rpc';
+import type { OpenClawService } from '../openclaw/openclaw.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import {
+  extractGatewayLlmText,
+  parseLLMResponse,
+  getFallbackEvaluation,
+  type LLMAnalysisResult,
+} from './evaluation-llm-parse';
+import {
+  calculateEffectivenessScore,
+  calculateEfficiencyScore,
+  calculateGrade,
+} from './evaluation-scoring';
 
 interface SessionMetrics {
   turnCount: number;
@@ -49,49 +58,40 @@ interface SessionJsonlMessageWithMetadata {
   };
 }
 
-interface LLMAnalysisResult {
-  effectiveness: {
-    taskCompleted: boolean;
-    taskCompletionReason: string;
-    hasHallucination: boolean;
-    hasContradiction: boolean;
-    accuracyLevel: 'high' | 'medium' | 'low';
-    userSatisfaction: UserSatisfaction;
-    satisfactionReason: string;
-    isConsistent: boolean;
-  };
-  efficiency: {
-    latencyScore: number;
-    tokenEfficiencyScore: number;
-    turnEfficiencyScore: number;
-    retryScore: number;
-  };
-  aiInsights: {
-    summary: string;
-    strengths: string[];
-    improvements: string[];
-    rootCause?: string;
-  };
-}
-
 export class SessionEvaluator {
+  private readonly logger = new Logger(SessionEvaluator.name);
   private readonly store: EvaluationStore;
-  private readonly evaluationPromptVersion: string = 'eval-prompt-v1';
   private readonly gatewayConnection: GatewayConnectionService;
+  private readonly openclawService: OpenClawService;
+  private readonly evaluationPromptConfig: EvaluationPromptConfigService;
 
   constructor(
     store: EvaluationStore,
     gatewayConnection: GatewayConnectionService,
+    openclawService: OpenClawService,
+    evaluationPromptConfig: EvaluationPromptConfigService,
   ) {
     this.store = store;
     this.gatewayConnection = gatewayConnection;
+    this.openclawService = openclawService;
+    this.evaluationPromptConfig = evaluationPromptConfig;
   }
 
   // 扫描会话并提取指标
   private async extractMetrics(sessionId: string): Promise<SessionMetrics> {
-    // 读取会话 JSONL 文件
-    const sessionsDir = process.env.SESSIONS_DIR || path.join(process.cwd(), 'sessions');
-    const sessionFile = path.join(sessionsDir, `${sessionId}.jsonl`);
+    const ocPath = await this.openclawService.resolveSessionJsonlPath(sessionId);
+    const sessionsDir =
+      process.env.SESSIONS_DIR || path.join(process.cwd(), 'sessions');
+    const sessionFile =
+      ocPath ?? path.join(sessionsDir, `${sessionId}.jsonl`);
+    if (
+      !ocPath &&
+      (sessionId.includes(':') || sessionId.includes('/'))
+    ) {
+      throw new Error(
+        `无法定位会话 transcript：Gateway sessionKey「${sessionId}」与磁盘 .jsonl 文件名不一致，且未能从 OpenClaw 状态目录解析。请确认状态目录可访问，或稍后重试以刷新会话缓存。`,
+      );
+    }
     const content = await fs.readFile(sessionFile, 'utf-8');
     const lines = content.split('\n').filter(line => line.trim());
     const session: SessionJsonlScanResult = scanSessionJsonlLines(lines);
@@ -154,193 +154,40 @@ export class SessionEvaluator {
     };
   }
 
-  // 计算效果分数
-  private calculateEffectivenessScore(llmAnalysis: LLMAnalysisResult): number {
-    const weights = {
-      taskCompletion: 0.4,
-      accuracy: 0.3,
-      satisfaction: 0.2,
-      consistency: 0.1,
-    };
-
-    const taskScore = llmAnalysis.effectiveness.taskCompleted ? 100 : 40;
-
-    let accuracyScore: number;
-    if (
-      llmAnalysis.effectiveness.hasHallucination ||
-      llmAnalysis.effectiveness.hasContradiction
-    ) {
-      accuracyScore = 40;
-    } else {
-      switch (llmAnalysis.effectiveness.accuracyLevel) {
-        case 'high':
-          accuracyScore = 100;
-          break;
-        case 'medium':
-          accuracyScore = 70;
-          break;
-        case 'low':
-          accuracyScore = 40;
-          break;
-        default:
-          accuracyScore = 70;
-      }
-    }
-
-    const satisfactionScores: Record<string, number> = {
-      positive: 100,
-      neutral: 70,
-      negative: 30,
-    };
-    const satisfactionScore =
-      satisfactionScores[llmAnalysis.effectiveness.userSatisfaction] ?? 70;
-
-    const consistencyScore = llmAnalysis.effectiveness.isConsistent ? 100 : 40;
-
-    const score =
-      taskScore * weights.taskCompletion +
-      accuracyScore * weights.accuracy +
-      satisfactionScore * weights.satisfaction +
-      consistencyScore * weights.consistency;
-
-    return Math.round(score);
-  }
-
-  // 计算效率分数
-  private calculateEfficiencyScore(llmAnalysis: LLMAnalysisResult): number {
-    const weights = {
-      latency: 0.4,
-      tokenEfficiency: 0.3,
-      turnEfficiency: 0.2,
-      retry: 0.1,
-    };
-
-    const score =
-      llmAnalysis.efficiency.latencyScore * weights.latency +
-      llmAnalysis.efficiency.tokenEfficiencyScore * weights.tokenEfficiency +
-      llmAnalysis.efficiency.turnEfficiencyScore * weights.turnEfficiency +
-      llmAnalysis.efficiency.retryScore * weights.retry;
-
-    return Math.round(score);
-  }
-
-  // 计算等级
-  private calculateGrade(score: number): EvaluationGrade {
-    if (score >= 90) return 'S';
-    if (score >= 80) return 'A';
-    if (score >= 70) return 'B';
-    if (score >= 60) return 'C';
-    return 'D';
-  }
-
   // 调用 Gateway LLM 进行评估
   private async callLLM(
     sessionId: string,
     metrics: SessionMetrics,
+    effective: EffectiveEvaluationPrompt,
   ): Promise<LLMAnalysisResult> {
     const context = buildSessionEvaluationContext(sessionId, metrics, []);
-    const prompt = SESSION_EVALUATION_PROMPT_V1.replace('{context}', context);
+    const prompt = effective.template.replace('{context}', context);
 
-    // 调用 Gateway LLM API
-    const result = await this.gatewayConnection.request('llm.generate', {
-      prompt,
-      model: 'bailian/qwen3.5-plus',
-      temperature: 0.1,
-      max_tokens: 1000,
-    });
+    const result: GatewayRpcResult<unknown> = await this.gatewayConnection.request(
+      'llm.generate',
+      {
+        prompt,
+        model: 'bailian/qwen3.5-plus',
+        temperature: 0.1,
+        max_tokens: 1000,
+      },
+      120_000,
+    );
 
-    // 解析 LLM 响应
-    return this.parseLLMResponse((result as any).content || '');
-  }
-
-  // 解析 LLM 输出（带容错）
-  private parseLLMResponse(responseText: string): LLMAnalysisResult {
-    // 尝试 1: 直接解析
-    try {
-      const parsed = JSON.parse(responseText.trim());
-      return this.validateAndFillDefaults(parsed);
-    } catch (e) {
-      // 尝试 2: 提取 JSON 代码块
-      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[1].trim());
-          return this.validateAndFillDefaults(parsed);
-        } catch (e2) {
-          // 尝试 3: 提取大括号内容
-          const braceMatch = responseText.match(/\{[\s\S]*\}/);
-          if (braceMatch) {
-            try {
-              const parsed = JSON.parse(braceMatch[0].trim());
-              return this.validateAndFillDefaults(parsed);
-            } catch (e3) {
-              // 失败：返回默认值
-              return this.getFallbackEvaluation();
-            }
-          }
-        }
-      }
-      // 失败：返回默认值
-      return this.getFallbackEvaluation();
+    if (!result.ok) {
+      this.logger.warn(`llm.generate 失败: ${result.error}`);
+      return getFallbackEvaluation();
     }
-  }
 
-  // 验证并填充默认值
-  private validateAndFillDefaults(data: any): LLMAnalysisResult {
-    return {
-      effectiveness: {
-        taskCompleted: data.effectiveness?.taskCompleted ?? false,
-        taskCompletionReason:
-          data.effectiveness?.taskCompletionReason ?? '无法判断',
-        hasHallucination: data.effectiveness?.hasHallucination ?? false,
-        hasContradiction: data.effectiveness?.hasContradiction ?? false,
-        accuracyLevel: data.effectiveness?.accuracyLevel ?? 'medium',
-        userSatisfaction: data.effectiveness?.userSatisfaction ?? 'neutral',
-        satisfactionReason:
-          data.effectiveness?.satisfactionReason ?? '无法判断',
-        isConsistent: data.effectiveness?.isConsistent ?? true,
-      },
-      efficiency: {
-        latencyScore: data.efficiency?.latencyScore ?? 50,
-        tokenEfficiencyScore: data.efficiency?.tokenEfficiencyScore ?? 50,
-        turnEfficiencyScore: data.efficiency?.turnEfficiencyScore ?? 50,
-        retryScore: data.efficiency?.retryScore ?? 50,
-      },
-      aiInsights: {
-        summary: data.aiInsights?.summary ?? '评估完成，但洞察生成失败',
-        strengths: data.aiInsights?.strengths ?? ['无明显优势'],
-        improvements: data.aiInsights?.improvements ?? ['无明显改进建议'],
-        rootCause: data.aiInsights?.rootCause ?? '',
-      },
-    };
-  }
+    const text = extractGatewayLlmText(result.payload).trim();
+    if (!text) {
+      this.logger.warn(
+        'llm.generate 成功但 payload 中无可解析正文（请确认 Gateway 返回字段与 extractGatewayLlmText 一致）',
+      );
+      return getFallbackEvaluation();
+    }
 
-  // 兜底返回值
-  private getFallbackEvaluation(): LLMAnalysisResult {
-    return {
-      effectiveness: {
-        taskCompleted: false,
-        taskCompletionReason: 'LLM 评估失败，无法判断',
-        hasHallucination: false,
-        hasContradiction: false,
-        accuracyLevel: 'medium',
-        userSatisfaction: 'neutral',
-        satisfactionReason: 'LLM 评估失败，无法判断',
-        isConsistent: true,
-      },
-      efficiency: {
-        latencyScore: 50,
-        tokenEfficiencyScore: 50,
-        turnEfficiencyScore: 50,
-        retryScore: 50,
-      },
-      aiInsights: {
-        summary: '评估过程中断，请重试',
-        strengths: [],
-        improvements: ['请重新提交评估'],
-        rootCause: 'LLM 响应解析失败',
-      },
-    };
+    return parseLLMResponse(text);
   }
 
   // 执行评估
@@ -354,16 +201,18 @@ export class SessionEvaluator {
     // 1. 提取指标
     const metrics = await this.extractMetrics(sessionId);
 
+    const effective = await this.evaluationPromptConfig.getEffective();
+
     // 2. 调用 LLM 评估
-    const llmAnalysis = await this.callLLM(sessionId, metrics);
+    const llmAnalysis = await this.callLLM(sessionId, metrics, effective);
 
     // 3. 计算分数
-    const effectivenessScore = this.calculateEffectivenessScore(llmAnalysis);
-    const efficiencyScore = this.calculateEfficiencyScore(llmAnalysis);
+    const effectivenessScore = calculateEffectivenessScore(llmAnalysis);
+    const efficiencyScore = calculateEfficiencyScore(llmAnalysis);
     const overallScore = Math.round(
       effectivenessScore * 0.6 + efficiencyScore * 0.4,
     );
-    const overallGrade = this.calculateGrade(overallScore);
+    const overallGrade = calculateGrade(overallScore);
 
     // 4. 构建评估记录
     const evaluation: SessionEvaluation = {
@@ -404,7 +253,8 @@ export class SessionEvaluator {
       },
       metadata: {
         evaluationVersion: '1.0',
-        promptVersion: this.evaluationPromptVersion,
+        promptVersion: effective.promptVersion,
+        promptTemplateSource: effective.source,
         sessionSnapshot: {
           turnCount: metrics.turnCount,
           startTime: metrics.startTime,

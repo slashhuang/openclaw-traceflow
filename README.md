@@ -12,8 +12,6 @@
 
 **开发入口**：在 **`openclaw-traceflow/`** 执行 `pnpm install`、`pnpm run start:dev` 等（根目录无独立 Node 工程）。
 
-**Docker**：可在仓库根执行 `docker compose up -d`（`docker-compose.yml` 构建 **`openclaw-traceflow/`**），或 `cd openclaw-traceflow && docker compose up -d`。
-
 - AI/编码助手（Cursor、Claude）：**[AGENTS.md](AGENTS.md)**
 - 简化流程：[docs/MONOREPO-SIMPLIFIED.md](docs/MONOREPO-SIMPLIFIED.md)
 - subtree 与上游：[docs/monorepo-workflow.md](docs/monorepo-workflow.md)

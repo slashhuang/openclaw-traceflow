@@ -1,108 +1,131 @@
 /**
  * OpenClaw Audit System - 评估按钮组件
- * 
+ *
+ * 仅提交异步任务（202），不轮询、不长等；由页面在切回标签或手动刷新时拉取结果。
+ *
  * @see PRD: docs/PRD-openclaw-audit-system.md Section 11.3.1
  */
 
-import React, { useState, useEffect } from 'react';
-import { Button, message, Spin } from 'antd';
+import React, { useState } from 'react';
+import { Button, message, Popconfirm } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
+import { useIntl } from 'react-intl';
 
 interface EvaluationButtonProps {
   resourceId: string;
   resourceType: 'session' | 'prompt';
-  onEvaluationComplete?: (evaluationId: string) => void;
+  /**
+   * session：会话详情「会话质量」评估；prompt：System Prompt 页「工作区规范」评估（文案不同）。
+   */
+  evaluationUi?: 'session' | 'prompt';
+  /** 默认 large；System Prompt 页可设为 middle 以节省纵向空间 */
+  buttonSize?: 'large' | 'middle' | 'small';
+  /** POST 成功接受任务后回调（用于标记「待拉取结果」） */
+  onEvaluationSubmitted?: () => void;
 }
 
 export const EvaluationButton: React.FC<EvaluationButtonProps> = ({
   resourceId,
   resourceType,
-  onEvaluationComplete,
+  evaluationUi = 'prompt',
+  buttonSize = 'large',
+  onEvaluationSubmitted,
 }) => {
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const intl = useIntl();
+  const [submitting, setSubmitting] = useState(false);
 
   const handleEvaluate = async () => {
-    setIsEvaluating(true);
-
+    setSubmitting(true);
     try {
-      // 1. 提交评估任务
-      const response = await fetch(
-        `/api/${resourceType}s/${resourceId}/evaluations`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: getCurrentUserId() }),
-        },
-      );
+      const idSeg = encodeURIComponent(resourceId);
+      const response = await fetch(`/api/${resourceType}s/${idSeg}/evaluations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: getCurrentUserId() }),
+      });
 
-      const data = await response.json();
+      const data = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+      };
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || '评估提交失败');
+        throw new Error(
+          data.error ||
+            intl.formatMessage({
+              id:
+                evaluationUi === 'session'
+                  ? 'sessionEvaluation.submitFailed'
+                  : 'systemPrompt.evaluationSubmitFailed',
+            }),
+        );
       }
 
-      message.info('评估任务已提交，处理中...');
-
-      // 2. 轮询任务状态
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusResponse = await fetch(
-            `/api/${resourceType}s/${resourceId}/evaluations/latest`,
-          );
-          const statusData = await statusResponse.json();
-
-          if (statusData.success && statusData.data) {
-            const { status, evaluationId } = statusData.data;
-
-            if (status === 'completed') {
-              clearInterval(pollInterval);
-              setIsEvaluating(false);
-              message.success('评估完成！');
-              if (onEvaluationComplete) {
-                onEvaluationComplete(evaluationId);
-              }
-            } else if (status === 'failed') {
-              clearInterval(pollInterval);
-              setIsEvaluating(false);
-              message.error('评估失败：' + (statusData.data.error || '未知错误'));
-            }
-          }
-        } catch (err) {
-          console.error('轮询评估状态失败:', err);
-        }
-      }, 1000);
-
-      setPollingInterval(pollInterval);
+      message.success({
+        content: intl.formatMessage({
+          id:
+            evaluationUi === 'session'
+              ? 'sessionEvaluation.submittedAsync'
+              : 'systemPrompt.evaluationSubmittedAsync',
+        }),
+        duration: 8,
+        key:
+          evaluationUi === 'session'
+            ? 'session-eval-submitted-async'
+            : 'prompt-eval-submitted-async',
+      });
+      onEvaluationSubmitted?.();
     } catch (error) {
-      setIsEvaluating(false);
-      message.error('评估提交失败：' + (error as Error).message);
+      message.error((error as Error).message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  // 清理轮询
-  useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [pollingInterval]);
-
   return (
-    <Button
-      type="primary"
-      icon={isEvaluating ? <Spin size="small" /> : <ThunderboltOutlined />}
-      onClick={handleEvaluate}
-      disabled={isEvaluating}
-      loading={isEvaluating}
+    <Popconfirm
+      title={intl.formatMessage({
+        id:
+          evaluationUi === 'session'
+            ? 'sessionEvaluation.confirmTitle'
+            : 'systemPrompt.evaluationConfirmTitle',
+      })}
+      description={intl.formatMessage({
+        id:
+          evaluationUi === 'session'
+            ? 'sessionEvaluation.confirmDesc'
+            : 'systemPrompt.evaluationConfirmDesc',
+      })}
+      onConfirm={handleEvaluate}
+      okText={intl.formatMessage({ id: 'common.yes' })}
+      cancelText={intl.formatMessage({ id: 'common.cancel' })}
+      disabled={submitting}
     >
-      {isEvaluating ? '评估中...' : '🔄 评估'}
-    </Button>
+      <Button
+        type="primary"
+        size={buttonSize}
+        icon={!submitting ? <ThunderboltOutlined /> : undefined}
+        disabled={submitting}
+        loading={submitting}
+      >
+        {submitting
+          ? intl.formatMessage({
+              id:
+                evaluationUi === 'session'
+                  ? 'sessionEvaluation.buttonSubmitting'
+                  : 'systemPrompt.evaluationButtonSubmitting',
+            })
+          : intl.formatMessage({
+              id:
+                evaluationUi === 'session'
+                  ? 'sessionEvaluation.buttonRun'
+                  : 'systemPrompt.evaluationButtonRun',
+            })}
+      </Button>
+    </Popconfirm>
   );
 };
 
-// 获取当前用户 ID（从 localStorage 或默认值）
 function getCurrentUserId(): string {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('userId') || 'anonymous';
