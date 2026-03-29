@@ -1,0 +1,3 @@
+packages:
+  - 'openclaw-traceflow'
+  - 'openclaw-traceflow/frontend'
