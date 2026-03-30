@@ -103,9 +103,7 @@ export class ConfigService implements ConfigReader {
       accessMode:
         (process.env.OPENCLAW_ACCESS_MODE as Config['accessMode']) || undefined,
       dataDir:
-        process.env.TRACEFLOW_DATA_DIR ||
-        process.env.DATA_DIR ||
-        undefined,
+        process.env.TRACEFLOW_DATA_DIR || process.env.DATA_DIR || undefined,
       openclawLogPath: process.env.OPENCLAW_LOG_PATH || undefined,
       tokenEstimateBytesDivisor: process.env.TOKEN_ESTIMATE_BYTES_DIVISOR
         ? parseFloat(process.env.TOKEN_ESTIMATE_BYTES_DIVISOR)

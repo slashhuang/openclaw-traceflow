@@ -50,7 +50,7 @@ export class LogsService {
    */
   async startTailing(gatewayLogPath?: string): Promise<void> {
     const config = this.configService.getConfig();
-    
+
     // 1. 启动 Gateway 日志追踪
     if (gatewayLogPath) {
       await this.startGatewayTailing(gatewayLogPath);
@@ -103,7 +103,10 @@ export class LogsService {
 
       this.logger.log(`Started tailing gateway logs from: ${logPath}`);
     } catch (error: any) {
-      this.logger.error('Failed to start gateway log tailing:', error?.message || error);
+      this.logger.error(
+        'Failed to start gateway log tailing:',
+        error?.message || error,
+      );
     }
   }
 
@@ -153,7 +156,10 @@ export class LogsService {
 
       this.logger.log(`Started tailing traceflow logs from: ${logPath}`);
     } catch (error: any) {
-      this.logger.error('Failed to start traceflow log tailing:', error?.message || error);
+      this.logger.error(
+        'Failed to start traceflow log tailing:',
+        error?.message || error,
+      );
     }
   }
 
@@ -226,11 +232,15 @@ export class LogsService {
         if (res.ok && res.payload) {
           const rawLines = Array.isArray(res.payload.lines)
             ? res.payload.lines.filter(
-                (l): l is string => typeof l === 'string' && l.trim().length > 0,
+                (l): l is string =>
+                  typeof l === 'string' && l.trim().length > 0,
               )
             : [];
           return this.mapGatewayTailPayloadToEntries({
-            cursor: typeof res.payload.cursor === 'number' ? res.payload.cursor : undefined,
+            cursor:
+              typeof res.payload.cursor === 'number'
+                ? res.payload.cursor
+                : undefined,
             lines: rawLines,
           });
         }
@@ -271,8 +281,10 @@ export class LogsService {
    * 获取 TraceFlow 最近日志
    */
   async getTraceflowRecentLogs(limit: number = 100): Promise<LogEntry[]> {
-    const logPath = this.traceflowLogPath || path.join(this.configService.getConfig().dataDir, 'traceflow.log');
-    
+    const logPath =
+      this.traceflowLogPath ||
+      path.join(this.configService.getConfig().dataDir, 'traceflow.log');
+
     try {
       if (!fs.existsSync(logPath)) {
         // 文件不存在时返回空数组（首次启动）
@@ -282,7 +294,7 @@ export class LogsService {
       const content = fs.readFileSync(logPath, 'utf-8');
       const lines = content.split('\n').filter((line) => line.trim());
       const rawLines = lines.slice(-limit);
-      
+
       return rawLines.map((l) => this.parseLogLine(l, 'traceflow'));
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -472,7 +484,10 @@ export class LogsService {
   /**
    * 解析日志行
    */
-  private parseLogLine(line: string, source: 'gateway' | 'traceflow' = 'gateway'): LogEntry {
+  private parseLogLine(
+    line: string,
+    source: 'gateway' | 'traceflow' = 'gateway',
+  ): LogEntry {
     const trimmed = line.trim();
     if (!trimmed) {
       return {

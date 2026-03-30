@@ -74,7 +74,11 @@ async function bootstrap() {
     error(message: string, trace?: string, context?: string) {
       const timestamp = new Date().toISOString();
       const formatted = `[${timestamp}] [ERROR] ${context ? `[${context}] ` : ''}${message}${trace ? `\n${trace}` : ''}\n`;
-      console.error(message, trace ? `\n${trace}` : '', context ? `[${context}]` : '');
+      console.error(
+        message,
+        trace ? `\n${trace}` : '',
+        context ? `[${context}]` : '',
+      );
       logStream.write(formatted);
     }
     warn(message: string, context?: string) {

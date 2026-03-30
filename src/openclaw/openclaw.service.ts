@@ -659,8 +659,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       ) {
         return {
           connected: false,
-          error:
-            'Gateway 连接检查超时（请确认 Gateway 可达或稍后重试）',
+          error: 'Gateway 连接检查超时（请确认 Gateway 可达或稍后重试）',
         };
       }
       return {
@@ -1263,7 +1262,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         await this.refreshCache();
       }
 
-      const pickPath = (data: SessionData | null | undefined): string | null => {
+      const pickPath = (
+        data: SessionData | null | undefined,
+      ): string | null => {
         const abs =
           data?.fileMeta?.sessionLogAbsolutePath ||
           data?.tokenUsageMeta?.sessionLogAbsolutePath;
@@ -2091,9 +2092,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         Number.isFinite(params.ifMatchMtimeMs) &&
         Math.abs(st0.mtimeMs - params.ifMatchMtimeMs) > 0.5
       ) {
-        throw new ConflictException(
-          '文件已被其他进程修改，请重新嗅探后再保存',
-        );
+        throw new ConflictException('文件已被其他进程修改，请重新嗅探后再保存');
       }
     } else if (
       params.ifMatchMtimeMs !== undefined &&
@@ -2607,8 +2606,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       skillsSnapshot,
       sessionMeta,
       sessionsJsonEntry,
-      injectedWorkspaceFiles:
-        readInjectedWorkspaceFilesFromChosenEntry(chosen?.entry),
+      injectedWorkspaceFiles: readInjectedWorkspaceFilesFromChosenEntry(
+        chosen?.entry,
+      ),
     };
   }
 

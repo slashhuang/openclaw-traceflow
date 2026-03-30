@@ -23,7 +23,9 @@ export async function coalesceLatestEvaluation<T>(
           setTimeout(
             () =>
               reject(
-                new Error(`latest evaluation coalesce timeout (${timeoutMs}ms)`),
+                new Error(
+                  `latest evaluation coalesce timeout (${timeoutMs}ms)`,
+                ),
               ),
             timeoutMs,
           ),
@@ -37,5 +39,5 @@ export async function coalesceLatestEvaluation<T>(
     inflight.delete(key);
   });
   inflight.set(key, p);
-  return p as Promise<T>;
+  return p;
 }
