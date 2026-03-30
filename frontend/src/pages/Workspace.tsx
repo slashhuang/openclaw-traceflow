@@ -141,13 +141,30 @@ export const Workspace: React.FC = () => {
           </button>
         </div>
         {treeData && (
-          <FileTree
-            nodes={treeData.children}
-            expandedPaths={expandedPaths}
-            onDirectoryClick={handleDirectoryClick}
-            onFileClick={handleFileClick}
-            selectedPath={selectedFile}
-          />
+          <>
+            <div className="workspace-path-info">
+              <div className="workspace-path-header">
+                <span className="workspace-path-label">📂</span>
+                <span>根目录</span>
+              </div>
+              <div className="workspace-path" title={treeData.absolutePath}>
+                {treeData.absolutePath}
+              </div>
+            </div>
+            {treeData.path !== '.' && (
+              <div className="workspace-current-path">
+                <span>📍 当前：</span>
+                <code>{treeData.path}</code>
+              </div>
+            )}
+            <FileTree
+              nodes={treeData.children}
+              expandedPaths={expandedPaths}
+              onDirectoryClick={handleDirectoryClick}
+              onFileClick={handleFileClick}
+              selectedPath={selectedFile}
+            />
+          </>
         )}
       </div>
       <div className="workspace-content">
