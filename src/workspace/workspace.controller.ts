@@ -32,7 +32,8 @@ export class WorkspaceController {
    */
   private validatePath(requestedPath: string): string {
     const resolved = path.resolve(this.workspaceRoot, requestedPath);
-    if (!resolved.startsWith(this.workspaceRoot)) {
+    // 严格检查：必须是 workspaceRoot 本身或其子目录（需要 path.sep 防止绕过）
+    if (resolved !== this.workspaceRoot && !resolved.startsWith(this.workspaceRoot + path.sep)) {
       throw new Error('Access denied: Path traversal detected');
     }
     return resolved;
