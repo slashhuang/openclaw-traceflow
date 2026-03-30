@@ -1,7 +1,9 @@
 import type { EvaluationGrade } from '../types/evaluation';
 import type { LLMAnalysisResult } from './evaluation-llm-parse';
 
-export function calculateEffectivenessScore(llmAnalysis: LLMAnalysisResult): number {
+export function calculateEffectivenessScore(
+  llmAnalysis: LLMAnalysisResult,
+): number {
   const weights = {
     taskCompletion: 0.4,
     accuracy: 0.3,
@@ -52,7 +54,9 @@ export function calculateEffectivenessScore(llmAnalysis: LLMAnalysisResult): num
   return Math.round(score);
 }
 
-export function calculateEfficiencyScore(llmAnalysis: LLMAnalysisResult): number {
+export function calculateEfficiencyScore(
+  llmAnalysis: LLMAnalysisResult,
+): number {
   const weights = {
     latency: 0.4,
     tokenEfficiency: 0.3,

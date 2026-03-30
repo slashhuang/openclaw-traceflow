@@ -85,12 +85,18 @@ export class SetupController {
     gatewayError?: string;
   }> {
     const startTime = Date.now();
-    this.logger.debug('[getSetupStatus] starting status check (single gateway pass)...');
+    this.logger.debug(
+      '[getSetupStatus] starting status check (single gateway pass)...',
+    );
 
     const config = this.configService.getConfig();
 
-    const { connected, gatewayError, paths: pathsData, totalTimeMs } =
-      await this.openclawService.getSetupStatusSnapshot();
+    const {
+      connected,
+      gatewayError,
+      paths: pathsData,
+      totalTimeMs,
+    } = await this.openclawService.getSetupStatusSnapshot();
 
     const totalTime = Date.now() - startTime;
     this.logger.debug(
@@ -157,8 +163,13 @@ export class SetupController {
     const mockConfigService = {
       getConfig: (): Config => tempConfig as Config,
     } as unknown as ConfigService;
-    const mockGatewayConnection = new GatewayConnectionService(mockConfigService);
-    const testService = new OpenClawService(mockConfigService, mockGatewayConnection);
+    const mockGatewayConnection = new GatewayConnectionService(
+      mockConfigService,
+    );
+    const testService = new OpenClawService(
+      mockConfigService,
+      mockGatewayConnection,
+    );
     const result = await testService.checkConnection();
 
     if (result.connected) {

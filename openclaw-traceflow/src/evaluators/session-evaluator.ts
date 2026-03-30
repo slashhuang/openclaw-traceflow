@@ -10,7 +10,10 @@ import { EvaluationStore } from '../stores/evaluation-store';
 import { buildSessionEvaluationContext } from './evaluation-prompt';
 import type { EffectiveEvaluationPrompt } from './evaluation-prompt-config.service';
 import { EvaluationPromptConfigService } from './evaluation-prompt-config.service';
-import { scanSessionJsonlLines, SessionJsonlScanResult } from '../openclaw/session-jsonl-scan';
+import {
+  scanSessionJsonlLines,
+  SessionJsonlScanResult,
+} from '../openclaw/session-jsonl-scan';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
 import type { GatewayRpcResult } from '../openclaw/gateway-rpc';
 import type { OpenClawService } from '../openclaw/openclaw.service';
@@ -79,21 +82,18 @@ export class SessionEvaluator {
 
   // 扫描会话并提取指标
   private async extractMetrics(sessionId: string): Promise<SessionMetrics> {
-    const ocPath = await this.openclawService.resolveSessionJsonlPath(sessionId);
+    const ocPath =
+      await this.openclawService.resolveSessionJsonlPath(sessionId);
     const sessionsDir =
       process.env.SESSIONS_DIR || path.join(process.cwd(), 'sessions');
-    const sessionFile =
-      ocPath ?? path.join(sessionsDir, `${sessionId}.jsonl`);
-    if (
-      !ocPath &&
-      (sessionId.includes(':') || sessionId.includes('/'))
-    ) {
+    const sessionFile = ocPath ?? path.join(sessionsDir, `${sessionId}.jsonl`);
+    if (!ocPath && (sessionId.includes(':') || sessionId.includes('/'))) {
       throw new Error(
         `无法定位会话 transcript：Gateway sessionKey「${sessionId}」与磁盘 .jsonl 文件名不一致，且未能从 OpenClaw 状态目录解析。请确认状态目录可访问，或稍后重试以刷新会话缓存。`,
       );
     }
     const content = await fs.readFile(sessionFile, 'utf-8');
-    const lines = content.split('\n').filter(line => line.trim());
+    const lines = content.split('\n').filter((line) => line.trim());
     const session: SessionJsonlScanResult = scanSessionJsonlLines(lines);
 
     const messages = session.messages as SessionJsonlMessageWithMetadata[];
@@ -163,16 +163,17 @@ export class SessionEvaluator {
     const context = buildSessionEvaluationContext(sessionId, metrics, []);
     const prompt = effective.template.replace('{context}', context);
 
-    const result: GatewayRpcResult<unknown> = await this.gatewayConnection.request(
-      'llm.generate',
-      {
-        prompt,
-        model: 'bailian/qwen3.5-plus',
-        temperature: 0.1,
-        max_tokens: 1000,
-      },
-      120_000,
-    );
+    const result: GatewayRpcResult<unknown> =
+      await this.gatewayConnection.request(
+        'llm.generate',
+        {
+          prompt,
+          model: 'bailian/qwen3.5-plus',
+          temperature: 0.1,
+          max_tokens: 1000,
+        },
+        120_000,
+      );
 
     if (!result.ok) {
       const errorMsg = (result as { ok: false; error: string }).error;
@@ -185,7 +186,9 @@ export class SessionEvaluator {
 
     // 记录原始响应（便于调试）
     const rawPayload = JSON.stringify(result.payload).slice(0, 1000);
-    this.logger.debug(`llm.generate 成功，原始响应：${rawPayload}${JSON.stringify(result.payload).length > 1000 ? '...[truncated]' : ''}`);
+    this.logger.debug(
+      `llm.generate 成功，原始响应：${rawPayload}${JSON.stringify(result.payload).length > 1000 ? '...[truncated]' : ''}`,
+    );
 
     const text = extractGatewayLlmText(result.payload).trim();
     if (!text) {
@@ -193,15 +196,18 @@ export class SessionEvaluator {
         'llm.generate 成功但 payload 中无可解析正文（请确认 Gateway 返回字段与 extractGatewayLlmText 一致）',
         {
           sessionId,
-          payloadKeys: result.payload && typeof result.payload === 'object' 
-            ? Object.keys(result.payload as object) 
-            : typeof result.payload,
+          payloadKeys:
+            result.payload && typeof result.payload === 'object'
+              ? Object.keys(result.payload)
+              : typeof result.payload,
         },
       );
       return getFallbackEvaluation();
     }
 
-    this.logger.debug(`提取的 LLM 正文长度：${text.length} 字符`, { sessionId });
+    this.logger.debug(`提取的 LLM 正文长度：${text.length} 字符`, {
+      sessionId,
+    });
     return parseLLMResponse(text);
   }
 
