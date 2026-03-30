@@ -76,6 +76,8 @@ export const sessionsApi = {
 
 export const logsApi = {
   getRecent: (limit = 100) => api.get(`/logs?limit=${limit}`).then(res => res.data),
+  getGatewayLogs: (limit = 100) => api.get(`/logs/gateway?limit=${limit}`).then(res => res.data),
+  getTraceflowLogs: (limit = 100) => api.get(`/logs/traceflow?limit=${limit}`).then(res => res.data),
 };
 
 /** 合并并发 GET /setup/status（开发态 StrictMode 会双跑 useEffect，避免重复打 Gateway） */
