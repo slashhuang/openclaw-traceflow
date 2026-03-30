@@ -12,6 +12,7 @@ export default {
   'menu.sessions': 'Sessions',
   'menu.skills': 'Skills',
   'menu.systemPrompt': 'Agent & harness',
+  'menu.workspace': 'Workspace',
   'menu.tokens': 'Tokens',
   'menu.pricing': 'Pricing',
   'menu.logs': 'Logs',
