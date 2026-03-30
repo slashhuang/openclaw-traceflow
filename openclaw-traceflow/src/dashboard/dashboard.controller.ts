@@ -23,7 +23,7 @@ export class DashboardController {
       .catch(() => ({ ok: false as const, error: 'bundle failed' }));
 
     let statusOverview: StatusOverviewResult | null;
-    let logs: Awaited<ReturnType<LogsService['getRecentLogs']>>;
+    let logs: Awaited<ReturnType<LogsService['getGatewayRecentLogs']>>;
     let connectionOverride: { connected: boolean; error?: string } | undefined;
 
     if (bundleResult.ok) {
@@ -35,7 +35,7 @@ export class DashboardController {
     } else {
       const [statusO, recentLogs, chk] = await Promise.all([
         this.openclawService.getStatusOverview().catch(() => null),
-        this.logsService.getRecentLogs(10).catch(() => []),
+        this.logsService.getGatewayRecentLogs(10).catch(() => []),
         this.openclawService
           .checkConnection()
           .catch(() => ({ connected: false, error: undefined })),
