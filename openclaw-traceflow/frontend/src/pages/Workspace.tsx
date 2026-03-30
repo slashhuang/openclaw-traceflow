@@ -111,11 +111,22 @@ export const Workspace: React.FC = () => {
   }
 
   if (error && !treeData) {
+    // 判断是否是目录不存在
+    const isNotFound = error.includes('ENOENT') || error.includes('no such file');
     return (
       <div className="workspace-error">
         <h3>加载失败</h3>
-        <p>{error}</p>
+        <p>{isNotFound ? 'Workspace 目录不存在，请配置 OPENCLAW_WORKSPACE_DIR 环境变量' : error}</p>
         <button onClick={() => loadTree()}>重试</button>
+      </div>
+    );
+  }
+
+  // 空目录提示
+  if (treeData && treeData.children.length === 0) {
+    return (
+      <div className="workspace-empty">
+        <p>📂 此目录为空</p>
       </div>
     );
   }
