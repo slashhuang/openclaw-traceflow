@@ -53,10 +53,9 @@
 - **路由**:
   - `GET /api/workspace/tree` - 获取目录树结构
   - `GET /api/workspace/file/*path` - 获取文件内容
-- **根目录嗅探逻辑**（优先级从高到低）:
-  1. 环境变量 `OPENCLAW_WORKSPACE_DIR`（绝对路径）
-  2. 配置文件 `openclaw.generated.json` 中的 `workspace.dir` 或类似字段
-  3. 默认值：`/root/githubRepo/claw-sources/claw-family/openClawRuntime/.workspace`
+- **根目录嗅探逻辑**:
+  - 读取运行时配置 `openclaw.generated.json` 中的 `agents.defaults.workspace` 字段（绝对路径）
+  - 该字段由启动脚本 `start-openclaw.sh` 根据 `openclaw.env.json` 中的 `OPENCLAW_WORKSPACE_DIR` 生成
 - **安全限制**:
   - 仅允许访问嗅探到的 workspace 目录
   - 禁止访问目录外文件（路径遍历防护）
