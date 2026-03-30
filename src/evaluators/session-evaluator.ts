@@ -175,18 +175,33 @@ export class SessionEvaluator {
     );
 
     if (!result.ok) {
-      this.logger.warn(`llm.generate 失败: ${result.error}`);
+      const errorMsg = (result as { ok: false; error: string }).error;
+      this.logger.warn(`llm.generate 失败：${errorMsg}`, {
+        sessionId,
+        model: 'bailian/qwen3.5-plus',
+      });
       return getFallbackEvaluation();
     }
+
+    // 记录原始响应（便于调试）
+    const rawPayload = JSON.stringify(result.payload).slice(0, 1000);
+    this.logger.debug(`llm.generate 成功，原始响应：${rawPayload}${JSON.stringify(result.payload).length > 1000 ? '...[truncated]' : ''}`);
 
     const text = extractGatewayLlmText(result.payload).trim();
     if (!text) {
       this.logger.warn(
         'llm.generate 成功但 payload 中无可解析正文（请确认 Gateway 返回字段与 extractGatewayLlmText 一致）',
+        {
+          sessionId,
+          payloadKeys: result.payload && typeof result.payload === 'object' 
+            ? Object.keys(result.payload as object) 
+            : typeof result.payload,
+        },
       );
       return getFallbackEvaluation();
     }
 
+    this.logger.debug(`提取的 LLM 正文长度：${text.length} 字符`, { sessionId });
     return parseLLMResponse(text);
   }
 
