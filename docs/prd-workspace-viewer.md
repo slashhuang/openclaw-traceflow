@@ -53,10 +53,14 @@
 - **路由**:
   - `GET /api/workspace/tree` - 获取目录树结构
   - `GET /api/workspace/file/*path` - 获取文件内容
-- **根目录嗅探逻辑**（保持 TraceFlow 独立性）:
-  1. 环境变量 `OPENCLAW_WORKSPACE_DIR`（绝对路径，优先级最高）
-  2. 可选：TraceFlow 配置文件（如 `traceflow.config.json`）中的 `workspace.dir` 字段
-  3. 未配置时返回错误，提示用户设置环境变量
+- **根目录嗅探逻辑**（复用 OpenClaw 标准解析逻辑）:
+  1. 读取 OpenClaw 配置文件（`~/.openclaw/openclaw.json` 或 `openclaw.generated.json`）
+  2. 按优先级解析 workspace 路径：
+     - agent 配置的 `workspace` 字段
+     - `agents.defaults.workspace` 字段
+     - 环境变量 `OPENCLAW_WORKSPACE_DIR`
+     - 默认：`~/.openclaw/workspace`
+  3. 支持 `resolveUserPath()` 逻辑（展开 `~` 等）
 - **安全限制**:
   - 仅允许访问嗅探到的 workspace 目录
   - 禁止访问目录外文件（路径遍历防护）
