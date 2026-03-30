@@ -14,73 +14,131 @@ export class WorkspaceController {
   }
 
   /**
-   * 解析 workspace 目录（复用 OpenClaw 降级逻辑）
+   * 解析 workspace 目录（完全复用 OpenClaw 源码逻辑）
+   * 参考：external-refs/openclaw/src/agents/agent-scope.ts + workspace.ts
+   * 
    * 降级顺序：
-   * 1. 配置文件中的 agent workspace 配置（~/.openclaw/openclaw.json 或 OPENCLAW_CONFIG_PATH）
-   * 2. agents.defaults.workspace 配置
-   * 3. 环境变量 OPENCLAW_WORKSPACE_DIR
-   * 4. 环境变量 OPENCLAW_PROFILE（如果有，非 default）
-   * 5. 默认值：~/.openclaw/workspace
+   * 1. agent 配置的 workspace（agents.list[].workspace for 'main'）
+   * 2. default agent 的 agents.defaults.workspace
+   * 3. resolveDefaultAgentWorkspaceDir(process.env):
+   *    - OPENCLAW_PROFILE (非 default) → ~/.openclaw/workspace-{profile}
+   *    - 默认 → ~/.openclaw/workspace
+   * 4. 非 default agent → {stateDir}/workspace-{agentId}
    */
   private resolveWorkspaceDir(): string {
+    const agentId = 'main'; // TraceFlow 固定使用 main agent
+    
     // 1. 尝试读取配置文件
     const configPath = process.env.OPENCLAW_CONFIG_PATH || path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    let config: any = null;
+    
     try {
       if (fsSync.existsSync(configPath)) {
         const configContent = fsSync.readFileSync(configPath, 'utf-8');
-        const config = JSON.parse(configContent);
-        
-        // 1a. 检查 agent 配置（main agent）
-        const agentConfig = config.agents?.list?.find((a: any) => a.id === 'main');
-        if (agentConfig?.workspace?.trim()) {
-          const resolved = this.resolveUserPath(agentConfig.workspace.trim());
-          console.log('[WorkspaceController] Using agent workspace config:', resolved);
-          return resolved;
-        }
-        
-        // 1b. 检查 agents.defaults.workspace
-        if (config.agents?.defaults?.workspace?.trim()) {
-          const resolved = this.resolveUserPath(config.agents.defaults.workspace.trim());
-          console.log('[WorkspaceController] Using agents.defaults.workspace:', resolved);
-          return resolved;
-        }
+        config = JSON.parse(configContent);
       }
     } catch (error) {
       console.warn('[WorkspaceController] Failed to read config:', error instanceof Error ? error.message : error);
     }
 
-    // 2. 环境变量 OPENCLAW_WORKSPACE_DIR
-    const envVar = process.env.OPENCLAW_WORKSPACE_DIR;
-    if (envVar && typeof envVar === 'string' && envVar.trim()) {
-      const resolved = path.resolve(envVar.trim());
-      console.log('[WorkspaceController] Using OPENCLAW_WORKSPACE_DIR:', resolved);
-      return resolved;
+    if (config) {
+      // 1a. 检查 agent 配置（main agent）
+      const agentConfig = config.agents?.list?.find((a: any) => a.id === 'main' || a.id === agentId);
+      if (agentConfig?.workspace?.trim()) {
+        const resolved = this.stripNullBytes(this.resolveUserPath(agentConfig.workspace.trim()));
+        console.log('[WorkspaceController] Using agent workspace config:', resolved);
+        return resolved;
+      }
+      
+      // 1b. 如果是 default agent，检查 agents.defaults.workspace
+      const defaultAgentId = this.resolveDefaultAgentId(config);
+      if (agentId === defaultAgentId && config.agents?.defaults?.workspace?.trim()) {
+        const resolved = this.stripNullBytes(this.resolveUserPath(config.agents.defaults.workspace.trim()));
+        console.log('[WorkspaceController] Using agents.defaults.workspace:', resolved);
+        return resolved;
+      }
+      
+      // 1c. 非 default agent → {stateDir}/workspace-{agentId}
+      if (agentId !== defaultAgentId) {
+        const stateDir = this.resolveStateDir();
+        const resolved = this.stripNullBytes(path.join(stateDir, `workspace-${agentId}`));
+        console.log('[WorkspaceController] Using agent-specific workspace:', resolved);
+        return resolved;
+      }
     }
 
-    // 3. OPENCLAW_PROFILE（如果有，非 default）
-    const profile = process.env.OPENCLAW_PROFILE?.trim();
-    if (profile && profile.toLowerCase() !== 'default') {
-      const homeDir = os.homedir();
-      const resolved = path.join(homeDir, '.openclaw', `workspace-${profile}`);
-      console.log('[WorkspaceController] Using OPENCLAW_PROFILE:', resolved);
-      return resolved;
-    }
-
-    // 4. 默认值：~/.openclaw/workspace
-    const homeDir = os.homedir();
-    const resolved = path.join(homeDir, '.openclaw', 'workspace');
+    // 2. resolveDefaultAgentWorkspaceDir (降级到默认值)
+    const resolved = this.resolveDefaultAgentWorkspaceDir();
     console.log('[WorkspaceController] Using default workspace:', resolved);
     return resolved;
   }
 
   /**
+   * 解析默认 agent workspace 目录（复用 OpenClaw 逻辑）
+   * 参考：external-refs/openclaw/src/agents/workspace.ts
+   */
+  private resolveDefaultAgentWorkspaceDir(): string {
+    const profile = process.env.OPENCLAW_PROFILE?.trim();
+    const homeDir = os.homedir();
+    
+    if (profile && profile.toLowerCase() !== 'default') {
+      return path.join(homeDir, '.openclaw', `workspace-${profile}`);
+    }
+    return path.join(homeDir, '.openclaw', 'workspace');
+  }
+
+  /**
+   * 解析 default agent id（复用 OpenClaw 逻辑）
+   * 参考：external-refs/openclaw/src/agents/agent-scope.ts
+   */
+  private resolveDefaultAgentId(config: any): string {
+    const agents = config.agents?.list || [];
+    if (agents.length === 0) {
+      return 'main';
+    }
+    const defaults = agents.filter((agent: any) => agent?.default);
+    const chosen = (defaults[0] ?? agents[0])?.id?.trim();
+    return this.normalizeAgentId(chosen || 'main');
+  }
+
+  /**
+   * 解析 state 目录
+   */
+  private resolveStateDir(): string {
+    // 优先使用环境变量，其次默认值
+    const envVar = process.env.OPENCLAW_STATE_DIR;
+    if (envVar && typeof envVar === 'string' && envVar.trim()) {
+      return path.resolve(envVar.trim());
+    }
+    // 默认：~/.openclaw/state 或 ~/.clawStates
+    const homeDir = os.homedir();
+    return path.join(homeDir, '.openclaw', 'state');
+  }
+
+  /**
+   * 标准化 agent id（转小写）
+   */
+  private normalizeAgentId(id: string): string {
+    return id.trim().toLowerCase();
+  }
+
+  /**
    * 解析用户路径（展开 ~ 等）
+   * 参考：external-refs/openclaw/src/utils.ts
    */
   private resolveUserPath(p: string): string {
     if (p.startsWith('~')) {
       return path.join(os.homedir(), p.slice(1));
     }
     return path.resolve(p);
+  }
+
+  /**
+   * 移除 null 字节（防止 ENOTDIR 错误）
+   * 参考：external-refs/openclaw/src/agents/agent-scope.ts
+   */
+  private stripNullBytes(s: string): string {
+    return s.replace(/\0/g, '');
   }
 
   /**
