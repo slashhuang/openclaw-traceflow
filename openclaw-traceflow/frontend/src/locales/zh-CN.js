@@ -12,6 +12,7 @@ export default {
   'menu.sessions': '会话',
   'menu.skills': 'Skills',
   'menu.systemPrompt': 'Agent 与 Harness',
+  'menu.workspace': '工作区',
   'menu.tokens': 'Token',
   'menu.pricing': '价格',
   'menu.logs': '日志',
