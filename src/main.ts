@@ -56,14 +56,53 @@ async function listenWithDevRetry(
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // 创建 TraceFlow 日志文件输出流
+  const configForLogger = new ConfigService();
+  const configData = configForLogger.getConfig();
+  const traceflowLogPath = path.join(configData.dataDir, 'traceflow.log');
+  const { createWriteStream } = await import('fs');
+  const logStream = createWriteStream(traceflowLogPath, { flags: 'a' });
+
+  // 自定义 Logger：同时输出到控制台和文件
+  class FileConsoleLogger {
+    log(message: string, context?: string) {
+      const timestamp = new Date().toISOString();
+      const formatted = `[${timestamp}] [INFO] ${context ? `[${context}] ` : ''}${message}\n`;
+      console.log(message, context ? `[${context}]` : '');
+      logStream.write(formatted);
+    }
+    error(message: string, trace?: string, context?: string) {
+      const timestamp = new Date().toISOString();
+      const formatted = `[${timestamp}] [ERROR] ${context ? `[${context}] ` : ''}${message}${trace ? `\n${trace}` : ''}\n`;
+      console.error(message, trace ? `\n${trace}` : '', context ? `[${context}]` : '');
+      logStream.write(formatted);
+    }
+    warn(message: string, context?: string) {
+      const timestamp = new Date().toISOString();
+      const formatted = `[${timestamp}] [WARN] ${context ? `[${context}] ` : ''}${message}\n`;
+      console.warn(message, context ? `[${context}]` : '');
+      logStream.write(formatted);
+    }
+    debug(message: string, context?: string) {
+      const timestamp = new Date().toISOString();
+      const formatted = `[${timestamp}] [DEBUG] ${context ? `[${context}] ` : ''}${message}\n`;
+      console.debug(message, context ? `[${context}]` : '');
+      logStream.write(formatted);
+    }
+    verbose(message: string, context?: string) {
+      const timestamp = new Date().toISOString();
+      const formatted = `[${timestamp}] [VERBOSE] ${context ? `[${context}] ` : ''}${message}\n`;
+      logStream.write(formatted);
+    }
+  }
+
+  const app = await NestFactory.create(AppModule, {
+    logger: new FileConsoleLogger(),
+  });
   app.enableShutdownHooks();
 
   // ========== 性能日志拦截器（100% 覆盖所有 HTTP API）==========
   app.useGlobalInterceptors(new PerformanceLoggingInterceptor());
-  console.log(
-    '[bootstrap] PerformanceLoggingInterceptor enabled (HTTP API logging)',
-  );
 
   // 注：WebSocket 性能日志需要在 WebSocketGateway 中实现，NestJS 不支持全局 WS 中间件
 
@@ -98,7 +137,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const config = configService.getConfig();
 
-  // 启动日志追踪（弱依赖，静默失败）
+  // 启动日志追踪（Gateway 日志 + TraceFlow 日志）
   const logsService = app.get(LogsService);
   logsService.startTailing(config.openclawLogPath);
 

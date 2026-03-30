@@ -3,17 +3,20 @@ import { ConfigService } from '../config/config.service';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
 import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
+import * as path from 'path';
 
 export interface LogEntry {
   timestamp: string;
   level: 'info' | 'warn' | 'error' | 'debug';
   content: string;
+  source?: 'gateway' | 'traceflow';
 }
 
 @Injectable()
 export class LogsService {
   private readonly logger = new Logger(LogsService.name);
-  private logTailer: import('chokidar').FSWatcher | null = null;
+  private gatewayLogTailer: import('chokidar').FSWatcher | null = null;
+  private traceflowLogTailer: import('chokidar').FSWatcher | null = null;
   private logSubscribers: Set<(entry: LogEntry) => void> = new Set();
 
   // OpenClaw Gateway tail via `logs.tail` cursor protocol
@@ -34,36 +37,49 @@ export class LogsService {
   private gatewayDedupeSet: Set<string> = new Set();
   private readonly gatewayDedupeMax = 1000;
 
+  // TraceFlow 自身日志
+  private traceflowLogPath: string | null = null;
+
   constructor(
     private configService: ConfigService,
     private gatewayConnection: GatewayConnectionService,
   ) {}
 
   /**
-   * 启动日志追踪（tail -f）- 弱依赖，失败不阻塞
+   * 启动日志追踪 - Gateway 日志和 TraceFlow 日志
    */
-  async startTailing(logPath?: string): Promise<void> {
-    if (!logPath) {
-      console.warn('[LogsService] Log file path not configured');
-      return;
+  async startTailing(gatewayLogPath?: string): Promise<void> {
+    const config = this.configService.getConfig();
+    
+    // 1. 启动 Gateway 日志追踪
+    if (gatewayLogPath) {
+      await this.startGatewayTailing(gatewayLogPath);
     }
 
+    // 2. 启动 TraceFlow 自身日志追踪
+    this.traceflowLogPath = path.join(config.dataDir, 'traceflow.log');
+    await this.startTraceflowTailing(this.traceflowLogPath);
+  }
+
+  /**
+   * 启动 Gateway 日志追踪
+   */
+  private async startGatewayTailing(logPath: string): Promise<void> {
     if (!fs.existsSync(logPath)) {
-      console.warn('[LogsService] Log file does not exist:', logPath);
+      this.logger.warn(`Gateway log file does not exist: ${logPath}`);
       return;
     }
 
     try {
       const chokidar = await import('chokidar');
-      this.logTailer = chokidar.watch(logPath, { persistent: true });
+      this.gatewayLogTailer = chokidar.watch(logPath, { persistent: true });
 
       let lastSize = fs.statSync(logPath).size;
 
-      this.logTailer.on('change', () => {
+      this.gatewayLogTailer.on('change', () => {
         try {
           const stats = fs.statSync(logPath);
           if (stats.size > lastSize) {
-            // 读取新增的日志内容
             const fd = fs.openSync(logPath, 'r');
             const buffer = Buffer.alloc(stats.size - lastSize);
             fs.readSync(fd, buffer, 0, buffer.length, lastSize);
@@ -74,24 +90,70 @@ export class LogsService {
               .split('\n')
               .filter((line) => line.trim());
             for (const line of newLines) {
-              const entry = this.parseLogLine(line);
+              const entry = this.parseLogLine(line, 'gateway');
               this.notifySubscribers(entry);
             }
 
             lastSize = stats.size;
           }
         } catch (err) {
-          console.error('[LogsService] Error reading log file:', err);
+          this.logger.error('Error reading gateway log file:', err);
         }
       });
 
-      this.logger.log(`Started tailing logs from: ${logPath}`);
+      this.logger.log(`Started tailing gateway logs from: ${logPath}`);
     } catch (error: any) {
-      console.error(
-        '[LogsService] Failed to start log tailing:',
-        error?.message || error,
-      );
-      // 不抛出错误，静默失败
+      this.logger.error('Failed to start gateway log tailing:', error?.message || error);
+    }
+  }
+
+  /**
+   * 启动 TraceFlow 自身日志追踪
+   */
+  private async startTraceflowTailing(logPath: string): Promise<void> {
+    // 确保日志文件存在
+    const logDir = path.dirname(logPath);
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    if (!fs.existsSync(logPath)) {
+      fs.writeFileSync(logPath, '', 'utf-8');
+    }
+
+    try {
+      const chokidar = await import('chokidar');
+      this.traceflowLogTailer = chokidar.watch(logPath, { persistent: true });
+
+      let lastSize = fs.statSync(logPath).size;
+
+      this.traceflowLogTailer.on('change', () => {
+        try {
+          const stats = fs.statSync(logPath);
+          if (stats.size > lastSize) {
+            const fd = fs.openSync(logPath, 'r');
+            const buffer = Buffer.alloc(stats.size - lastSize);
+            fs.readSync(fd, buffer, 0, buffer.length, lastSize);
+            fs.closeSync(fd);
+
+            const newLines = buffer
+              .toString('utf-8')
+              .split('\n')
+              .filter((line) => line.trim());
+            for (const line of newLines) {
+              const entry = this.parseLogLine(line, 'traceflow');
+              this.notifySubscribers(entry);
+            }
+
+            lastSize = stats.size;
+          }
+        } catch (err) {
+          this.logger.error('Error reading traceflow log file:', err);
+        }
+      });
+
+      this.logger.log(`Started tailing traceflow logs from: ${logPath}`);
+    } catch (error: any) {
+      this.logger.error('Failed to start traceflow log tailing:', error?.message || error);
     }
   }
 
@@ -116,8 +178,80 @@ export class LogsService {
   }
 
   /**
-   * Subscribe to OpenClaw Gateway `logs.tail` cursor.
-   * Returns a cleanup function for this callback only.
+   * 映射 Gateway tail payload 到日志条目（用于 dashboard bundle）
+   */
+  mapGatewayTailPayloadToEntries(payload: {
+    cursor?: number;
+    lines: string[];
+  }): LogEntry[] {
+    if (typeof payload.cursor === 'number') {
+      this.gatewayCursor = payload.cursor;
+    }
+    const rawLines = payload.lines.filter(
+      (l) => typeof l === 'string' && l.trim().length > 0,
+    );
+    for (const line of rawLines) {
+      this.rememberGatewayLine(line);
+    }
+    return rawLines.map((l) => this.parseLogLine(l, 'gateway'));
+  }
+
+  /**
+   * 获取 Gateway 最近日志
+   */
+  async getGatewayRecentLogs(limit: number = 100): Promise<LogEntry[]> {
+    const config = this.configService.getConfig();
+    const logPath = config.openclawLogPath;
+    
+    if (!logPath) {
+      this.logger.warn('Gateway log file path not configured (OPENCLAW_LOG_PATH)');
+      return [];
+    }
+
+    try {
+      if (!fs.existsSync(logPath)) {
+        this.logger.warn(`Gateway log file does not exist: ${logPath}`);
+        return [];
+      }
+
+      const content = fs.readFileSync(logPath, 'utf-8');
+      const lines = content.split('\n').filter((line) => line.trim());
+      const rawLines = lines.slice(-limit);
+      
+      return rawLines.map((l) => this.parseLogLine(l, 'gateway'));
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get gateway recent logs: ${msg}`);
+      return [];
+    }
+  }
+
+  /**
+   * 获取 TraceFlow 最近日志
+   */
+  async getTraceflowRecentLogs(limit: number = 100): Promise<LogEntry[]> {
+    const logPath = this.traceflowLogPath || path.join(this.configService.getConfig().dataDir, 'traceflow.log');
+    
+    try {
+      if (!fs.existsSync(logPath)) {
+        // 文件不存在时返回空数组（首次启动）
+        return [];
+      }
+
+      const content = fs.readFileSync(logPath, 'utf-8');
+      const lines = content.split('\n').filter((line) => line.trim());
+      const rawLines = lines.slice(-limit);
+      
+      return rawLines.map((l) => this.parseLogLine(l, 'traceflow'));
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get traceflow recent logs: ${msg}`);
+      return [];
+    }
+  }
+
+  /**
+   * 订阅 Gateway 日志（WebSocket 实时推送）
    */
   subscribeGatewayLogs(
     callback: (entry: LogEntry) => void,
@@ -152,7 +286,6 @@ export class LogsService {
       this.gatewaySuppressNextEmit = this.gatewayCursor == null;
       this.scheduleGatewayPoll();
 
-      // Kick once immediately
       void this.pollGatewayTailOnce();
     }
 
@@ -182,97 +315,6 @@ export class LogsService {
     if (normalized === this.gatewayCurrentPollMs) return;
     this.gatewayCurrentPollMs = normalized;
     this.scheduleGatewayPoll();
-  }
-
-  /**
-   * 获取最近日志 - 优先调用 OpenClaw Gateway `logs.tail`。
-   * 若 Gateway 不可用/参数缺失，才退回到本地 `OPENCLAW_LOG_PATH` 文件读取。
-   */
-  async getRecentLogs(limit: number = 100): Promise<LogEntry[]> {
-    const config = this.configService.getConfig();
-
-    // 1) Prefer Gateway tail, because it works without OPENCLAW_LOG_PATH
-    const gatewayHttpUrl = config.openclawGatewayUrl?.trim();
-    if (gatewayHttpUrl) {
-      const res = await this.gatewayConnection.request<{
-        file?: string;
-        cursor?: number;
-        size?: number;
-        lines?: string[];
-        truncated?: boolean;
-        reset?: boolean;
-      }>(
-        'logs.tail',
-        {
-          limit,
-          maxBytes: Math.max(250_000, limit * 4_000),
-        },
-        8000,
-      );
-
-      if (res.ok && res.payload) {
-        if (typeof res.payload.cursor === 'number') {
-          this.gatewayCursor = res.payload.cursor;
-        }
-        const rawLines = Array.isArray(res.payload.lines)
-          ? res.payload.lines.filter(
-              (l): l is string => typeof l === 'string' && l.trim().length > 0,
-            )
-          : [];
-        // Fill dedupe so the websocket won't re-send the same lines.
-        for (const line of rawLines) {
-          this.rememberGatewayLine(line);
-        }
-        return rawLines.map((l) => this.parseLogLine(l));
-      }
-    }
-
-    // 2) Fallback to local file logs
-    const logPath = config.openclawLogPath;
-    if (!logPath) {
-      console.warn(
-        '[LogsService] Log file path not configured (OPENCLAW_LOG_PATH) and Gateway unavailable',
-      );
-      return [];
-    }
-
-    try {
-      if (!fs.existsSync(logPath)) {
-        return [];
-      }
-
-      const content = fs.readFileSync(logPath, 'utf-8');
-      const lines = content.split('\n').filter((line) => line.trim());
-
-      const rawLines = lines.slice(-limit);
-      for (const line of rawLines) {
-        this.rememberGatewayLine(line);
-      }
-      return rawLines.map((l) => this.parseLogLine(l));
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`[LogsService] Failed to get recent logs: ${msg}`);
-      return [];
-    }
-  }
-
-  /**
-   * 与 getRecentLogs 的 Gateway 分支一致：更新 cursor、去重并解析（供仪表盘单次 WS 合并拉取复用）
-   */
-  mapGatewayTailPayloadToEntries(payload: {
-    cursor?: number;
-    lines: string[];
-  }): LogEntry[] {
-    if (typeof payload.cursor === 'number') {
-      this.gatewayCursor = payload.cursor;
-    }
-    const rawLines = payload.lines.filter(
-      (l) => typeof l === 'string' && l.trim().length > 0,
-    );
-    for (const line of rawLines) {
-      this.rememberGatewayLine(line);
-    }
-    return rawLines.map((l) => this.parseLogLine(l));
   }
 
   private async pollGatewayTailOnce(): Promise<void> {
@@ -307,7 +349,6 @@ export class LogsService {
         this.gatewayFailureCount += 1;
         this.gatewayNoNewDataCount = 0;
         const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
-        // 连续失败时使用更激进冷却，避免无效 logs.tail 高频重试。
         this.updateGatewayPollInterval(
           Math.min(60_000, base * 2 ** Math.min(this.gatewayFailureCount, 6)),
         );
@@ -334,7 +375,6 @@ export class LogsService {
       if (rawLines.length === 0) {
         this.gatewayNoNewDataCount += 1;
         const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
-        // 无增量日志时渐进拉长轮询，降低空转 I/O 与 CPU。
         this.updateGatewayPollInterval(
           Math.min(60_000, base * 2 ** Math.min(this.gatewayNoNewDataCount, 5)),
         );
@@ -349,7 +389,6 @@ export class LogsService {
         res.payload.reset || res.payload.truncated,
       );
       if (resetOrTruncated) {
-        // The cursor moved backwards or we only got a truncated chunk; safest is clearing dedupe.
         this.gatewayDedupeOrder = [];
         this.gatewayDedupeSet.clear();
       }
@@ -359,7 +398,7 @@ export class LogsService {
         if (!firstTime) continue;
         if (this.gatewaySuppressNextEmit) continue;
 
-        const entry = this.parseLogLine(line);
+        const entry = this.parseLogLine(line, 'gateway');
         for (const subscriber of this.gatewaySubscribers) {
           try {
             subscriber(entry);
@@ -392,20 +431,20 @@ export class LogsService {
   /**
    * 解析日志行
    */
-  private parseLogLine(line: string): LogEntry {
+  private parseLogLine(line: string, source: 'gateway' | 'traceflow' = 'gateway'): LogEntry {
     const trimmed = line.trim();
     if (!trimmed) {
       return {
         timestamp: new Date().toISOString(),
         level: 'info',
         content: '',
+        source,
       };
     }
 
-    // Try OpenClaw JSONL / structured log format first.
+    // 尝试解析 JSON 格式日志
     try {
       const obj = JSON.parse(trimmed) as unknown;
-      // `logs.tail` 的单行日志可能是结构化对象，也可能是 JSON 数组；这里都尝试解析。
       if (obj && typeof obj === 'object') {
         const o = obj as unknown as Record<string, unknown>;
         const meta =
@@ -490,6 +529,7 @@ export class LogsService {
           timestamp,
           level: normalizedLevel,
           content: subsystem ? `[${subsystem}] ${message}` : message,
+          source,
         };
       }
     } catch {
@@ -504,6 +544,7 @@ export class LogsService {
         timestamp: match[1],
         level: this.normalizeLogLevel(match[2]),
         content: match[3],
+        source,
       };
     }
 
@@ -517,6 +558,7 @@ export class LogsService {
         timestamp: simpleMatch[1],
         level: this.normalizeLogLevel(simpleMatch[2]),
         content: simpleMatch[3],
+        source,
       };
     }
 
@@ -525,6 +567,7 @@ export class LogsService {
       timestamp: new Date().toISOString(),
       level: 'info',
       content: line,
+      source,
     };
   }
 
