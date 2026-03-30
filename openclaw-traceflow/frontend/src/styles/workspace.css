@@ -25,6 +25,68 @@
   font-weight: 600;
 }
 
+.workspace-path-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--ant-color-fill-quaternary);
+  border-bottom: 1px solid var(--ant-color-border);
+  font-size: 12px;
+}
+
+.workspace-path-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.workspace-path-label {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.workspace-path {
+  flex: 1;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-bg-layout);
+  padding: 6px 10px;
+  border-radius: 4px;
+  word-break: break-all;
+  line-height: 1.4;
+  max-height: 80px;
+  overflow-y: auto;
+  font-size: 11px;
+}
+
+.workspace-path::-webkit-scrollbar {
+  width: 4px;
+}
+
+.workspace-path::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border);
+  border-radius: 2px;
+}
+
+.workspace-current-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--ant-color-fill-secondary);
+  border-bottom: 1px solid var(--ant-color-border);
+  font-size: 13px;
+}
+
+.workspace-current-path code {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  color: var(--ant-color-primary);
+  font-weight: 500;
+}
+
 .workspace-header button {
   background: transparent;
   border: none;

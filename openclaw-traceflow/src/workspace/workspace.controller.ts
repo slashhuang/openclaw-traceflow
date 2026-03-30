@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Query, Res, HttpStatus } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -18,9 +18,9 @@ export class WorkspaceController {
    * 2. 默认值：~/.openclaw/workspace
    */
   private resolveWorkspaceDir(): string {
-    const envVar = process.env.OPENCLAW_WORKSPACE_DIR?.trim();
-    if (envVar) {
-      return path.resolve(envVar);
+    const envVar = process.env.OPENCLAW_WORKSPACE_DIR;
+    if (envVar && typeof envVar === 'string' && envVar.trim()) {
+      return path.resolve(envVar.trim());
     }
     // 默认值：~/.openclaw/workspace
     const homeDir = os.homedir();
@@ -30,8 +30,10 @@ export class WorkspaceController {
   /**
    * 验证路径是否在 workspace 根目录内（防止路径遍历攻击）
    */
-  private validatePath(requestedPath: string): string {
-    const resolved = path.resolve(this.workspaceRoot, requestedPath);
+  private validatePath(requestedPath: string | string[]): string {
+    // wildcard 参数可能是数组，取第一个元素
+    const pathStr = Array.isArray(requestedPath) ? requestedPath[0] : requestedPath;
+    const resolved = path.resolve(this.workspaceRoot, pathStr);
     // 严格检查：必须是 workspaceRoot 本身或其子目录（需要 path.sep 防止绕过）
     if (
       resolved !== this.workspaceRoot &&
@@ -106,10 +108,15 @@ export class WorkspaceController {
   /**
    * 获取文件内容
    */
-  @Get('file/*')
-  async getFile(@Param('0') filePath: string, @Res() res: Response) {
+  @Get('file/*path')
+  async getFile(@Param('path') filePath: string | string[], @Res() res: Response) {
     try {
-      const fullPath = this.validatePath(filePath);
+      // wildcard 参数可能是数组，取第一个元素
+      const pathStr = Array.isArray(filePath) ? filePath[0] : filePath;
+      const fullPath = this.validatePath(pathStr);
+      console.log('[WorkspaceController] Requested path:', pathStr);
+      console.log('[WorkspaceController] Full path:', fullPath);
+      console.log('[WorkspaceController] Workspace root:', this.workspaceRoot);
       const stat = await fs.stat(fullPath);
 
       if (!stat.isFile()) {
@@ -136,13 +143,14 @@ export class WorkspaceController {
 
       // 其他文件返回 JSON
       return res.json({
-        path: filePath,
+        path: pathStr,
         name: path.basename(fullPath),
         ext,
         size: stat.size,
         content,
       });
     } catch (error) {
+      console.error('[WorkspaceController] Error:', error);
       if (error instanceof Error && (error as any).code === 'ENOENT') {
         return res
           .status(HttpStatus.NOT_FOUND)
