@@ -78,3 +78,6 @@ build/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# pnpm lock file (auto-generated, not committed)
+pnpm-lock.yaml
