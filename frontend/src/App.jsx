@@ -13,6 +13,8 @@ import SystemPrompt from './pages/SystemPrompt';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
 import Pricing from './pages/Pricing';
+import Workspace from './pages/Workspace';
+import './styles/workspace.css';
 
 function AppInner() {
   const intl = useIntl();
@@ -57,6 +59,7 @@ function AppInner() {
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/workspace" element={<Workspace />} />
         </Route>
       </Routes>
     </BrowserRouter>
