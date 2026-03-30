@@ -23,7 +23,7 @@ const execFileAsync = promisify(execFile);
 export type OpenClawPathsSource = {
   configPath: 'gateway' | 'env' | 'cli' | 'none';
   stateDir: 'gateway' | 'env' | 'explicit' | 'inferred' | 'fallback';
-  workspaceDir: 'gateway' | 'config-file' | 'cli' | 'explicit' | 'none';
+  workspaceDir: 'gateway' | 'config-file' | 'cli' | 'explicit' | 'sessions-json' | 'none';
 };
 
 export interface OpenClawResolvedPaths {
@@ -108,6 +108,68 @@ async function runOpenClawConfigFile(
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg };
+  }
+}
+
+/**
+ * 从 stateDir/agents/{agent}/sessions/sessions.json 中嗅探 workspaceDir。
+ * 优先使用 agent:main:main key 的 systemPromptReport.workspaceDir，
+ * 其次按 updatedAt 取最新有效值。
+ */
+function inferWorkspaceDirFromStateDir(stateDir: string): string | null {
+  const agentsDir = path.join(stateDir, 'agents');
+  if (!fs.existsSync(agentsDir)) return null;
+  try {
+    const agentDirs = fs.readdirSync(agentsDir);
+    const candidates: Array<{
+      updatedAt: number;
+      workspaceDir: string;
+      isMain: boolean;
+    }> = [];
+    for (const agent of agentDirs) {
+      const storePath = path.join(
+        agentsDir,
+        agent,
+        'sessions',
+        'sessions.json',
+      );
+      if (!fs.existsSync(storePath)) continue;
+      try {
+        const store = JSON.parse(
+          fs.readFileSync(storePath, 'utf8'),
+        ) as Record<string, unknown>;
+        for (const [key, entry] of Object.entries(store)) {
+          if (!entry || typeof entry !== 'object') continue;
+          const report = (entry as Record<string, unknown>).systemPromptReport;
+          if (!report || typeof report !== 'object') continue;
+          const wd = (report as Record<string, unknown>).workspaceDir;
+          if (typeof wd !== 'string' || !wd.trim()) continue;
+          const resolved = path.resolve(wd.trim());
+          try {
+            if (!fs.existsSync(resolved)) continue;
+          } catch {
+            continue;
+          }
+          const updatedAt =
+            typeof (entry as Record<string, unknown>).updatedAt === 'number'
+              ? ((entry as Record<string, unknown>).updatedAt as number)
+              : 0;
+          candidates.push({
+            updatedAt,
+            workspaceDir: resolved,
+            isMain: key === 'agent:main:main',
+          });
+        }
+      } catch {
+        /* ignore per-file errors */
+      }
+    }
+    if (!candidates.length) return null;
+    const main = candidates.find((c) => c.isMain);
+    if (main) return main.workspaceDir;
+    return candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0].workspaceDir;
+  } catch {
+    return null;
   }
 }
 
@@ -259,6 +321,13 @@ export async function resolveOpenClawPaths(options: {
   if (!workspaceDir && workspaceDirFromGateway) {
     workspaceDir = workspaceDirFromGateway;
     source.workspaceDir = 'gateway';
+  }
+  if (!workspaceDir && stateDir) {
+    const w = inferWorkspaceDirFromStateDir(stateDir);
+    if (w) {
+      workspaceDir = w;
+      source.workspaceDir = 'sessions-json';
+    }
   }
   if (!workspaceDir && configPath && fs.existsSync(configPath)) {
     workspaceDir = readWorkspaceFromConfigFile(configPath);
