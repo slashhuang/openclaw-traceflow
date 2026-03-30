@@ -121,7 +121,11 @@ export default function Logs() {
     try {
       if (showLoading) setGatewayLoading(true);
       const data = await logsApi.getGatewayLogs(200);
-      setGatewayLogs(Array.isArray(data) ? data : []);
+      if (!Array.isArray(data)) {
+        return;
+      }
+      // 首次加载信任服务端；后台定时刷新若短暂失败，避免用空数组冲掉 Socket 已累积的行
+      setGatewayLogs((prev) => (data.length > 0 || showLoading ? data : prev));
       setLastRefreshTime(new Date());
     } catch (e) {
       console.error('Failed to load gateway logs:', e);
