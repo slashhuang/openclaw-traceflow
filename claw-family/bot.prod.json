@@ -8,14 +8,6 @@
         "connectionMode": "websocket",
         "domain": "feishu",
         "requireMention": true,
-        "tools": {
-            "elevated": {
-                "enabled": true,
-                "allowFrom": {
-                    "feishu": true
-                }
-            }
-        },
         "accounts": {
           "jojo": {
             "name": "jojo",
