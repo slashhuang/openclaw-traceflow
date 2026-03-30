@@ -59,6 +59,9 @@ data/*.db
 *.sqlite
 *.sqlite3
 
+# Runtime data directory (evaluations, configs, etc.)
+data/
+
 # IDE
 .idea/
 .vscode/
