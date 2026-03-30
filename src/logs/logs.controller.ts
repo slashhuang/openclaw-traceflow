@@ -5,34 +5,49 @@ import { LogsService, LogEntry } from './logs.service';
 export class LogsController {
   constructor(private readonly logsService: LogsService) {}
 
-  @Get()
-  async getRecentLogs(
+  /**
+   * 获取 Gateway 最近日志
+   */
+  @Get('gateway')
+  async getGatewayLogs(
     @Query('limit') limit?: number,
-    @Query('level') level?: string,
-    @Query('search') search?: string,
   ): Promise<LogEntry[]> {
     const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
-    const logs = await this.logsService.getRecentLogs(limitNum);
+    return this.logsService.getGatewayRecentLogs(limitNum);
+  }
 
-    // 过滤日志级别
-    let filtered = logs;
-    if (level && level !== 'all') {
-      const validLevels = ['error', 'warn', 'info', 'debug'];
-      if (validLevels.includes(level.toLowerCase())) {
-        filtered = filtered.filter((log) => log.level === level.toLowerCase());
-      }
-    }
+  /**
+   * 获取 TraceFlow 最近日志
+   */
+  @Get('traceflow')
+  async getTraceflowLogs(
+    @Query('limit') limit?: number,
+  ): Promise<LogEntry[]> {
+    const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
+    return this.logsService.getTraceflowRecentLogs(limitNum);
+  }
 
-    // 搜索关键词（不区分大小写）
-    if (search && search.trim()) {
-      const searchLower = search.toLowerCase();
-      filtered = filtered.filter(
-        (log) =>
-          log.content.toLowerCase().includes(searchLower) ||
-          log.timestamp.toLowerCase().includes(searchLower),
+  /**
+   * 获取混合日志（兼容旧版）
+   */
+  @Get()
+  async getAllLogs(
+    @Query('limit') limit?: number,
+    @Query('source') source?: 'gateway' | 'traceflow' | 'all',
+  ): Promise<LogEntry[]> {
+    const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
+    
+    if (source === 'gateway') {
+      return this.logsService.getGatewayRecentLogs(limitNum);
+    } else if (source === 'traceflow') {
+      return this.logsService.getTraceflowRecentLogs(limitNum);
+    } else {
+      // 默认返回混合日志
+      const gatewayLogs = await this.logsService.getGatewayRecentLogs(limitNum / 2);
+      const traceflowLogs = await this.logsService.getTraceflowRecentLogs(limitNum / 2);
+      return [...gatewayLogs, ...traceflowLogs].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       );
     }
-
-    return filtered;
   }
 }
