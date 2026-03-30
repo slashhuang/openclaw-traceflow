@@ -69,10 +69,7 @@ export class HealthService {
     return Promise.race([
       promise,
       new Promise<T>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`${label} timeout`)),
-          timeoutMs,
-        ),
+        setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs),
       ),
     ]);
   }
@@ -97,8 +94,7 @@ export class HealthService {
             'checkConnection',
           ).catch((): { connected: boolean; error?: string } => ({
             connected: false,
-            error:
-              'Gateway 连接检查超时（请确认 Gateway 可达或稍后重试）',
+            error: 'Gateway 连接检查超时（请确认 Gateway 可达或稍后重试）',
           })),
     ]);
 

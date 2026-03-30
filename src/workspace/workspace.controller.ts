@@ -33,7 +33,10 @@ export class WorkspaceController {
   private validatePath(requestedPath: string): string {
     const resolved = path.resolve(this.workspaceRoot, requestedPath);
     // 严格检查：必须是 workspaceRoot 本身或其子目录（需要 path.sep 防止绕过）
-    if (resolved !== this.workspaceRoot && !resolved.startsWith(this.workspaceRoot + path.sep)) {
+    if (
+      resolved !== this.workspaceRoot &&
+      !resolved.startsWith(this.workspaceRoot + path.sep)
+    ) {
       throw new Error('Access denied: Path traversal detected');
     }
     return resolved;
@@ -44,7 +47,9 @@ export class WorkspaceController {
    */
   @Get('tree')
   async getTree(@Query('path') queryPath?: string) {
-    const targetPath = queryPath ? this.validatePath(queryPath) : this.workspaceRoot;
+    const targetPath = queryPath
+      ? this.validatePath(queryPath)
+      : this.workspaceRoot;
 
     try {
       const stat = await fs.stat(targetPath);
@@ -57,7 +62,7 @@ export class WorkspaceController {
         entries.map(async (entry) => {
           const fullPath = path.join(targetPath, entry.name);
           const relativePath = path.relative(this.workspaceRoot, fullPath);
-          
+
           if (entry.isDirectory()) {
             return {
               name: entry.name,
@@ -75,7 +80,7 @@ export class WorkspaceController {
               size: (await fs.stat(fullPath)).size,
             };
           }
-        })
+        }),
       );
 
       // 按目录优先排序
@@ -92,8 +97,9 @@ export class WorkspaceController {
         absolutePath: targetPath,
         children,
       };
-    } catch (error: any) {
-      return { error: error.message };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { error: message };
     }
   }
 
@@ -136,11 +142,16 @@ export class WorkspaceController {
         size: stat.size,
         content,
       });
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        return res.status(HttpStatus.NOT_FOUND).json({ error: 'File not found' });
+    } catch (error) {
+      if (error instanceof Error && (error as any).code === 'ENOENT') {
+        return res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ error: 'File not found' });
       }
-      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: error.message });
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ error: message });
     }
   }
 }

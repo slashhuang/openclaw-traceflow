@@ -51,9 +51,10 @@ export function extractGatewayLlmText(payload: unknown): string {
 }
 
 export function parseLLMResponse(responseText: string): LLMAnalysisResult {
-  const preview = responseText.length > 500 
-    ? responseText.slice(0, 500) + '...[truncated]' 
-    : responseText;
+  const preview =
+    responseText.length > 500
+      ? responseText.slice(0, 500) + '...[truncated]'
+      : responseText;
 
   // 尝试 1: 直接解析 JSON
   try {
@@ -89,9 +90,12 @@ export function parseLLMResponse(responseText: string): LLMAnalysisResult {
         logger.debug('LLM 响应解析成功：从 {...} 提取（代码块后）');
         return validateAndFillDefaults(parsed);
       } catch (e) {
-        logger.warn(`LLM 响应解析失败 [{...} 代码块后]: ${(e as Error).message}`, {
-          braceContent: braceMatch[0].slice(0, 300),
-        });
+        logger.warn(
+          `LLM 响应解析失败 [{...} 代码块后]: ${(e as Error).message}`,
+          {
+            braceContent: braceMatch[0].slice(0, 300),
+          },
+        );
       }
     }
   }
@@ -128,8 +132,7 @@ export function validateAndFillDefaults(data: any): LLMAnalysisResult {
       hasContradiction: data.effectiveness?.hasContradiction ?? false,
       accuracyLevel: data.effectiveness?.accuracyLevel ?? 'medium',
       userSatisfaction: data.effectiveness?.userSatisfaction ?? 'neutral',
-      satisfactionReason:
-        data.effectiveness?.satisfactionReason ?? '无法判断',
+      satisfactionReason: data.effectiveness?.satisfactionReason ?? '无法判断',
       isConsistent: data.effectiveness?.isConsistent ?? true,
     },
     efficiency: {

@@ -199,7 +199,9 @@ export function buildWorkspaceBootstrapEvaluationContext(
     const cap = 14000;
     lines.push('\n### 组装后的 System Prompt（节选）');
     lines.push(
-      md.length > cap ? `${md.slice(0, cap)}\n…[truncated, total ${md.length} chars]` : md,
+      md.length > cap
+        ? `${md.slice(0, cap)}\n…[truncated, total ${md.length} chars]`
+        : md,
     );
   }
 
