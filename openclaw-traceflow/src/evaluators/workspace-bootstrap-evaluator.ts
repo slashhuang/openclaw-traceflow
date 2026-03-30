@@ -39,16 +39,17 @@ export class WorkspaceBootstrapEvaluator {
   ): Promise<LLMAnalysisResult> {
     const prompt = effective.template.replace('{context}', context);
 
-    const result: GatewayRpcResult<unknown> = await this.gatewayConnection.request(
-      'llm.generate',
-      {
-        prompt,
-        model: 'bailian/qwen3.5-plus',
-        temperature: 0.1,
-        max_tokens: 1800,
-      },
-      120_000,
-    );
+    const result: GatewayRpcResult<unknown> =
+      await this.gatewayConnection.request(
+        'llm.generate',
+        {
+          prompt,
+          model: 'bailian/qwen3.5-plus',
+          temperature: 0.1,
+          max_tokens: 1800,
+        },
+        120_000,
+      );
 
     if (!result.ok) {
       this.logger.warn(`工作区引导评估 llm.generate 失败: ${result.error}`);

@@ -7,7 +7,8 @@ import {
   WORKSPACE_BOOTSTRAP_EVALUATION_PROMPT_V1,
 } from './evaluation-prompt';
 
-export const EVALUATION_PROMPT_OVERRIDE_FILENAME = 'evaluation-prompt-override.json';
+export const EVALUATION_PROMPT_OVERRIDE_FILENAME =
+  'evaluation-prompt-override.json';
 export const WORKSPACE_BOOTSTRAP_EVAL_PROMPT_OVERRIDE_FILENAME =
   'workspace-bootstrap-eval-prompt-override.json';
 export const EVALUATION_PROMPT_MAX_BYTES = 256 * 1024;
@@ -56,10 +57,7 @@ export class EvaluationPromptConfigService {
     try {
       const raw = await fs.readFile(this.overridePath(), 'utf8');
       const parsed = JSON.parse(raw) as OverrideFileShape;
-      if (
-        typeof parsed.template !== 'string' ||
-        parsed.template.length === 0
-      ) {
+      if (typeof parsed.template !== 'string' || parsed.template.length === 0) {
         return this.builtinEffective();
       }
       return {
