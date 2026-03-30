@@ -3,155 +3,40 @@ import type { Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
-import * as fsSync from 'fs';
+import { OpenClawService } from '../openclaw/openclaw.service';
 
 @Controller('api/workspace')
 export class WorkspaceController {
-  private workspaceRoot: string;
-
-  constructor() {
-    this.workspaceRoot = this.resolveWorkspaceDir();
-  }
+  constructor(private readonly openClawService: OpenClawService) {}
 
   /**
-   * 解析 workspace 目录（完全复用 OpenClaw 源码逻辑）
-   * 参考：external-refs/openclaw/src/agents/agent-scope.ts + workspace.ts
-   * 
-   * 降级顺序：
-   * 1. agent 配置的 workspace（agents.list[].workspace for 'main'）
-   * 2. default agent 的 agents.defaults.workspace
-   * 3. resolveDefaultAgentWorkspaceDir(process.env):
-   *    - OPENCLAW_PROFILE (非 default) → ~/.openclaw/workspace-{profile}
-   *    - 默认 → ~/.openclaw/workspace
-   * 4. 非 default agent → {stateDir}/workspace-{agentId}
+   * 从 OpenClawService 获取 workspace 根目录（与 SystemPrompt / Setup 等模块保持一致）。
+   * 降级：若 getResolvedPaths() 未解析到 workspaceDir，退化为 ~/.openclaw/workspace。
    */
-  private resolveWorkspaceDir(): string {
-    const agentId = 'main'; // TraceFlow 固定使用 main agent
-    
-    // 1. 尝试读取配置文件
-    const configPath = process.env.OPENCLAW_CONFIG_PATH || path.join(os.homedir(), '.openclaw', 'openclaw.json');
-    let config: any = null;
-    
+  private async getWorkspaceRoot(): Promise<string> {
     try {
-      if (fsSync.existsSync(configPath)) {
-        const configContent = fsSync.readFileSync(configPath, 'utf-8');
-        config = JSON.parse(configContent);
+      const paths = await this.openClawService.getResolvedPaths();
+      if (paths.workspaceDir?.trim()) {
+        return paths.workspaceDir.trim();
       }
-    } catch (error) {
-      console.warn('[WorkspaceController] Failed to read config:', error instanceof Error ? error.message : error);
+    } catch (err) {
+      console.warn(
+        '[WorkspaceController] getResolvedPaths failed, falling back to default:',
+        err instanceof Error ? err.message : err,
+      );
     }
-
-    if (config) {
-      // 1a. 检查 agent 配置（main agent）
-      const agentConfig = config.agents?.list?.find((a: any) => a.id === 'main' || a.id === agentId);
-      if (agentConfig?.workspace?.trim()) {
-        const resolved = this.stripNullBytes(this.resolveUserPath(agentConfig.workspace.trim()));
-        console.log('[WorkspaceController] Using agent workspace config:', resolved);
-        return resolved;
-      }
-      
-      // 1b. 如果是 default agent，检查 agents.defaults.workspace
-      const defaultAgentId = this.resolveDefaultAgentId(config);
-      if (agentId === defaultAgentId && config.agents?.defaults?.workspace?.trim()) {
-        const resolved = this.stripNullBytes(this.resolveUserPath(config.agents.defaults.workspace.trim()));
-        console.log('[WorkspaceController] Using agents.defaults.workspace:', resolved);
-        return resolved;
-      }
-      
-      // 1c. 非 default agent → {stateDir}/workspace-{agentId}
-      if (agentId !== defaultAgentId) {
-        const stateDir = this.resolveStateDir();
-        const resolved = this.stripNullBytes(path.join(stateDir, `workspace-${agentId}`));
-        console.log('[WorkspaceController] Using agent-specific workspace:', resolved);
-        return resolved;
-      }
-    }
-
-    // 2. resolveDefaultAgentWorkspaceDir (降级到默认值)
-    const resolved = this.resolveDefaultAgentWorkspaceDir();
-    console.log('[WorkspaceController] Using default workspace:', resolved);
-    return resolved;
-  }
-
-  /**
-   * 解析默认 agent workspace 目录（复用 OpenClaw 逻辑）
-   * 参考：external-refs/openclaw/src/agents/workspace.ts
-   */
-  private resolveDefaultAgentWorkspaceDir(): string {
-    const profile = process.env.OPENCLAW_PROFILE?.trim();
-    const homeDir = os.homedir();
-    
-    if (profile && profile.toLowerCase() !== 'default') {
-      return path.join(homeDir, '.openclaw', `workspace-${profile}`);
-    }
-    return path.join(homeDir, '.openclaw', 'workspace');
-  }
-
-  /**
-   * 解析 default agent id（复用 OpenClaw 逻辑）
-   * 参考：external-refs/openclaw/src/agents/agent-scope.ts
-   */
-  private resolveDefaultAgentId(config: any): string {
-    const agents = config.agents?.list || [];
-    if (agents.length === 0) {
-      return 'main';
-    }
-    const defaults = agents.filter((agent: any) => agent?.default);
-    const chosen = (defaults[0] ?? agents[0])?.id?.trim();
-    return this.normalizeAgentId(chosen || 'main');
-  }
-
-  /**
-   * 解析 state 目录
-   */
-  private resolveStateDir(): string {
-    // 优先使用环境变量，其次默认值
-    const envVar = process.env.OPENCLAW_STATE_DIR;
-    if (envVar && typeof envVar === 'string' && envVar.trim()) {
-      return path.resolve(envVar.trim());
-    }
-    // 默认：~/.openclaw/state 或 ~/.clawStates
-    const homeDir = os.homedir();
-    return path.join(homeDir, '.openclaw', 'state');
-  }
-
-  /**
-   * 标准化 agent id（转小写）
-   */
-  private normalizeAgentId(id: string): string {
-    return id.trim().toLowerCase();
-  }
-
-  /**
-   * 解析用户路径（展开 ~ 等）
-   * 参考：external-refs/openclaw/src/utils.ts
-   */
-  private resolveUserPath(p: string): string {
-    if (p.startsWith('~')) {
-      return path.join(os.homedir(), p.slice(1));
-    }
-    return path.resolve(p);
-  }
-
-  /**
-   * 移除 null 字节（防止 ENOTDIR 错误）
-   * 参考：external-refs/openclaw/src/agents/agent-scope.ts
-   */
-  private stripNullBytes(s: string): string {
-    return s.replace(/\0/g, '');
+    return path.join(os.homedir(), '.openclaw', 'workspace');
   }
 
   /**
    * 验证路径是否在 workspace 根目录内（防止路径遍历攻击）
    */
-  private validatePath(requestedPath: string | string[]): string {
-    // wildcard 参数可能是数组，取第一个元素
+  private validatePath(workspaceRoot: string, requestedPath: string | string[]): string {
     const pathStr = Array.isArray(requestedPath) ? requestedPath[0] : requestedPath;
-    const resolved = path.resolve(this.workspaceRoot, pathStr);
-    // 严格检查：必须是 workspaceRoot 本身或其子目录（需要 path.sep 防止绕过）
+    const resolved = path.resolve(workspaceRoot, pathStr);
     if (
-      resolved !== this.workspaceRoot &&
-      !resolved.startsWith(this.workspaceRoot + path.sep)
+      resolved !== workspaceRoot &&
+      !resolved.startsWith(workspaceRoot + path.sep)
     ) {
       throw new Error('Access denied: Path traversal detected');
     }
@@ -163,9 +48,10 @@ export class WorkspaceController {
    */
   @Get('tree')
   async getTree(@Query('path') queryPath?: string) {
+    const workspaceRoot = await this.getWorkspaceRoot();
     const targetPath = queryPath
-      ? this.validatePath(queryPath)
-      : this.workspaceRoot;
+      ? this.validatePath(workspaceRoot, queryPath)
+      : workspaceRoot;
 
     try {
       const stat = await fs.stat(targetPath);
@@ -177,7 +63,7 @@ export class WorkspaceController {
       const children = await Promise.all(
         entries.map(async (entry) => {
           const fullPath = path.join(targetPath, entry.name);
-          const relativePath = path.relative(this.workspaceRoot, fullPath);
+          const relativePath = path.relative(workspaceRoot, fullPath);
 
           if (entry.isDirectory()) {
             return {
@@ -207,7 +93,7 @@ export class WorkspaceController {
         return a.type === 'directory' ? -1 : 1;
       });
 
-      const relativeRoot = path.relative(this.workspaceRoot, targetPath);
+      const relativeRoot = path.relative(workspaceRoot, targetPath);
       return {
         path: relativeRoot || '.',
         absolutePath: targetPath,
@@ -224,13 +110,14 @@ export class WorkspaceController {
    */
   @Get('file/*path')
   async getFile(@Param('path') filePath: string | string[], @Res() res: Response) {
+    const workspaceRoot = await this.getWorkspaceRoot();
     try {
       // wildcard 参数可能是数组，取第一个元素
       const pathStr = Array.isArray(filePath) ? filePath[0] : filePath;
-      const fullPath = this.validatePath(pathStr);
+      const fullPath = this.validatePath(workspaceRoot, pathStr);
       console.log('[WorkspaceController] Requested path:', pathStr);
       console.log('[WorkspaceController] Full path:', fullPath);
-      console.log('[WorkspaceController] Workspace root:', this.workspaceRoot);
+      console.log('[WorkspaceController] Workspace root:', workspaceRoot);
       const stat = await fs.stat(fullPath);
 
       if (!stat.isFile()) {
