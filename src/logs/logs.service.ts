@@ -198,13 +198,54 @@ export class LogsService {
 
   /**
    * 获取 Gateway 最近日志
+   * 与 Socket 轮询一致：已配置 Gateway URL 时优先 `logs.tail`（无需 OPENCLAW_LOG_PATH）；
+   * 失败或未配置 URL 时再读 `OPENCLAW_LOG_PATH` 本地文件。
    */
   async getGatewayRecentLogs(limit: number = 100): Promise<LogEntry[]> {
     const config = this.configService.getConfig();
-    const logPath = config.openclawLogPath;
-    
+    const gatewayHttpUrl = config.openclawGatewayUrl?.trim();
+
+    if (gatewayHttpUrl) {
+      const maxBytes = Math.max(250_000, limit * 4_000);
+      try {
+        const res = await this.gatewayConnection.request<{
+          file?: string;
+          cursor?: number;
+          lines?: string[];
+          truncated?: boolean;
+          reset?: boolean;
+        }>(
+          'logs.tail',
+          {
+            limit,
+            maxBytes,
+          },
+          8000,
+        );
+
+        if (res.ok && res.payload) {
+          const rawLines = Array.isArray(res.payload.lines)
+            ? res.payload.lines.filter(
+                (l): l is string => typeof l === 'string' && l.trim().length > 0,
+              )
+            : [];
+          return this.mapGatewayTailPayloadToEntries({
+            cursor: typeof res.payload.cursor === 'number' ? res.payload.cursor : undefined,
+            lines: rawLines,
+          });
+        }
+
+        this.logger.debug(
+          `Gateway logs.tail failed for recent logs: ${!res.ok ? res.error : 'empty payload'}`,
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.debug(`Gateway logs.tail error for recent logs: ${msg}`);
+      }
+    }
+
+    const logPath = config.openclawLogPath?.trim();
     if (!logPath) {
-      this.logger.warn('Gateway log file path not configured (OPENCLAW_LOG_PATH)');
       return [];
     }
 
@@ -217,11 +258,11 @@ export class LogsService {
       const content = fs.readFileSync(logPath, 'utf-8');
       const lines = content.split('\n').filter((line) => line.trim());
       const rawLines = lines.slice(-limit);
-      
+
       return rawLines.map((l) => this.parseLogLine(l, 'gateway'));
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to get gateway recent logs: ${msg}`);
+      this.logger.error(`Failed to get gateway recent logs from file: ${msg}`);
       return [];
     }
   }
