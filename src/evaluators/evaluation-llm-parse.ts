@@ -2,7 +2,10 @@
  * 会话 / 工作区评估共用的 LLM 正文提取与 JSON 解析（与 eval-prompt JSON 形状一致）。
  */
 
+import { Logger } from '@nestjs/common';
 import type { UserSatisfaction } from '../types/evaluation';
+
+const logger = new Logger('LLMResponseParser');
 
 export interface LLMAnalysisResult {
   effectiveness: {
@@ -48,38 +51,71 @@ export function extractGatewayLlmText(payload: unknown): string {
 }
 
 export function parseLLMResponse(responseText: string): LLMAnalysisResult {
+  const preview = responseText.length > 500 
+    ? responseText.slice(0, 500) + '...[truncated]' 
+    : responseText;
+
+  // 尝试 1: 直接解析 JSON
   try {
     const parsed = JSON.parse(responseText.trim());
+    logger.debug('LLM 响应解析成功：直接 JSON 解析');
     return validateAndFillDefaults(parsed);
-  } catch {
-    const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[1].trim());
-        return validateAndFillDefaults(parsed);
-      } catch {
-        const braceMatch = responseText.match(/\{[\s\S]*\}/);
-        if (braceMatch) {
-          try {
-            const parsed = JSON.parse(braceMatch[0].trim());
-            return validateAndFillDefaults(parsed);
-          } catch {
-            return getFallbackEvaluation();
-          }
-        }
-      }
+  } catch (e) {
+    logger.warn(`LLM 响应解析失败 [直接 JSON]: ${(e as Error).message}`, {
+      responsePreview: preview,
+    });
+  }
+
+  // 尝试 2: 提取 ```json``` 代码块
+  const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1].trim());
+      logger.debug('LLM 响应解析成功：从 json 代码块提取');
+      return validateAndFillDefaults(parsed);
+    } catch (e) {
+      logger.warn(`LLM 响应解析失败 [json 代码块]: ${(e as Error).message}`, {
+        codeBlockContent: jsonMatch[1].slice(0, 300),
+      });
     }
+  }
+
+  // 尝试 3: 提取第一个 {...} JSON 对象（在 ```json``` 之后）
+  if (jsonMatch) {
     const braceMatch = responseText.match(/\{[\s\S]*\}/);
     if (braceMatch) {
       try {
         const parsed = JSON.parse(braceMatch[0].trim());
+        logger.debug('LLM 响应解析成功：从 {...} 提取（代码块后）');
         return validateAndFillDefaults(parsed);
-      } catch {
-        return getFallbackEvaluation();
+      } catch (e) {
+        logger.warn(`LLM 响应解析失败 [{...} 代码块后]: ${(e as Error).message}`, {
+          braceContent: braceMatch[0].slice(0, 300),
+        });
       }
     }
-    return getFallbackEvaluation();
   }
+
+  // 尝试 4: 直接提取第一个 {...} JSON 对象
+  const braceMatch = responseText.match(/\{[\s\S]*\}/);
+  if (braceMatch) {
+    try {
+      const parsed = JSON.parse(braceMatch[0].trim());
+      logger.debug('LLM 响应解析成功：从 {...} 提取（直接）');
+      return validateAndFillDefaults(parsed);
+    } catch (e) {
+      logger.warn(`LLM 响应解析失败 [{...} 直接]: ${(e as Error).message}`, {
+        braceContent: braceMatch[0].slice(0, 300),
+      });
+    }
+  }
+
+  // 全部失败
+  logger.error('LLM 响应解析全部失败，返回兜底结果', {
+    responsePreview: preview,
+    responseLength: responseText.length,
+  });
+  return getFallbackEvaluation();
 }
 
 export function validateAndFillDefaults(data: any): LLMAnalysisResult {
