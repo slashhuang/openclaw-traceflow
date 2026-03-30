@@ -29,9 +29,9 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose }) =
       try {
         const response = await fetch(`/api/workspace/file/${encodeURIComponent(filePath)}`);
         
-        // HTML 文件特殊处理
-        const contentType = response.headers.get('content-type');
-        if (contentType?.includes('text/html')) {
+        // HTML 文件特殊处理（根据扩展名判断）
+        const ext = filePath.toLowerCase().split('.').pop();
+        if (ext === 'html' || ext === 'htm') {
           const htmlContent = await response.text();
           const blob = new Blob([htmlContent], { type: 'text/html' });
           const url = URL.createObjectURL(blob);
