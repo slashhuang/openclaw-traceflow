@@ -538,47 +538,16 @@ def has_unpushed_commits(repo_root, subtree_dir, remote_name, upstream_branch="m
 
 def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
     """
-    推送 subtree 到上游
+    推送 subtree 到上游（始终使用 --ignore-joins，避免推送 monorepo 完整历史）
+    
+    重要：直接使用 git subtree push 会把 monorepo 根目录的提交历史也带进上游仓库，
+    导致上游仓库包含错误的文件结构（如 claw-family/、futu-openD/ 等）。
+    因此必须始终使用 --ignore-joins 方式推送，确保只推送 subtree 目录的内容。
+    
     返回：{success, message}
     """
     print(f"[code-sync] 🔄 推送 subtree: {subtree_dir} (to {remote_name}/{upstream_branch})")
     
-    precheck = subtree_publish_precheck(repo_root, subtree_dir, remote_name, upstream_branch)
-    if not precheck["success"]:
-        print(f"[code-sync]   ❌ 预检查失败：{precheck['message']}")
-        return {
-            "success": False,
-            "dir": subtree_dir,
-            "remote": remote_name,
-            "pushed": False,
-            "message": precheck["message"][:200],
-        }
-    if not precheck["safe_to_push"]:
-        # 上游领先或分叉时，不执行 pull（会覆盖本地提交），直接使用 ignore-joins fallback 推送
-        print(f"[code-sync]   ⚠️  检测到上游领先/分叉，跳过 pull，使用 ignore-joins fallback 推送")
-        fb_ok, fb_msg = push_subtree_ignore_joins_fallback(
-            repo_root, subtree_dir, remote_name, upstream_branch
-        )
-        if fb_ok:
-            print(f"[code-sync]   ✅ 推送成功（ignore-joins fallback）")
-            print(f"[code-sync]   {fb_msg[:200]}")
-            return {
-                "success": True,
-                "dir": subtree_dir,
-                "remote": remote_name,
-                "pushed": True,
-                "message": fb_msg[:200]
-            }
-        else:
-            print(f"[code-sync]   ❌ fallback 推送失败：{fb_msg}")
-            return {
-                "success": False,
-                "dir": subtree_dir,
-                "remote": remote_name,
-                "pushed": False,
-                "message": fb_msg[:200]
-            }
-
     # 检查是否有未推送的提交
     if not has_unpushed_commits(repo_root, subtree_dir, remote_name, upstream_branch):
         print(f"[code-sync]   ⏭️  无需推送（无本地修改）")
@@ -590,49 +559,28 @@ def push_subtree(repo_root, subtree_dir, remote_name, upstream_branch="main"):
             "message": "No local changes to push"
         }
     
-    # 执行 subtree push
-    cmd = f"git subtree push --prefix {subtree_dir} {remote_name} {upstream_branch}"
-    success, stdout, stderr = run_command(cmd, cwd=repo_root, timeout=300)
-    
-    if success:
-        print(f"[code-sync]   ✅ 推送成功")
-        msg = (stdout or "").strip().split('\n')[-1][:100] or "Pushed successfully"
-        print(f"[code-sync]   {msg}")
+    # 始终使用 ignore-joins fallback 方式推送（避免 monorepo 历史污染上游仓库）
+    fb_ok, fb_msg = push_subtree_ignore_joins_fallback(
+        repo_root, subtree_dir, remote_name, upstream_branch
+    )
+    if fb_ok:
+        print(f"[code-sync]   ✅ 推送成功（ignore-joins）")
+        print(f"[code-sync]   {fb_msg[:200]}")
         return {
             "success": True,
             "dir": subtree_dir,
             "remote": remote_name,
             "pushed": True,
-            "message": msg
+            "message": fb_msg[:200]
         }
     else:
-        error_msg = (stderr or "").strip() or (stdout or "").strip()
-        if "already exists" in error_msg or "cache for" in error_msg:
-            print(
-                "[code-sync]   ⚠️  subtree push 报 cache 冲突（多为重复 Split 元数据），"
-                "尝试 ignore-joins + merge 后推送…"
-            )
-            fb_ok, fb_msg = push_subtree_ignore_joins_fallback(
-                repo_root, subtree_dir, remote_name, upstream_branch
-            )
-            if fb_ok:
-                print("[code-sync]   ✅ 推送成功（ignore-joins fallback）")
-                print(f"[code-sync]   {fb_msg[:200]}")
-                return {
-                    "success": True,
-                    "dir": subtree_dir,
-                    "remote": remote_name,
-                    "pushed": True,
-                    "message": fb_msg[:200],
-                }
-            print(f"[code-sync]   ❌ fallback 仍失败：{fb_msg[:300]}")
-        print(f"[code-sync]   ❌ 推送失败：{error_msg}")
+        print(f"[code-sync]   ❌ 推送失败：{fb_msg}")
         return {
             "success": False,
             "dir": subtree_dir,
             "remote": remote_name,
             "pushed": False,
-            "message": error_msg[:200]
+            "message": fb_msg[:200]
         }
 
 
