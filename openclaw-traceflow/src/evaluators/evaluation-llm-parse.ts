@@ -32,7 +32,7 @@ export interface LLMAnalysisResult {
   };
 }
 
-/** 从 Gateway `llm.generate` 等 RPC 的 payload 中取出模型正文（兼容多种字段名） */
+/** 从 Gateway 评估 RPC（chat 聚合结果等）的 payload 中取出模型正文（兼容多种字段名） */
 export function extractGatewayLlmText(payload: unknown): string {
   if (payload == null) return '';
   if (typeof payload === 'string') return payload;
