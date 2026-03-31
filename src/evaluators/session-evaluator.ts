@@ -20,6 +20,10 @@ import type { OpenClawService } from '../openclaw/openclaw.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import {
+  callGatewayChatForEvaluationText,
+  DEFAULT_GATEWAY_EVAL_SESSION_KEY,
+} from './evaluation-gateway-llm';
+import {
   extractGatewayLlmText,
   parseLLMResponse,
   getFallbackEvaluation,
@@ -163,23 +167,23 @@ export class SessionEvaluator {
     const context = buildSessionEvaluationContext(sessionId, metrics, []);
     const prompt = effective.template.replace('{context}', context);
 
+    const sessionKey =
+      (await this.openclawService.resolveGatewaySessionKeyForEvaluation(
+        sessionId,
+      )) ?? DEFAULT_GATEWAY_EVAL_SESSION_KEY;
+
     const result: GatewayRpcResult<unknown> =
-      await this.gatewayConnection.request(
-        'llm.generate',
-        {
-          prompt,
-          model: 'bailian/qwen3.5-plus',
-          temperature: 0.1,
-          max_tokens: 1000,
-        },
-        120_000,
-      );
+      await callGatewayChatForEvaluationText(this.gatewayConnection, {
+        sessionKey,
+        userMessage: prompt,
+        timeoutMs: 120_000,
+      });
 
     if (!result.ok) {
       const errorMsg = (result as { ok: false; error: string }).error;
-      this.logger.warn(`llm.generate 失败：${errorMsg}`, {
+      this.logger.warn(`Gateway 评估对话失败：${errorMsg}`, {
         sessionId,
-        model: 'bailian/qwen3.5-plus',
+        sessionKey,
       });
       return getFallbackEvaluation();
     }
@@ -187,13 +191,13 @@ export class SessionEvaluator {
     // 记录原始响应（便于调试）
     const rawPayload = JSON.stringify(result.payload).slice(0, 1000);
     this.logger.debug(
-      `llm.generate 成功，原始响应：${rawPayload}${JSON.stringify(result.payload).length > 1000 ? '...[truncated]' : ''}`,
+      `Gateway 评估成功，原始响应：${rawPayload}${JSON.stringify(result.payload).length > 1000 ? '...[truncated]' : ''}`,
     );
 
     const text = extractGatewayLlmText(result.payload).trim();
     if (!text) {
       this.logger.warn(
-        'llm.generate 成功但 payload 中无可解析正文（请确认 Gateway 返回字段与 extractGatewayLlmText 一致）',
+        'Gateway 返回无可解析正文（请确认 chat.history 中 assistant 消息格式）',
         {
           sessionId,
           payloadKeys:

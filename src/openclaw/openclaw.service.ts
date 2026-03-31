@@ -531,6 +531,38 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 将列表/详情中的 sessionId 解析为 Gateway `chat.send` 使用的 sessionKey（如 `agent:main:main`）。
+   * 找不到时返回 null，调用方可回退 `main`。
+   */
+  async resolveGatewaySessionKeyForEvaluation(
+    sessionId: string,
+  ): Promise<string | null> {
+    try {
+      if (
+        Date.now() - this.sessionStorage.getCacheTimestamp() >
+        OpenClawService.CACHE_TTL_MS
+      ) {
+        await this.refreshCache();
+      }
+      const bare = sessionId.includes('/')
+        ? sessionId.slice(sessionId.lastIndexOf('/') + 1)
+        : sessionId;
+      const map = await this.sessionStorage.getAll();
+      for (const [, data] of map) {
+        if (data.sessionId === sessionId || data.sessionId === bare) {
+          const k = data.sessionKey?.trim();
+          if (k) return k;
+        }
+      }
+      const direct = await this.sessionStorage.get(sessionId);
+      if (direct?.sessionKey?.trim()) return direct.sessionKey.trim();
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  /**
    * 解析 OpenClaw 的 stateDir / configPath / workspaceDir（CLI + 环境变量 + 启发式）
    */
   async getResolvedPaths(forceRefresh = false): Promise<OpenClawResolvedPaths> {
