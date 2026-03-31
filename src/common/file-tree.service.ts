@@ -33,6 +33,16 @@ export interface FileResponse {
   ext: string;
   size: number;
   content: string;
+  // 大文件预览相关
+  isLargeFile?: boolean;
+  createdAt?: string;
+  modifiedAt?: string;
+  preview?: {
+    head: string;  // 前 10 行
+    tail: string;  // 后 10 行
+    totalLines: number;
+    message: string;
+  };
 }
 
 /**
@@ -135,27 +145,49 @@ export class FileTreeService {
         return;
       }
 
-      // 大文件限制（1MB）
-      const MAX_FILE_SIZE = 1 * 1024 * 1024;
-      if (stat.size > MAX_FILE_SIZE) {
-        res.status(HttpStatus.BAD_REQUEST).json({
-          error: 'File too large to preview (max 1MB)',
-          size: stat.size,
-        });
-        return;
-      }
-
       const ext = path.extname(fullPath).toLowerCase();
-      const content = await fs.readFile(fullPath, 'utf-8');
+      const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 
       // HTML 文件特殊处理 - 返回原始内容供 iframe 使用
       if (ext === '.html' || ext === '.htm') {
+        const content = await fs.readFile(fullPath, 'utf-8');
         res.set('Content-Type', 'text/html; charset=utf-8');
         res.send(content);
         return;
       }
 
-      // 其他文件返回 JSON
+      // 大文件优化预览
+      if (stat.size > MAX_FILE_SIZE) {
+        const content = await fs.readFile(fullPath, 'utf-8');
+        const lines = content.split('\n');
+        const totalLines = lines.length;
+        
+        // 性能可控：只读取前 10 行和后 10 行
+        const PREVIEW_LINES = 10;
+        const head = lines.slice(0, PREVIEW_LINES).join('\n');
+        const tail = lines.slice(-PREVIEW_LINES).join('\n');
+        
+        res.json({
+          path: pathStr,
+          name: path.basename(fullPath),
+          ext,
+          size: stat.size,
+          isLargeFile: true,
+          createdAt: stat.birthtime.toISOString(),
+          modifiedAt: stat.mtime.toISOString(),
+          preview: {
+            head,
+            tail,
+            totalLines,
+            message: `文件过大（${this.formatSize(stat.size)}），仅显示前 ${PREVIEW_LINES} 行和后 ${PREVIEW_LINES} 行，共 ${totalLines} 行`,
+          },
+          content: head + '\n\n... [中间内容已隐藏] ...\n\n' + tail,
+        } as FileResponse);
+        return;
+      }
+
+      // 小文件直接返回完整内容
+      const content = await fs.readFile(fullPath, 'utf-8');
       res.json({
         path: pathStr,
         name: path.basename(fullPath),
@@ -176,5 +208,15 @@ export class FileTreeService {
         .status(HttpStatus.INTERNAL_SERVER_ERROR)
         .json({ error: message });
     }
+  }
+
+  /**
+   * 格式化文件大小
+   */
+  private formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
 }

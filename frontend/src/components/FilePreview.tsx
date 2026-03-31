@@ -14,6 +14,16 @@ interface FileData {
   ext: string;
   size: number;
   content: string;
+  // 大文件预览相关
+  isLargeFile?: boolean;
+  createdAt?: string;
+  modifiedAt?: string;
+  preview?: {
+    head: string;
+    tail: string;
+    totalLines: number;
+    message: string;
+  };
 }
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown']);
@@ -140,11 +150,31 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose, api
           <span className="file-meta">
             {formatSize(fileData.size)}
             {fileData.ext && ` · ${fileData.ext}`}
+            {fileData.isLargeFile && ' · ⚠️ 大文件'}
           </span>
         </div>
         <button className="close-btn" onClick={onClose}>✕</button>
       </div>
       <div className="file-preview-content">
+        {fileData.isLargeFile && fileData.preview && (
+          <div className="large-file-notice" style={{
+            padding: '12px',
+            marginBottom: '16px',
+            background: 'var(--ant-color-warning-bg)',
+            border: '1px solid var(--ant-color-warning-border)',
+            borderRadius: '6px',
+            fontSize: '13px',
+          }}>
+            <div style={{ marginBottom: '8px' }}>
+              <strong>⚠️ 文件过大预览</strong>
+            </div>
+            <div style={{ color: 'var(--ant-color-text-secondary)', fontSize: '12px' }}>
+              <div>📊 {fileData.preview.message}</div>
+              <div>📅 创建：{new Date(fileData.createdAt!).toLocaleString('zh-CN')}</div>
+              <div>🕐 修改：{new Date(fileData.modifiedAt!).toLocaleString('zh-CN')}</div>
+            </div>
+          </div>
+        )}
         {isMarkdownFile(fileData.ext) ? (
           <div className="markdown-workspace">
             <div className="markdown-mode-switch">
