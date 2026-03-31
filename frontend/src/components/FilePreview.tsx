@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 interface FilePreviewProps {
   filePath: string;
   onClose: () => void;
+  apiPrefix?: string; // 可选，默认为 '/api/workspace'
 }
 
 interface FileData {
@@ -17,7 +18,7 @@ interface FileData {
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown']);
 
-export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose }) => {
+export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose, apiPrefix = '/api/workspace' }) => {
   const [fileData, setFileData] = useState<FileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +34,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose }) =
       setHtmlUrl(null);
 
       try {
-        const response = await fetch(`/api/workspace/file/${encodeURIComponent(filePath)}`);
+        const response = await fetch(`${apiPrefix}/file/${encodeURIComponent(filePath)}`);
         
         // HTML 文件特殊处理（根据扩展名判断）
         const ext = filePath.toLowerCase().split('.').pop();

@@ -169,7 +169,7 @@ export const States: React.FC = () => {
       </div>
       <div className="states-content">
         {selectedFile ? (
-          <FilePreview filePath={selectedFile} onClose={() => setSelectedFile(null)} />
+          <FilePreview filePath={selectedFile} onClose={() => setSelectedFile(null)} apiPrefix="/api/states" />
         ) : (
           <div className="states-empty">
             <p>选择一个文件进行预览</p>
