@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface FilePreviewProps {
   filePath: string;
@@ -13,11 +15,15 @@ interface FileData {
   content: string;
 }
 
+const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown']);
+
 export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose }) => {
   const [fileData, setFileData] = useState<FileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [htmlUrl, setHtmlUrl] = useState<string | null>(null);
+  const [markdownDraft, setMarkdownDraft] = useState('');
+  const [markdownMode, setMarkdownMode] = useState<'edit' | 'preview'>('edit');
 
   useEffect(() => {
     const loadFile = async () => {
@@ -46,6 +52,12 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose }) =
           setError(data.error);
         } else {
           setFileData(data);
+          if (isMarkdownFile(data?.ext)) {
+            setMarkdownDraft(String(data?.content || ''));
+            setMarkdownMode('edit');
+          } else {
+            setMarkdownDraft('');
+          }
         }
       } catch (err: any) {
         setError(err.message);
@@ -68,6 +80,12 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose }) =
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const isMarkdownFile = (ext?: string): boolean => {
+    if (!ext) return false;
+    const normalized = String(ext).toLowerCase().replace(/^\./, '');
+    return MARKDOWN_EXTENSIONS.has(normalized);
   };
 
   if (loading) {
@@ -126,9 +144,40 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ filePath, onClose }) =
         <button className="close-btn" onClick={onClose}>✕</button>
       </div>
       <div className="file-preview-content">
-        <pre className="file-content">
-          <code>{fileData.content}</code>
-        </pre>
+        {isMarkdownFile(fileData.ext) ? (
+          <div className="markdown-workspace">
+            <div className="markdown-mode-switch">
+              <button
+                className={`markdown-mode-btn ${markdownMode === 'edit' ? 'active' : ''}`}
+                onClick={() => setMarkdownMode('edit')}
+              >
+                编辑
+              </button>
+              <button
+                className={`markdown-mode-btn ${markdownMode === 'preview' ? 'active' : ''}`}
+                onClick={() => setMarkdownMode('preview')}
+              >
+                预览
+              </button>
+            </div>
+            {markdownMode === 'edit' ? (
+              <textarea
+                className="markdown-editor"
+                value={markdownDraft}
+                onChange={(e) => setMarkdownDraft(e.target.value)}
+                spellCheck={false}
+              />
+            ) : (
+              <div className="markdown-preview">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownDraft || ''}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        ) : (
+          <pre className="file-content">
+            <code>{fileData.content}</code>
+          </pre>
+        )}
       </div>
     </div>
   );

@@ -460,6 +460,17 @@ export default {
   'logs.pageScopeDesc':
     'Initial lines from GET /api/logs; then Socket.IO `logs:new` appends. Clear only clears the in-browser buffer.',
   'logs.cardScopeDesc': 'Shows streamed and recently fetched log lines; level filter is client-side.',
+  'markdownPreview.inputTitle': 'Input',
+  'markdownPreview.previewTitle': 'Preview',
+  'markdownPreview.modePaste': 'Paste Markdown',
+  'markdownPreview.modeFile': 'Select workspace file',
+  'markdownPreview.filePlaceholder': 'Select a Markdown file',
+  'markdownPreview.loadFile': 'Load file',
+  'markdownPreview.pastePlaceholder': 'Paste Markdown text here…',
+  'markdownPreview.emptyHint': 'No content yet. Paste Markdown text or load a workspace file.',
+  'markdownPreview.noMarkdownFiles': 'No .md/.markdown files found in the current workspace.',
+  'markdownPreview.loadTreeFailed': 'Failed to load workspace file list',
+  'markdownPreview.loadFileFailed': 'Failed to load Markdown file',
   'skills.title': 'Skills',
   'skills.subtitle': 'Skill × Tool relationship, usage, zombie & duplicate skills',
   'skills.pageScopeDesc':

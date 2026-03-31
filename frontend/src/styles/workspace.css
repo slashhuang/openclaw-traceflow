@@ -275,10 +275,118 @@
   border: none;
 }
 
+.markdown-preview {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border);
+  border-radius: 8px;
+  padding: 16px;
+  height: 100%;
+  min-height: 240px;
+  overflow: auto;
+}
+
+.markdown-preview :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 1.2em;
+  margin-bottom: 0.6em;
+}
+
+.markdown-preview h1 {
+  margin-top: 0;
+}
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview table {
+  margin: 0 0 0.9em;
+}
+
+.markdown-preview code {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  background: var(--ant-color-fill-tertiary);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.markdown-preview pre {
+  margin: 0 0 1em;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-fill-quaternary);
+  overflow: auto;
+}
+
+.markdown-preview pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-preview table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--ant-color-border);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.markdown-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 300px;
+}
+
+.markdown-mode-switch {
+  display: flex;
+  gap: 8px;
+}
+
+.markdown-mode-btn {
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.markdown-mode-btn.active {
+  border-color: var(--ant-color-primary);
+  color: var(--ant-color-primary);
+}
+
+.markdown-editor {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+}
+
 /* 响应式 */
 @media (max-width: 768px) {
   .workspace-sidebar {
     width: 250px;
     min-width: 200px;
   }
+
+  .markdown-workspace { min-height: 260px; }
 }

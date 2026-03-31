@@ -454,6 +454,17 @@ export default {
   'logs.pageScopeDesc':
     '初始列表来自 GET /api/logs；之后通过 Socket.IO `logs:new` 增量追加。清空仅影响浏览器内存中的展示。',
   'logs.cardScopeDesc': '展示为服务端推送与最近拉取的日志行；级别筛选为前端过滤。',
+  'markdownPreview.inputTitle': '输入',
+  'markdownPreview.previewTitle': '预览',
+  'markdownPreview.modePaste': '粘贴 Markdown',
+  'markdownPreview.modeFile': '选择工作区文件',
+  'markdownPreview.filePlaceholder': '请选择 Markdown 文件',
+  'markdownPreview.loadFile': '加载文件',
+  'markdownPreview.pastePlaceholder': '在此粘贴 Markdown 文本…',
+  'markdownPreview.emptyHint': '暂无内容，可粘贴文本或加载工作区 Markdown 文件。',
+  'markdownPreview.noMarkdownFiles': '当前工作区未找到 .md/.markdown 文件。',
+  'markdownPreview.loadTreeFailed': '加载工作区文件列表失败',
+  'markdownPreview.loadFileFailed': '加载 Markdown 文件失败',
   'skills.title': 'Skills 分析',
   'skills.subtitle': 'Skill 与 Tool 关联、调用频率、僵尸与重复 Skills',
   'skills.pageScopeDesc':
