@@ -597,7 +597,6 @@ export default function Dashboard() {
   const [health, setHealth] = useState(null);
   const [statusOverview, setStatusOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
-  const [recentLogs, setRecentLogs] = useState([]);
   const [archiveCountMap, setArchiveCountMap] = useState({});
   /** 与 Token 监控同源：用于估算按进行中/归档分桶 */
   const [metrics, setMetrics] = useState({
@@ -634,7 +633,6 @@ export default function Dashboard() {
           setHealth(null);
           setStatusOverview({ error: errDetail });
           setSessions([]);
-          setRecentLogs([]);
           setMetrics({
             latency: { p50: 0, p95: 0, p99: 0, count: 0 },
           });
@@ -648,7 +646,6 @@ export default function Dashboard() {
       const healthData = data?.health ?? null;
       const statusData = data?.statusOverview ?? { error: fallbackDetail };
       const sessionsData = Array.isArray(data?.sessions) ? data.sessions : [];
-      const logsData = Array.isArray(data?.recentLogs) ? data.recentLogs : [];
       const latencyData = data?.metrics?.latency ?? { p50: 0, p95: 0, p99: 0, count: 0 };
       const tokenSummaryData = data?.metrics?.tokenSummary ?? {
         totalInput: 0,
@@ -671,7 +668,6 @@ export default function Dashboard() {
       setHealth(healthData);
       setStatusOverview(statusData);
       setSessions(sessionsData);
-      setRecentLogs(logsData);
       setArchiveCountMap(acMap);
       setMetrics({
         latency: latencyData || { p50: 0, p95: 0, p99: 0, count: 0 },
@@ -1150,29 +1146,6 @@ export default function Dashboard() {
           </Row>
         );
       })()}
-
-      <Card
-        title={intl.formatMessage({ id: 'dashboard.recentLogs' })}
-        size="small"
-        style={{ marginTop: 16 }}
-        extra={
-          <Space size="small">
-            <SectionScopeHint intl={intl} messageId="dashboard.recentLogsDesc" />
-            <Link to="/logs">{intl.formatMessage({ id: 'dashboard.fullLogs' })}</Link>
-          </Space>
-        }
-        bodyStyle={{ padding: '12px 16px' }}
-      >
-        <div style={{ maxHeight: 280, overflow: 'auto', fontFamily: 'monospace', fontSize: 12 }}>
-          {recentLogs.map((log, i) => (
-            <div key={i} style={{ marginBottom: 2 }}>
-              <Typography.Text type="secondary">{new Date(log.timestamp).toLocaleTimeString(intl.locale)}</Typography.Text>{' '}
-              <Typography.Text type={log.level === 'error' ? 'danger' : undefined}>[{log.level}]</Typography.Text>{' '}
-              {log.content}
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }
