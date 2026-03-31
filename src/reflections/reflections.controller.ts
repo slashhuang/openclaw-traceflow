@@ -22,6 +22,8 @@ interface Reflection {
   lastSeen: string;
   applicableTo: 'ai' | 'user' | 'both';
   status: 'pending' | 'applied' | 'ignored' | 'escalated';
+  appliedAt?: string;
+  note?: string;
   diff?: {
     file: string;
     old: Record<string, any>;
@@ -97,7 +99,8 @@ export class ReflectionsController {
     // 确保目录存在
     await fs.mkdir(stateRoot, { recursive: true });
     
-    const line = JSON.stringify(reflection, null, 2) + '\n';
+    // JSONL 格式：单行 JSON
+    const line = JSON.stringify(reflection) + '\n';
     await fs.appendFile(reflectionsFile, line, 'utf-8');
   }
 
