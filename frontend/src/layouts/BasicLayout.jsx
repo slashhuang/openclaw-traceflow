@@ -13,6 +13,7 @@ import {
   FolderOutlined,
   DatabaseOutlined,
   ThunderboltOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { Alert, Button, Dropdown, message, Space, Tag, Tooltip, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -66,6 +67,7 @@ export default function BasicLayout() {
     { path: '/workspace', key: '/workspace', name: '工作区与记忆', icon: <FolderOutlined /> },
     { path: '/states', key: '/states', name: 'States', icon: <DatabaseOutlined /> },
     { path: '/reflections', key: '/reflections', name: '反思列表', icon: <ThunderboltOutlined /> },
+    { path: '/audit', key: '/audit', name: '贡献审计', icon: <BarChartOutlined /> },
 
     { path: '/pricing', key: '/pricing', name: intl.formatMessage({ id: 'menu.pricing' }), icon: <DollarOutlined /> },
     { path: '/logs', key: '/logs', name: intl.formatMessage({ id: 'menu.logs' }), icon: <UnorderedListOutlined /> },

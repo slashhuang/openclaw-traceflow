@@ -21,6 +21,7 @@ import { StatesController } from './states/states.controller';
 import { ReflectionsController } from './reflections/reflections.controller';
 import { FileTreeService } from './common/file-tree.service';
 import { WorkspaceController } from './workspace/workspace.controller';
+import { AuditController } from './audit/audit.controller';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { WorkspaceController } from './workspace/workspace.controller';
     StatesController,
     ReflectionsController,
     WorkspaceController,
+    AuditController,
   ],
   providers: [AppService, EvaluationPromptConfigService, FileTreeService],
 })
