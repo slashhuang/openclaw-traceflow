@@ -19,6 +19,7 @@ import { WorkspaceBootstrapEvaluationPromptController } from './evaluators/works
 import { EvaluationPromptConfigService } from './evaluators/evaluation-prompt-config.service';
 import { StatesController } from './states/states.controller';
 import { ReflectionsController } from './reflections/reflections.controller';
+import { FileTreeService } from './common/file-tree.service';
 
 @Module({
   imports: [
@@ -43,6 +44,6 @@ import { ReflectionsController } from './reflections/reflections.controller';
     StatesController,
     ReflectionsController,
   ],
-  providers: [AppService, EvaluationPromptConfigService],
+  providers: [AppService, EvaluationPromptConfigService, FileTreeService],
 })
 export class AppModule {}
