@@ -125,8 +125,8 @@ export class FileTreeService {
     res: Response,
   ): Promise<void> {
     try {
-      // wildcard 参数可能是数组，取第一个元素
-      const pathStr = Array.isArray(filePath) ? filePath[0] : filePath;
+      // wildcard 参数可能是数组（NestJS 会将 /*path 拆分为数组），需要 join
+      const pathStr = Array.isArray(filePath) ? filePath.join('/') : filePath;
       const fullPath = this.validatePath(root, pathStr);
       const stat = await fs.stat(fullPath);
 
