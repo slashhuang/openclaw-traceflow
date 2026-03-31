@@ -633,7 +633,6 @@ export default function Dashboard() {
           setHealth(null);
           setStatusOverview({ error: errDetail });
           setSessions([]);
-          setRecentLogs([]);
           setMetrics({
             latency: { p50: 0, p95: 0, p99: 0, count: 0 },
           });
