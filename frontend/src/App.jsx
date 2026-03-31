@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import Pricing from './pages/Pricing';
 import Workspace from './pages/Workspace';
 import States from './pages/States';
+import Reflections from './pages/Reflections';
 import './styles/workspace.css';
 
 function AppInner() {
@@ -62,6 +63,7 @@ function AppInner() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/workspace" element={<Workspace />} />
           <Route path="/states" element={<States />} />
+          <Route path="/reflections" element={<Reflections />} />
         </Route>
       </Routes>
     </BrowserRouter>
