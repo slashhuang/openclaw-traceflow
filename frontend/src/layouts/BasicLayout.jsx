@@ -63,7 +63,7 @@ export default function BasicLayout() {
     { path: '/', key: '/', name: intl.formatMessage({ id: 'menu.dashboard' }), icon: <DashboardOutlined /> },
     { path: '/sessions', key: '/sessions', name: intl.formatMessage({ id: 'menu.sessions' }), icon: <MessageOutlined /> },
     { path: '/system-prompt', key: '/system-prompt', name: intl.formatMessage({ id: 'menu.systemPrompt' }), icon: <FileTextOutlined /> },
-    { path: '/workspace', key: '/workspace', name: intl.formatMessage({ id: 'menu.workspace' }), icon: <FolderOutlined /> },
+    { path: '/workspace', key: '/workspace', name: '工作区与记忆', icon: <FolderOutlined /> },
     { path: '/states', key: '/states', name: 'States', icon: <DatabaseOutlined /> },
     { path: '/reflections', key: '/reflections', name: '反思列表', icon: <ThunderboltOutlined /> },
 
