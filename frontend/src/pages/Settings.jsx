@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert, Space, Tag } from 'antd';
+import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert, Space, Tag, Segmented } from 'antd';
 import { useIntl } from 'react-intl';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   setupApi,
   actionsApi,
@@ -30,12 +32,14 @@ export default function Settings() {
   const [evalPromptLoading, setEvalPromptLoading] = useState(true);
   const [evalPromptSaving, setEvalPromptSaving] = useState(false);
   const [evalPromptTemplate, setEvalPromptTemplate] = useState('');
+  const [evalPromptMode, setEvalPromptMode] = useState('edit');
   const [evalPromptSource, setEvalPromptSource] = useState('builtin');
   const [evalPromptVersion, setEvalPromptVersion] = useState('eval-prompt-v1');
 
   const [wsEvalPromptLoading, setWsEvalPromptLoading] = useState(true);
   const [wsEvalPromptSaving, setWsEvalPromptSaving] = useState(false);
   const [wsEvalPromptTemplate, setWsEvalPromptTemplate] = useState('');
+  const [wsEvalPromptMode, setWsEvalPromptMode] = useState('edit');
   const [wsEvalPromptSource, setWsEvalPromptSource] = useState('builtin');
   const [wsEvalPromptVersion, setWsEvalPromptVersion] = useState('workspace-bootstrap-eval-v1');
 
@@ -424,13 +428,29 @@ export default function Settings() {
                 : intl.formatMessage({ id: 'settings.evaluationPrompt.sourceBuiltin' })}
             </Tag>
           </Space>
-          <Input.TextArea
-            value={evalPromptTemplate}
-            onChange={(e) => setEvalPromptTemplate(e.target.value)}
-            rows={16}
-            style={{ fontFamily: 'monospace', fontSize: 12 }}
-            disabled={evalPromptLoading}
+          <Segmented
+            size="small"
+            options={[
+              { label: '编辑', value: 'edit' },
+              { label: '预览', value: 'preview' },
+            ]}
+            value={evalPromptMode}
+            onChange={setEvalPromptMode}
+            style={{ marginBottom: 8 }}
           />
+          {evalPromptMode === 'edit' ? (
+            <Input.TextArea
+              value={evalPromptTemplate}
+              onChange={(e) => setEvalPromptTemplate(e.target.value)}
+              rows={16}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+              disabled={evalPromptLoading}
+            />
+          ) : (
+            <div className="markdown-preview" style={{ minHeight: 160 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{evalPromptTemplate || ''}</ReactMarkdown>
+            </div>
+          )}
           <Space style={{ marginTop: 12 }}>
             <Button type="primary" onClick={onSaveEvalPrompt} loading={evalPromptSaving}>
               {intl.formatMessage({ id: 'settings.evaluationPrompt.save' })}
@@ -468,13 +488,29 @@ export default function Settings() {
                 : intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.sourceBuiltin' })}
             </Tag>
           </Space>
-          <Input.TextArea
-            value={wsEvalPromptTemplate}
-            onChange={(e) => setWsEvalPromptTemplate(e.target.value)}
-            rows={16}
-            style={{ fontFamily: 'monospace', fontSize: 12 }}
-            disabled={wsEvalPromptLoading}
+          <Segmented
+            size="small"
+            options={[
+              { label: '编辑', value: 'edit' },
+              { label: '预览', value: 'preview' },
+            ]}
+            value={wsEvalPromptMode}
+            onChange={setWsEvalPromptMode}
+            style={{ marginBottom: 8 }}
           />
+          {wsEvalPromptMode === 'edit' ? (
+            <Input.TextArea
+              value={wsEvalPromptTemplate}
+              onChange={(e) => setWsEvalPromptTemplate(e.target.value)}
+              rows={16}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+              disabled={wsEvalPromptLoading}
+            />
+          ) : (
+            <div className="markdown-preview" style={{ minHeight: 160 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{wsEvalPromptTemplate || ''}</ReactMarkdown>
+            </div>
+          )}
           <Space style={{ marginTop: 12 }}>
             <Button type="primary" onClick={onSaveWsEvalPrompt} loading={wsEvalPromptSaving}>
               {intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.save' })}

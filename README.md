@@ -36,16 +36,13 @@
 
 ### Dashboard / Sessions
 
-![Dashboard](./docs/traceFlowSnapshots/dashboard-1.png)
-![Session List](./docs/traceFlowSnapshots/sessionList.png)
-![Session Detail](./docs/traceFlowSnapshots/sessionDetail.png)
+> Screenshot assets under `docs/traceFlowSnapshots/` are currently not included in this repository snapshot.  
+> This section is kept in place and will be refreshed with updated captures.
 
 ### Skills / Prompt / Tokens / Pricing
 
-![Skills](./docs/traceFlowSnapshots/skills.png)
-![System Prompt](./docs/traceFlowSnapshots/systemPrompt.png)
-![Token Monitor](./docs/traceFlowSnapshots/tokenMonitor.png)
-![Pricing](./docs/traceFlowSnapshots/models.png)
+> Screenshot assets under `docs/traceFlowSnapshots/` are currently not included in this repository snapshot.  
+> This section is kept in place and will be refreshed with updated captures.
 
 ---
 
@@ -132,10 +129,10 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 | Path | Purpose |
 |------|---------|
 | `/` · `/dashboard` | Overview: Gateway health, tokens, latency, tools, etc. |
-| `/sessions` · `/sessions/:id` | Session list and detail |
-| `/skills` | Skill usage statistics |
+| `/sessions` · `/sessions/:id` · `/sessions/:id/archives` | Session list, detail, and archived epochs |
 | `/system-prompt` (`/agent-harness` redirects here) | Agent & harness: Project Context, OpenClaw Structure, skills snapshot, etc. |
-| `/tokens` | Token monitoring & alerts |
+| `/workspace` | Workspace bootstrap files (`AGENTS.md` / `SOUL.md` / `IDENTITY.md` / `USER.md`) |
+| `/markdown-preview` | Rendered markdown preview for workspace bootstrap docs |
 | `/pricing` | Model pricing |
 | `/logs` | Live logs (Socket.IO) |
 | `/settings` | Gateway URL, paths, access |
@@ -190,7 +187,12 @@ Useful for scripts and monitoring. Full list lives in `src/**/*controller.ts`.
 | `/api/sessions` | GET | Session list |
 | `/api/sessions/:id` | GET | Session detail |
 | `/api/sessions/:id/kill` | POST | Kill session |
+| `/api/sessions/:id/evaluations*` | GET/POST/DELETE | Session evaluations (`latest`, history, detail, create) |
 | `/api/metrics/*` | GET | Latency, tools/skills, token summaries |
+| `/api/prompts/:promptId/evaluations*` | GET/POST/DELETE | Prompt evaluations (`latest`, history, detail, create) |
+| `/api/evaluation-prompt` | GET/PUT/DELETE | Session evaluation template |
+| `/api/workspace-bootstrap-evaluation-prompt` | GET/PUT/DELETE | Workspace bootstrap evaluation template |
+| `/api/workspace/*` | GET/PUT | Workspace file read/write APIs |
 | `/api/logs` | GET | Recent log lines |
 | `/api/setup/*` | GET/POST | Setup (protected by access mode) |
 
