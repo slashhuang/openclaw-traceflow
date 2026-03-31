@@ -14,6 +14,7 @@ import Logs from './pages/Logs';
 import Settings from './pages/Settings';
 import Pricing from './pages/Pricing';
 import Workspace from './pages/Workspace';
+import States from './pages/States';
 import './styles/workspace.css';
 
 function AppInner() {
@@ -60,6 +61,7 @@ function AppInner() {
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/workspace" element={<Workspace />} />
+          <Route path="/states" element={<States />} />
         </Route>
       </Routes>
     </BrowserRouter>
