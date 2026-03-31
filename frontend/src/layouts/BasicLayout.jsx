@@ -11,6 +11,7 @@ import {
   ApiOutlined,
   GithubOutlined,
   FolderOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import { Alert, Button, Dropdown, message, Space, Tag, Tooltip, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -62,6 +63,7 @@ export default function BasicLayout() {
     { path: '/sessions', key: '/sessions', name: intl.formatMessage({ id: 'menu.sessions' }), icon: <MessageOutlined /> },
     { path: '/system-prompt', key: '/system-prompt', name: intl.formatMessage({ id: 'menu.systemPrompt' }), icon: <FileTextOutlined /> },
     { path: '/workspace', key: '/workspace', name: intl.formatMessage({ id: 'menu.workspace' }), icon: <FolderOutlined /> },
+    { path: '/states', key: '/states', name: 'States', icon: <DatabaseOutlined /> },
 
     { path: '/pricing', key: '/pricing', name: intl.formatMessage({ id: 'menu.pricing' }), icon: <DollarOutlined /> },
     { path: '/logs', key: '/logs', name: intl.formatMessage({ id: 'menu.logs' }), icon: <UnorderedListOutlined /> },

@@ -17,6 +17,7 @@ import { PromptEvaluationController } from './evaluators/prompt-evaluation.contr
 import { EvaluationPromptController } from './evaluators/evaluation-prompt.controller';
 import { WorkspaceBootstrapEvaluationPromptController } from './evaluators/workspace-bootstrap-evaluation-prompt.controller';
 import { EvaluationPromptConfigService } from './evaluators/evaluation-prompt-config.service';
+import { StatesController } from './states/states.controller';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { EvaluationPromptConfigService } from './evaluators/evaluation-prompt-co
     PromptEvaluationController,
     EvaluationPromptController,
     WorkspaceBootstrapEvaluationPromptController,
+    StatesController,
   ],
   providers: [AppService, EvaluationPromptConfigService],
 })
