@@ -9,6 +9,10 @@ import { buildWorkspaceBootstrapEvaluationContext } from './evaluation-prompt';
 import type { EffectiveEvaluationPrompt } from './evaluation-prompt-config.service';
 import { EvaluationPromptConfigService } from './evaluation-prompt-config.service';
 import {
+  callGatewayChatForEvaluationText,
+  DEFAULT_GATEWAY_EVAL_SESSION_KEY,
+} from './evaluation-gateway-llm';
+import {
   extractGatewayLlmText,
   getFallbackEvaluation,
   parseLLMResponse,
@@ -36,29 +40,36 @@ export class WorkspaceBootstrapEvaluator {
   private async callLLM(
     context: string,
     effective: EffectiveEvaluationPrompt,
+    probeIds: { sessionId?: string; sessionKey?: string },
   ): Promise<LLMAnalysisResult> {
     const prompt = effective.template.replace('{context}', context);
 
+    const idForResolve =
+      probeIds.sessionId || probeIds.sessionKey || '';
+    const sessionKey =
+      (idForResolve
+        ? await this.openclawService.resolveGatewaySessionKeyForEvaluation(
+            String(idForResolve),
+          )
+        : null) ??
+      probeIds.sessionKey?.trim() ??
+      DEFAULT_GATEWAY_EVAL_SESSION_KEY;
+
     const result: GatewayRpcResult<unknown> =
-      await this.gatewayConnection.request(
-        'llm.generate',
-        {
-          prompt,
-          model: 'bailian/qwen3.5-plus',
-          temperature: 0.1,
-          max_tokens: 1800,
-        },
-        120_000,
-      );
+      await callGatewayChatForEvaluationText(this.gatewayConnection, {
+        sessionKey,
+        userMessage: prompt,
+        timeoutMs: 120_000,
+      });
 
     if (!result.ok) {
-      this.logger.warn(`工作区引导评估 llm.generate 失败: ${result.error}`);
+      this.logger.warn(`工作区引导评估 Gateway 对话失败: ${result.error}`);
       return getFallbackEvaluation();
     }
 
     const text = extractGatewayLlmText(result.payload).trim();
     if (!text) {
-      this.logger.warn('工作区引导评估：llm.generate 无正文');
+      this.logger.warn('工作区引导评估：Gateway 返回无正文');
       return getFallbackEvaluation();
     }
 
@@ -85,7 +96,10 @@ export class WorkspaceBootstrapEvaluator {
 
     const context = buildWorkspaceBootstrapEvaluationContext(probe);
     const effective = await this.evaluationPromptConfig.getEffectiveWorkspace();
-    const llmAnalysis = await this.callLLM(context, effective);
+    const llmAnalysis = await this.callLLM(context, effective, {
+      sessionId: probe.sessionId,
+      sessionKey: probe.sessionKey,
+    });
 
     const effectivenessScore = calculateEffectivenessScore(llmAnalysis);
     const efficiencyScore = calculateEfficiencyScore(llmAnalysis);
