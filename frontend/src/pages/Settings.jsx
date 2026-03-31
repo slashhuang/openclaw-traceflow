@@ -13,6 +13,7 @@ import {
   TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY,
 } from '../api';
 import SectionScopeHint from '../components/SectionScopeHint';
+import SelfImprovementHint from '../components/SelfImprovementHint';
 
 const EVAL_CONTEXT_PLACEHOLDER = '{context}';
 
@@ -42,6 +43,8 @@ export default function Settings() {
   const [wsEvalPromptMode, setWsEvalPromptMode] = useState('edit');
   const [wsEvalPromptSource, setWsEvalPromptSource] = useState('builtin');
   const [wsEvalPromptVersion, setWsEvalPromptVersion] = useState('workspace-bootstrap-eval-v1');
+
+  const [selfImprovementEnabled, setSelfImprovementEnabled] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -302,6 +305,13 @@ export default function Settings() {
 
   return (
     <div>
+      <SelfImprovementHint
+        enabled={selfImprovementEnabled}
+        onEnable={() => {
+          setSelfImprovementEnabled(true);
+          message.success('Self-Improvement 已启用！AI 将自动反思并生成优化建议');
+        }}
+      />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'settings.title' })}</Typography.Title>
         <SectionScopeHint intl={intl} messageId="settings.pageScopeDesc" />
