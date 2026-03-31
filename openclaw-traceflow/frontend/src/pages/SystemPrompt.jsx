@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Card,
   Row,
@@ -219,11 +220,13 @@ function BootstrapFilePreviewPanel({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [draftMode, setDraftMode] = useState('edit');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setEditing(false);
     setDraft('');
+    setDraftMode('edit');
   }, [selectedBootstrapRow?.entry?.id]);
 
   if (!selectedBootstrapRow) return null;
@@ -361,11 +364,12 @@ function BootstrapFilePreviewPanel({
                 {intl.formatMessage({ id: 'systemPrompt.bootstrap.openInVscode' })}
               </Button>
             ) : null}
-            {!editing ? (
+            {!editing && (
               <Button size="small" type="primary" onClick={startEdit}>
                 {intl.formatMessage({ id: 'systemPrompt.bootstrap.edit' })}
               </Button>
-            ) : (
+            )}
+            {editing && (
               <>
                 <Button size="small" onClick={cancelEdit} disabled={saving}>
                   {intl.formatMessage({ id: 'systemPrompt.bootstrap.cancelEdit' })}
@@ -417,21 +421,39 @@ function BootstrapFilePreviewPanel({
         </Typography.Text>
       )}
       {editing && coreEditable ? (
-        <Input.TextArea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          style={{
-            flex: 1,
-            minHeight: 200,
-            fontFamily: 'monospace',
-            fontSize: 12,
-          }}
-          autoSize={{ minRows: 12, maxRows: 40 }}
-        />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Space size={8}>
+            <Button size="small" type={draftMode === 'edit' ? 'primary' : 'default'} onClick={() => setDraftMode('edit')}>
+              编辑
+            </Button>
+            <Button size="small" type={draftMode === 'preview' ? 'primary' : 'default'} onClick={() => setDraftMode('preview')}>
+              预览
+            </Button>
+          </Space>
+          {draftMode === 'edit' ? (
+            <Input.TextArea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              style={{
+                flex: 1,
+                minHeight: 200,
+                fontFamily: 'monospace',
+                fontSize: 12,
+              }}
+              autoSize={{ minRows: 12, maxRows: 40 }}
+            />
+          ) : (
+            <div className="system-prompt-md" style={mainScrollStyle}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={BOOTSTRAP_MARKDOWN_COMPONENTS}>
+                {String(draft || '')}
+              </ReactMarkdown>
+            </div>
+          )}
+        </div>
       ) : selectedBootstrapRow.hit && !selectedBootstrapRow.missing ? (
         String(selectedBootstrapRow.hit.content || '').trim() ? (
           <div className="system-prompt-md" style={mainScrollStyle}>
-            <ReactMarkdown components={BOOTSTRAP_MARKDOWN_COMPONENTS}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={BOOTSTRAP_MARKDOWN_COMPONENTS}>
               {String(selectedBootstrapRow.hit.content || '')}
             </ReactMarkdown>
           </div>
@@ -1792,7 +1814,7 @@ export default function SystemPromptPage() {
                                 : 'none',
                             }}
                           >
-                            <ReactMarkdown components={BOOTSTRAP_MARKDOWN_COMPONENTS}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={BOOTSTRAP_MARKDOWN_COMPONENTS}>
                               {chunk.content}
                             </ReactMarkdown>
                           </section>
