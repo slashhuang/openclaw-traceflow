@@ -79,7 +79,18 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
         onClick={handleClick}
       >
         <span className="file-tree-icon">{icon}</span>
-        <span className="file-tree-name">{node.name}</span>
+        <span className="file-tree-name">
+          {node.type === 'file' && node.ext ? (
+            <>
+              <span className="file-tree-name-base" title={node.name}>
+                {getNodeBaseName(node.name, node.ext)}
+              </span>
+              <span className="file-tree-ext">{node.ext}</span>
+            </>
+          ) : (
+            <span title={node.name}>{node.name}</span>
+          )}
+        </span>
         {node.type === 'directory' && (
           <span className="file-tree-toggle">{isExpanded ? '▼' : '▶'}</span>
         )}
@@ -102,6 +113,16 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
     </div>
   );
 };
+
+/**
+ * 获取文件名的主体部分（不含后缀）
+ */
+function getNodeBaseName(name: string, ext: string): string {
+  if (!ext || !name.endsWith(ext)) {
+    return name;
+  }
+  return name.slice(0, -ext.length);
+}
 
 function getNodeIcon(node: FileNode): string {
   if (node.type === 'directory') {

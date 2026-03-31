@@ -180,8 +180,24 @@
   flex: 1;
   font-size: 13px;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.file-tree-name-base {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.file-tree-ext {
+  color: var(--ant-color-text-tertiary);
+  flex-shrink: 0;
+  font-size: 12px;
+  margin-left: 2px;
 }
 
 .file-tree-toggle {
