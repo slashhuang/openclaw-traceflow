@@ -17,6 +17,48 @@ export default {
   'menu.pricing': 'Pricing',
   'menu.logs': 'Logs',
   'menu.settings': 'Settings',
+  'menu.traceflowSkills': 'TraceFlow skills',
+  'traceflowSkills.pageTitle': 'TraceFlow companion skills',
+  'traceflowSkills.intro':
+    'OpenClaw companion skills shipped with this open-source TraceFlow repository. Copy them into your OpenClaw skills layout as needed—TraceFlow does not install or run them for you.',
+  'traceflowSkills.loading': 'Loading companion skills…',
+  'traceflowSkills.loadErrorTitle': 'Failed to load companion skills',
+  'traceflowSkills.loadError': 'Could not load companion skills',
+  'traceflowSkills.copyFile': 'Copy this file',
+  'traceflowSkills.copyAll': 'Copy all files',
+  'traceflowSkills.copySuccess': 'Copied: {label}',
+  'traceflowSkills.copyFailed': 'Copy failed (check browser permissions)',
+  'traceflowSkills.skill.agent_audit.title': 'agent-audit (contribution audit)',
+  'traceflowSkills.skill.agent_audit.desc':
+    'Scans session JSONL and builds audit snapshots; after install, tell your Agent phrases like “run the audit” (or your locale equivalent) to generate data.',
+  'traceflowSkills.skill.self_improvement.title': 'self-improvement (live reflections)',
+  'traceflowSkills.skill.self_improvement.desc':
+    'Detects corrections, failures, and insights during sessions and appends reflections.jsonl for this page (requires the skill installed and active in OpenClaw).',
+  'traceflowSkills.backToAudit': 'Back to contribution audit',
+  'audit.loadingSnapshot': 'Loading audit data…',
+  'audit.onboarding.title': 'No audit snapshot yet',
+  'audit.onboarding.lead':
+    'Contribution audit needs the agent-audit skill on the OpenClaw side: copy it from TraceFlow companion skills, install it, then trigger a scan from OpenClaw.',
+  'audit.onboarding.step1':
+    'Open TraceFlow companion skills in the sidebar and install agent-audit into your OpenClaw skills directory.',
+  'audit.onboarding.step2':
+    'In OpenClaw chat, ask the Agent to run the audit (e.g. phrases like “run the audit” / contribution report—see the skill text).',
+  'audit.onboarding.step3': 'Return here and click Retry or refresh.',
+  'audit.onboarding.openSkills': 'Open TraceFlow companion skills',
+  'audit.error.title': 'Failed to load audit data',
+  'audit.error.unknown': 'Unknown error',
+  'reflections.onboarding.title': 'No reflections data file yet',
+  'reflections.onboarding.lead':
+    'This page reads reflections.jsonl under your OpenClaw state directory, usually written by the self-improvement runtime.',
+  'reflections.onboarding.step1':
+    'Open TraceFlow companion skills in the sidebar and install self-improvement into your OpenClaw skills layout (requires git and python3 on the machine; see the SKILL text).',
+  'reflections.onboarding.step2':
+    'Use OpenClaw normally; corrections, fix requests, tool failures, etc. can be recorded into reflections.jsonl.',
+  'reflections.onboarding.step3': 'Return here and click Refresh.',
+  'reflections.onboarding.openSkills': 'Open TraceFlow companion skills',
+  'reflections.loadError': 'Failed to load reflections',
+  'reflections.emptyHint':
+    'No rows for the current filters. Trigger correction/fix-style interactions in OpenClaw to generate entries, or read the self-improvement skill on the companion skills page.',
   'gateway.banner.title': 'Gateway disconnected',
   'gateway.banner.settings': 'Open settings',
   'gateway.connected': 'Gateway connected',

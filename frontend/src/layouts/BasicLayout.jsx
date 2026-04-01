@@ -5,7 +5,6 @@ import {
   DashboardOutlined,
   MessageOutlined,
   FileTextOutlined,
-  DollarOutlined,
   UnorderedListOutlined,
   SettingOutlined,
   ApiOutlined,
@@ -14,6 +13,7 @@ import {
   DatabaseOutlined,
   ThunderboltOutlined,
   BarChartOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { Alert, Button, Dropdown, message, Space, Tag, Tooltip, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -69,9 +69,14 @@ export default function BasicLayout() {
     { path: '/reflections', key: '/reflections', name: '反思列表', icon: <ThunderboltOutlined /> },
     { path: '/audit', key: '/audit', name: '贡献审计', icon: <BarChartOutlined /> },
 
-    { path: '/pricing', key: '/pricing', name: intl.formatMessage({ id: 'menu.pricing' }), icon: <DollarOutlined /> },
     { path: '/logs', key: '/logs', name: intl.formatMessage({ id: 'menu.logs' }), icon: <UnorderedListOutlined /> },
     { path: '/settings', key: '/settings', name: intl.formatMessage({ id: 'menu.settings' }), icon: <SettingOutlined /> },
+    {
+      path: '/traceflow-skills',
+      key: '/traceflow-skills',
+      name: intl.formatMessage({ id: 'menu.traceflowSkills' }),
+      icon: <AppstoreOutlined />,
+    },
   ];
 
   return (

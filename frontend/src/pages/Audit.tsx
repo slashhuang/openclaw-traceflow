@@ -1,7 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Col, Descriptions, Row, Statistic, Table, Tag, Typography, Spin, Alert, Button, Space } from 'antd';
-import { CodeOutlined, QuestionCircleOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import type { AuditSnapshot, CodeDeliveryStats, QaServiceStats, AutomationStats, CostStats } from '../types/audit';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { useIntl } from 'react-intl';
+import {
+  Card,
+  Col,
+  Descriptions,
+  Row,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+  Spin,
+  Alert,
+  Button,
+  Space,
+} from 'antd';
+import {
+  CodeOutlined,
+  QuestionCircleOutlined,
+  RobotOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
+import type {
+  AuditSnapshot,
+  CodeDeliveryStats,
+  QaServiceStats,
+  AutomationStats,
+} from '../types/audit';
 
 const { Title, Text } = Typography;
 
@@ -9,11 +34,12 @@ interface AuditData {
   snapshot: AuditSnapshot | null;
   loading: boolean;
   error: string | null;
+  errorCode: string | null;
 }
 
 /**
  * Agent 贡献审计页面
- * 
+ *
  * 展示 Bot 对团队的贡献数据：
  * - 代码交付（MR 数量、涉及仓库）
  * - 问答服务（服务人数、问题类型）
@@ -21,42 +47,80 @@ interface AuditData {
  * - Token 消耗统计
  */
 export const Audit: React.FC = () => {
+  const intl = useIntl();
   const [data, setData] = useState<AuditData>({
     snapshot: null,
     loading: true,
     error: null,
+    errorCode: null,
   });
 
-  useEffect(() => {
-    fetchSnapshot();
-  }, []);
-
-  /**
-   * 获取审计快照数据
-   */
-  const fetchSnapshot = async () => {
+  const fetchSnapshot = useCallback(async () => {
     try {
       const response = await fetch('/api/audit/snapshot');
-      const result = await response.json();
-      
+      const result = (await response.json()) as {
+        success: boolean;
+        data?: AuditSnapshot;
+        error?: string;
+        code?: string;
+      };
+
       if (result.success) {
-        setData({ snapshot: result.data, loading: false, error: null });
+        setData({ snapshot: result.data ?? null, loading: false, error: null, errorCode: null });
       } else {
-        setData({ snapshot: null, loading: false, error: result.error });
+        setData({
+          snapshot: null,
+          loading: false,
+          error: result.error ?? intl.formatMessage({ id: 'audit.error.unknown' }),
+          errorCode: result.code ?? null,
+        });
       }
     } catch (error) {
-      setData({ 
-        snapshot: null, 
-        loading: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      setData({
+        snapshot: null,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorCode: null,
       });
     }
-  };
+  }, [intl]);
+
+  useEffect(() => {
+    void fetchSnapshot();
+  }, [fetchSnapshot]);
 
   if (data.loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Spin size="large" tip="加载审计数据..." />
+        <Spin size="large" tip={intl.formatMessage({ id: 'audit.loadingSnapshot' })} />
+      </div>
+    );
+  }
+
+  if (data.errorCode === 'SNAPSHOT_NOT_FOUND') {
+    return (
+      <div style={{ padding: 24, maxWidth: 720 }}>
+        <Alert
+          type="info"
+          message={intl.formatMessage({ id: 'audit.onboarding.title' })}
+          showIcon
+          description={
+            <div>
+              <p style={{ marginBottom: 12 }}>{intl.formatMessage({ id: 'audit.onboarding.lead' })}</p>
+              <ol style={{ marginBottom: 16, paddingLeft: 20 }}>
+                <li>{intl.formatMessage({ id: 'audit.onboarding.step1' })}</li>
+                <li>{intl.formatMessage({ id: 'audit.onboarding.step2' })}</li>
+                <li>{intl.formatMessage({ id: 'audit.onboarding.step3' })}</li>
+              </ol>
+              <Space wrap>
+                <Link to="/traceflow-skills#agent-audit">
+                  <Button type="primary">{intl.formatMessage({ id: 'audit.onboarding.openSkills' })}</Button>
+                </Link>
+                <Button onClick={() => void fetchSnapshot()}>{intl.formatMessage({ id: 'common.retry' })}</Button>
+              </Space>
+            </div>
+          }
+        />
       </div>
     );
   }
@@ -65,13 +129,13 @@ export const Audit: React.FC = () => {
     return (
       <div style={{ padding: 24 }}>
         <Alert
-          message="审计数据加载失败"
+          message={intl.formatMessage({ id: 'audit.error.title' })}
           description={data.error}
           type="error"
           showIcon
           action={
-            <Button size="small" type="primary" onClick={fetchSnapshot}>
-              重试
+            <Button size="small" type="primary" onClick={() => void fetchSnapshot()}>
+              {intl.formatMessage({ id: 'common.retry' })}
             </Button>
           }
         />
@@ -83,10 +147,22 @@ export const Audit: React.FC = () => {
     return (
       <div style={{ padding: 24 }}>
         <Alert
-          message="暂无审计数据"
-          description="请先运行审计扫描器生成数据"
+          message={intl.formatMessage({ id: 'audit.onboarding.title' })}
+          description={intl.formatMessage({ id: 'audit.onboarding.lead' })}
           type="info"
           showIcon
+          action={
+            <Space>
+              <Link to="/traceflow-skills#agent-audit">
+                <Button size="small" type="primary">
+                  {intl.formatMessage({ id: 'audit.onboarding.openSkills' })}
+                </Button>
+              </Link>
+              <Button size="small" onClick={() => void fetchSnapshot()}>
+                {intl.formatMessage({ id: 'common.retry' })}
+              </Button>
+            </Space>
+          }
         />
       </div>
     );
@@ -242,14 +318,16 @@ const QaServiceTable: React.FC<QaServiceTableProps> = ({ data }) => {
   const userColumns = [
     { title: '用户', dataIndex: 'name', key: 'name' },
     { title: '问题数', dataIndex: 'questions', key: 'questions', sorter: (a: any, b: any) => a.questions - b.questions },
-    { 
-      title: 'Top 标签', 
-      dataIndex: 'topTags', 
+    {
+      title: 'Top 标签',
+      dataIndex: 'topTags',
       key: 'topTags',
       render: (tags: { tag: string; count: number }[]) => (
         <Space>
           {tags.slice(0, 3).map(({ tag, count }) => (
-            <Tag key={tag} color="blue">{tag}({count})</Tag>
+            <Tag key={tag} color="blue">
+              {tag}({count})
+            </Tag>
           ))}
         </Space>
       ),
@@ -261,7 +339,7 @@ const QaServiceTable: React.FC<QaServiceTableProps> = ({ data }) => {
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-    
+
     return {
       key: userId,
       name: stats.displayName,

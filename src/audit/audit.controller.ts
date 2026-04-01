@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -56,27 +56,33 @@ export class AuditController {
    * }
    */
   @Get('snapshot')
-  async getSnapshot(): Promise<{ success: boolean; data?: AuditSnapshot; error?: string }> {
+  async getSnapshot(): Promise<{
+    success: boolean;
+    data?: AuditSnapshot;
+    error?: string;
+    code?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
       const snapshotPath = path.join(auditDir, 'snapshots', 'latest.json');
-      
+
       await fs.access(snapshotPath);
       const content = await fs.readFile(snapshotPath, 'utf-8');
       const snapshot = JSON.parse(content) as AuditSnapshot;
-      
+
       return { success: true, data: snapshot };
     } catch (error) {
       console.error('[AuditController] getSnapshot error:', error);
       if ((error as any).code === 'ENOENT') {
-        return { 
-          success: false, 
-          error: '审计快照不存在，请先运行审计扫描器' 
+        return {
+          success: false,
+          code: 'SNAPSHOT_NOT_FOUND',
+          error: '审计快照不存在，请先运行审计扫描器',
         };
       }
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -93,27 +99,33 @@ export class AuditController {
   @Get('snapshot/:month')
   async getSnapshotByMonth(
     @Param('month') month: string,
-  ): Promise<{ success: boolean; data?: AuditSnapshot; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    data?: AuditSnapshot;
+    error?: string;
+    code?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
       const snapshotPath = path.join(auditDir, 'snapshots', `${month}.json`);
-      
+
       await fs.access(snapshotPath);
       const content = await fs.readFile(snapshotPath, 'utf-8');
       const snapshot = JSON.parse(content) as AuditSnapshot;
-      
+
       return { success: true, data: snapshot };
     } catch (error) {
       console.error('[AuditController] getSnapshotByMonth error:', error);
       if ((error as any).code === 'ENOENT') {
-        return { 
-          success: false, 
-          error: `找不到 ${month} 的审计快照` 
+        return {
+          success: false,
+          code: 'SNAPSHOT_MONTH_NOT_FOUND',
+          error: `找不到 ${month} 的审计快照`,
         };
       }
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

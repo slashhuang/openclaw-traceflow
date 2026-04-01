@@ -63,20 +63,23 @@ export class ReflectionsController {
   }
 
   /**
-   * 读取反思记录
+   * 读取反思记录文件（若不存在则 exists 为 false）
    */
-  private async readReflections(): Promise<Reflection[]> {
+  private async loadReflectionsFromFile(): Promise<{
+    exists: boolean;
+    reflections: Reflection[];
+  }> {
     const reflectionsFile = await this.getReflectionsFile();
-    
+
     try {
       await fs.access(reflectionsFile);
     } catch {
-      return [];
+      return { exists: false, reflections: [] };
     }
 
     const content = await fs.readFile(reflectionsFile, 'utf-8');
-    const lines = content.trim().split('\n').filter(line => line.trim());
-    
+    const lines = content.trim().split('\n').filter((line) => line.trim());
+
     const reflections: Reflection[] = [];
     for (const line of lines) {
       try {
@@ -86,7 +89,7 @@ export class ReflectionsController {
       }
     }
 
-    return reflections;
+    return { exists: true, reflections };
   }
 
   /**
@@ -114,22 +117,25 @@ export class ReflectionsController {
     @Query('dimension') dimension?: string,
     @Query('limit') limit?: number,
   ) {
-    let reflections = await this.readReflections();
+    const { exists: reflectionsFileExists, reflections: allReflections } =
+      await this.loadReflectionsFromFile();
+
+    let reflections = allReflections;
 
     // 筛选
     if (status) {
-      reflections = reflections.filter(r => r.status === status);
+      reflections = reflections.filter((r) => r.status === status);
     }
     if (priority) {
-      reflections = reflections.filter(r => r.priority === priority);
+      reflections = reflections.filter((r) => r.priority === priority);
     }
     if (dimension) {
-      reflections = reflections.filter(r => r.dimension === dimension);
+      reflections = reflections.filter((r) => r.dimension === dimension);
     }
 
     // 按时间倒序
-    reflections.sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    reflections.sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 
     // 限制数量
@@ -139,15 +145,19 @@ export class ReflectionsController {
 
     // 统计
     const stats = {
-      pending: reflections.filter(r => r.status === 'pending').length,
-      applied: reflections.filter(r => r.status === 'applied').length,
-      ignored: reflections.filter(r => r.status === 'ignored').length,
-      escalated: reflections.filter(r => r.status === 'escalated').length,
+      pending: reflections.filter((r) => r.status === 'pending').length,
+      applied: reflections.filter((r) => r.status === 'applied').length,
+      ignored: reflections.filter((r) => r.status === 'ignored').length,
+      escalated: reflections.filter((r) => r.status === 'escalated').length,
     };
 
     return {
       reflections,
       stats,
+      source: { reflectionsFileExists },
+      ...(!reflectionsFileExists
+        ? { code: 'REFLECTIONS_SOURCE_MISSING' as const }
+        : {}),
       filters: {
         dimensions: ['ai', 'user', 'interaction'],
         categories: ['config', 'skill', 'prompt', 'input-clarity', 'interaction'],
@@ -161,7 +171,7 @@ export class ReflectionsController {
    */
   @Get(':id')
   async getReflection(@Param('id') id: string) {
-    const reflections = await this.readReflections();
+    const { reflections } = await this.loadReflectionsFromFile();
     const reflection = reflections.find(r => r.id === id);
     
     if (!reflection) {
@@ -176,7 +186,7 @@ export class ReflectionsController {
    */
   @Get(':id/diff')
   async getDiff(@Param('id') id: string) {
-    const reflections = await this.readReflections();
+    const { reflections } = await this.loadReflectionsFromFile();
     const reflection = reflections.find(r => r.id === id);
     
     if (!reflection) {
@@ -208,7 +218,7 @@ export class ReflectionsController {
    */
   @Get(':id/full')
   async getFullContent(@Param('id') id: string) {
-    const reflections = await this.readReflections();
+    const { reflections } = await this.loadReflectionsFromFile();
     const reflection = reflections.find(r => r.id === id);
     
     if (!reflection) {
@@ -239,8 +249,8 @@ export class ReflectionsController {
     @Param('id') id: string,
     @Body() body: { action?: 'apply' | 'ignore' | 'escalate'; note?: string } = {},
   ) {
-    const reflections = await this.readReflections();
-    const index = reflections.findIndex(r => r.id === id);
+    const { reflections } = await this.loadReflectionsFromFile();
+    const index = reflections.findIndex((r) => r.id === id);
     
     if (index === -1) {
       return { error: 'Reflection not found' };

@@ -22,6 +22,7 @@ import { ReflectionsController } from './reflections/reflections.controller';
 import { FileTreeService } from './common/file-tree.service';
 import { WorkspaceController } from './workspace/workspace.controller';
 import { AuditController } from './audit/audit.controller';
+import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.controller';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AuditController } from './audit/audit.controller';
     ReflectionsController,
     WorkspaceController,
     AuditController,
+    TraceflowSkillsController,
   ],
   providers: [AppService, EvaluationPromptConfigService, FileTreeService],
 })

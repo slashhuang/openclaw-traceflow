@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { useIntl } from 'react-intl';
 import {
+  Alert,
   Card,
   Typography,
   Table,
   Tag,
   Button,
   Space,
-  Collapse,
   Modal,
   message,
-  Tabs,
   Select,
   Statistic,
   Row,
@@ -28,8 +29,6 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text, Paragraph } = Typography;
-const { Panel } = Collapse;
-const { TabPane } = Tabs;
 const { Option } = Select;
 
 interface Reflection {
@@ -65,11 +64,15 @@ interface ReflectionsResponse {
     ignored: number;
     escalated: number;
   };
+  source?: { reflectionsFileExists: boolean };
+  code?: string;
 }
 
 export const Reflections: React.FC = () => {
+  const intl = useIntl();
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [loading, setLoading] = useState(false);
+  const [sourceMissing, setSourceMissing] = useState(false);
   const [stats, setStats] = useState<ReflectionsResponse['stats']>({
     pending: 0,
     applied: 0,
@@ -94,17 +97,21 @@ export const Reflections: React.FC = () => {
       if (dimensionFilter !== 'all') params.append('dimension', dimensionFilter);
 
       const response = await fetch(`/api/reflections?${params.toString()}`);
-      const data: ReflectionsResponse = await response.json();
-      
-      setReflections(data.reflections);
+      const data = (await response.json()) as ReflectionsResponse;
+
+      setReflections(data.reflections ?? []);
       setStats(data.stats);
+      const missing =
+        data.code === 'REFLECTIONS_SOURCE_MISSING' ||
+        data.source?.reflectionsFileExists === false;
+      setSourceMissing(Boolean(missing));
     } catch (error) {
-      message.error('加载反思列表失败');
+      message.error(intl.formatMessage({ id: 'reflections.loadError' }));
       console.error(error);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, dimensionFilter]);
+  }, [statusFilter, priorityFilter, dimensionFilter, intl]);
 
   useEffect(() => {
     loadReflections();
@@ -302,10 +309,34 @@ export const Reflections: React.FC = () => {
   ];
 
   return (
-    <div>
+    <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>🔄 反思列表</Title>
+        <Title level={4} style={{ margin: 0 }}>
+          🔄 反思列表
+        </Title>
       </div>
+
+      {sourceMissing ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={intl.formatMessage({ id: 'reflections.onboarding.title' })}
+          description={
+            <div>
+              <p style={{ marginBottom: 12 }}>{intl.formatMessage({ id: 'reflections.onboarding.lead' })}</p>
+              <ol style={{ marginBottom: 16, paddingLeft: 20 }}>
+                <li>{intl.formatMessage({ id: 'reflections.onboarding.step1' })}</li>
+                <li>{intl.formatMessage({ id: 'reflections.onboarding.step2' })}</li>
+                <li>{intl.formatMessage({ id: 'reflections.onboarding.step3' })}</li>
+              </ol>
+              <Link to="/traceflow-skills#self-improvement">
+                <Button type="primary">{intl.formatMessage({ id: 'reflections.onboarding.openSkills' })}</Button>
+              </Link>
+            </div>
+          }
+        />
+      ) : null}
 
       {/* 统计卡片 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
@@ -399,6 +430,20 @@ export const Reflections: React.FC = () => {
           loading={loading}
           pagination={{ pageSize: 20 }}
           scroll={{ x: 1200 }}
+          locale={
+            !loading && !sourceMissing
+              ? {
+                  emptyText: (
+                    <span>
+                      {intl.formatMessage({ id: 'reflections.emptyHint' })}{' '}
+                      <Link to="/traceflow-skills#self-improvement">
+                        {intl.formatMessage({ id: 'menu.traceflowSkills' })}
+                      </Link>
+                    </span>
+                  ),
+                }
+              : undefined
+          }
         />
       </Card>
 

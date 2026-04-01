@@ -17,6 +17,46 @@ export default {
   'menu.pricing': '价格',
   'menu.logs': '日志',
   'menu.settings': '设置',
+  'menu.traceflowSkills': 'TraceFlow 配套 Skills',
+  'traceflowSkills.pageTitle': 'TraceFlow 配套 Skills',
+  'traceflowSkills.intro':
+    '以下为本开源仓库随 TraceFlow 一并提供的 OpenClaw 配套 skill；请按你环境中的约定复制到 OpenClaw 的 skill 目录并自行安装。TraceFlow 不会代你安装或执行这些 skill。',
+  'traceflowSkills.loading': '加载配套 Skills…',
+  'traceflowSkills.loadErrorTitle': '配套 Skills 加载失败',
+  'traceflowSkills.loadError': '无法加载配套 Skills',
+  'traceflowSkills.copyFile': '复制本文件',
+  'traceflowSkills.copyAll': '复制全部文件',
+  'traceflowSkills.copySuccess': '已复制：{label}',
+  'traceflowSkills.copyFailed': '复制失败，请检查浏览器权限',
+  'traceflowSkills.skill.agent_audit.title': 'agent-audit（贡献审计）',
+  'traceflowSkills.skill.agent_audit.desc':
+    '扫描会话 JSONL，生成贡献审计快照；安装后在 OpenClaw 中对 Agent 说「跑一下审计」等触发词即可生成数据。',
+  'traceflowSkills.skill.self_improvement.title': 'self-improvement（实时反思）',
+  'traceflowSkills.skill.self_improvement.desc':
+    '在会话中检测纠正、错误与洞察，并写入 reflections.jsonl，供本页列表展示（需 OpenClaw 侧安装并启用该机制）。',
+  'traceflowSkills.backToAudit': '返回贡献审计',
+  'audit.loadingSnapshot': '加载审计数据…',
+  'audit.onboarding.title': '还没有审计快照',
+  'audit.onboarding.lead':
+    '贡献审计依赖 OpenClaw 侧的 agent-audit skill：请先到「TraceFlow 配套 Skills」复制并自行安装，再在 OpenClaw 里触发扫描。',
+  'audit.onboarding.step1': '打开侧栏「TraceFlow 配套 Skills」，将 agent-audit 按你的 OpenClaw 约定放入 skills 目录。',
+  'audit.onboarding.step2': '在 OpenClaw 对话中对 Agent 说「跑一下审计」（或「审计报告」「贡献统计」等同类说法）以生成快照。',
+  'audit.onboarding.step3': '完成后回到本页点击「重试」或刷新。',
+  'audit.onboarding.openSkills': '前往 TraceFlow 配套 Skills',
+  'audit.error.title': '审计数据加载失败',
+  'audit.error.unknown': '未知错误',
+  'reflections.onboarding.title': '还没有反思数据源',
+  'reflections.onboarding.lead':
+    '本页从 OpenClaw state 目录下的 reflections.jsonl 读取数据，通常由 self-improvement 技能在运行时写入。',
+  'reflections.onboarding.step1':
+    '打开侧栏「TraceFlow 配套 Skills」，将 self-improvement 按你的 OpenClaw 约定放入 skills 目录（该技能依赖本机 git、python3，详见 SKILL 正文）。',
+  'reflections.onboarding.step2':
+    '在 OpenClaw 中正常使用 Agent；当出现用户纠正、修复请求或工具失败等场景时，机制会将记录写入 reflections.jsonl。',
+  'reflections.onboarding.step3': '回到本页点击「刷新」。',
+  'reflections.onboarding.openSkills': '前往 TraceFlow 配套 Skills',
+  'reflections.loadError': '加载反思列表失败',
+  'reflections.emptyHint':
+    '当前筛选下暂无记录。可在 OpenClaw 对话中触发纠正、修复等场景以产生反思；也可在配套 Skills 页查看 self-improvement 说明。',
   'gateway.banner.title': 'Gateway 连接失败',
   'gateway.banner.settings': '去设置恢复连接',
   'gateway.connected': 'Gateway 已连接',

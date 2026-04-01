@@ -17,6 +17,7 @@ import Workspace from './pages/Workspace';
 import States from './pages/States';
 import Reflections from './pages/Reflections';
 import Audit from './pages/Audit';
+import TraceflowSkills from './pages/TraceflowSkills';
 import './styles/workspace.css';
 
 function AppInner() {
@@ -65,6 +66,7 @@ function AppInner() {
           <Route path="/workspace" element={<Workspace />} />
           <Route path="/states" element={<States />} />
           <Route path="/reflections" element={<Reflections />} />
+          <Route path="/traceflow-skills" element={<TraceflowSkills />} />
           <Route path="/audit" element={<Audit />} />
         </Route>
       </Routes>

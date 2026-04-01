@@ -110,6 +110,9 @@ pnpm test
 | `POST /api/setup/test-connection` | 测试 Gateway |
 | `GET /api/skills/system-prompt/probe` | System Prompt 嗅探（workspace 引导文件等） |
 | `PUT /api/skills/system-prompt/workspace-file` | 写入核心引导 `AGENTS/SOUL/IDENTITY/USER.md`（需 AuthGuard；`accessMode=none` 时默认禁止，除非 `OPENCLAW_WORKSPACE_WRITE=true`；仅当 TraceFlow 进程能访问解析出的 workspace 路径时有效） |
+| `GET /api/audit/snapshot` | 贡献审计快照；无 `latest.json` 时 `success: false` 且 `code: SNAPSHOT_NOT_FOUND`（仍带 `error` 文案） |
+| `GET /api/traceflow-skills` | TraceFlow 配套 OpenClaw skills 的 vendored 文件列表与正文（`/traceflow-skills` 页） |
+| `GET /api/reflections` | 反思列表；无 `reflections.jsonl` 时 `source.reflectionsFileExists: false` 且 `code: REFLECTIONS_SOURCE_MISSING` |
 
 ## WebSocket
 
