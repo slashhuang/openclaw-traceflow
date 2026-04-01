@@ -141,3 +141,49 @@ pnpm test
 - i18n：新增文案需同时改 `frontend/src/locales/en-US.js` 与 `zh-CN.js`  
 - 修改 Gateway 相关行为时同步更新 **README.md**、**README.zh-CN.md**、本文件与 **`config/README.md`**
 - **性能与已知瓶颈**：`MetricsService.refreshToolStatsSnapshot()` 对每个会话调用 `getSessionDetail`（会话多时 O(n) 磁盘/解析）；后台 `MetricsModule` 定时任务同路径；详见 **`ROADMAP.md`**
+
+---
+
+## 路径解析规范（openclawCommonUtils）
+
+**统一工具库**：`src/common/resolveOpenClawPaths.ts`
+
+所有涉及 OpenClaw 路径解析的代码**必须使用**此工具库，**禁止硬编码** `~/.openclaw/xxx`。
+
+### 使用方式
+
+```typescript
+import { resolveUserPath, resolveWorkspaceDir, resolveAuditDir, resolveStateDir } from './common/resolveOpenClawPaths';
+
+const workspaceDir = resolveWorkspaceDir();
+const auditDir = resolveAuditDir();
+```
+
+### 路径优先级
+
+| 函数 | 优先级 1 | 优先级 2 | 默认 |
+|------|---------|---------|------|
+| `resolveWorkspaceDir()` | `OPENCLAW_WORKSPACE_DIR` | - | `~/.openclaw/workspace` |
+| `resolveStateDir()` | `OPENCLAW_STATE_DIR` | - | `~/.openclaw/state` |
+| `resolveAuditDir()` | `OPENCLAW_AUDIT_DIR` | `workspaceDir/.openclawAudits` | `~/.openclaw/workspace/.openclawAudits` |
+
+### 环境变量支持
+
+| 变量名 | 说明 |
+|--------|------|
+| `OPENCLAW_WORKSPACE_DIR` | 自定义 workspace 目录 |
+| `OPENCLAW_STATE_DIR` | 自定义 state 目录 |
+| `OPENCLAW_AUDIT_DIR` | 自定义 audit/reflections 目录 |
+
+### 路径格式支持
+
+- `~/xxx` → `/home/user/xxx`
+- `$HOME/xxx` → `/home/user/xxx`
+- 绝对路径 → 原样返回
+
+### 更新流程
+
+1. 修改 `src/common/resolveOpenClawPaths.ts`
+2. 同步更新 monorepo 根目录 `openclawCommonUtils/resolveOpenClawPaths.ts`
+3. 测试所有使用路径解析的功能
+4. 提交更改
