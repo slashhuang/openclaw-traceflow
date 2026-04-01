@@ -237,32 +237,98 @@ snapshots/latest.json (聚合快照)
 
 ## 4. 技术实现
 
-### 4.1 后端修改
+### 4.1 agent-audit Skill 调整
 
-#### 4.1.1 审计事件数据结构扩展
+#### 4.1.1 MR Title 提取
 
-**修改 `audit-scanner.mjs`**，提取 MR title 和问题摘要：
+**修改 `claw-family/skills/agent-audit/scripts/audit-scanner.mjs`**：
+
+**方案 A：调用 GitLab API**（推荐）
+```javascript
+// 在检测到 gitlab-mr.mjs --create 时，提取 MR title
+async function extractMrTitle(project, iid) {
+  try {
+    const response = await fetch(
+      `https://gitlab.com/api/v4/projects/${encodeURIComponent(project)}/merge_requests/${iid}`,
+      { headers: { 'PRIVATE-TOKEN': process.env.GITLAB_TOKEN } }
+    );
+    const data = await response.json();
+    return data.title;
+  } catch (error) {
+    console.warn('[audit] Failed to fetch MR title:', error);
+    return null;
+  }
+}
+```
+
+**方案 B：从 assistant 回复中提取**（降级方案）
+```javascript
+// 从 assistant 回复中提取 MR title
+// 示例回复："已创建 MR #95: feat(audit): 统一路径解析逻辑"
+function extractTitleFromReply(reply) {
+  const match = reply.match(/MR #(\d+):\s*(.+?)(?:\n|$)/);
+  return match ? match[2] : null;
+}
+```
+
+#### 4.1.2 问题摘要生成
+
+**修改 `audit-scanner.mjs`**，生成问题摘要：
+
+```javascript
+// 截取前 100 个字符，去除 metadata 块
+function summarizeQuestion(userMessage) {
+  // 1. 去除 metadata 块（Conversation info 等）
+  let cleaned = userMessage.replace(/Conversation info[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/\[message_id:[^\]]+\]/g, '');
+  
+  // 2. 去除首尾空白
+  cleaned = cleaned.trim();
+  
+  // 3. 截取前 100 字
+  if (cleaned.length > 100) {
+    return cleaned.slice(0, 100) + '...';
+  }
+  
+  return cleaned;
+}
+```
+
+#### 4.1.3 审计事件数据结构扩展
+
+**修改后的事件结构**：
 
 ```javascript
 // 代码交付事件
 {
   type: 'code_delivery',
-  // ... 现有字段
+  timestamp: '2026-04-01T10:48:00+08:00',
+  sessionId: 'main/xxx',
+  senderId: 'xiaogang.h',
+  senderName: '黄晓刚',
   mr: {
     project: 'claw-sources',
     iid: 95,
     title: 'feat(audit): 统一路径解析逻辑',  // ← 新增
-    url: 'https://...',
-    // ...
-  }
+    url: 'https://github.com/slashhuang/claw-sources/pull/95',
+    sourceBranch: 'feat/unify-path-resolution',
+    targetBranch: 'main'
+  },
+  tokenUsage: { input: 75000, output: 7000 },
+  sessionId: 'main/xxx'
 }
 
 // 问答事件
 {
   type: 'qa',
-  // ... 现有字段
-  userMessage: '帮我创建个 PR...',  // 已有
-  questionSummary: '帮我创建个 PR，修复 audit 目录路径…'  // ← 新增（截取后）
+  timestamp: '2026-04-01T10:35:00+08:00',
+  sessionId: 'main/yyy',
+  senderId: 'xiaogang.h',
+  senderName: '黄晓刚',
+  tags: ['code/mr-create'],
+  userMessage: '帮我创建个 PR...',  // 完整内容（用于导出）
+  questionSummary: '帮我创建个 PR，修复 audit 目录路径…',  // ← 新增（前 100 字）
+  tokenUsage: { input: 80000, output: 2000 }
 }
 ```
 
