@@ -226,6 +226,49 @@ export const Audit: React.FC = () => {
         </Col>
       </Row>
 
+      {/* 审计明细入口卡片 */}
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+        <Col span={8}>
+          <Card 
+            title="代码交付明细" 
+            extra={<Link to="/audit/code">查看详情 →</Link>}
+            onClick={() => window.location.href = '/audit/code'}
+          >
+            <Statistic 
+              title="MR 数量" 
+              value={snapshot.codeDelivery.totalMRs} 
+              valueStyle={{ color: '#1890ff' }} 
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card 
+            title="问答服务明细" 
+            extra={<Link to="/audit/qa">查看详情 →</Link>}
+            onClick={() => window.location.href = '/audit/qa'}
+          >
+            <Statistic 
+              title="问题总数" 
+              value={snapshot.qaService.totalQuestions} 
+              valueStyle={{ color: '#52c41a' }} 
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card 
+            title="自动化明细" 
+            extra={<Link to="/audit/automation">查看详情 →</Link>}
+            onClick={() => window.location.href = '/audit/automation'}
+          >
+            <Statistic 
+              title="运行次数" 
+              value={snapshot.automation.totalRuns} 
+              valueStyle={{ color: '#fa8c16' }} 
+            />
+          </Card>
+        </Col>
+      </Row>
+
       {/* 代码交付详情 */}
       <Card title="📦 代码交付" style={{ marginBottom: 24 }}>
         <CodeDeliveryTable data={snapshot.codeDelivery} />

@@ -19,6 +19,9 @@ import Reflections from './pages/Reflections';
 import Audit from './pages/Audit';
 import TraceflowSkills from './pages/TraceflowSkills';
 import './styles/workspace.css';
+import CodeDeliveryList from './pages/audit/CodeDeliveryList';
+import QaServiceList from './pages/audit/QaServiceList';
+import AutomationList from './pages/audit/AutomationList';
 
 function AppInner() {
   const intl = useIntl();
@@ -68,6 +71,10 @@ function AppInner() {
           <Route path="/reflections" element={<Reflections />} />
           <Route path="/traceflow-skills" element={<TraceflowSkills />} />
           <Route path="/audit" element={<Audit />} />
+          <Route path="/audit/code" element={<CodeDeliveryList />} />
+          <Route path="/audit/qa" element={<QaServiceList />} />
+          <Route path="/audit/automation" element={<AutomationList />} />
+          <Route path="/audit/session/:id" element={<SessionDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>
