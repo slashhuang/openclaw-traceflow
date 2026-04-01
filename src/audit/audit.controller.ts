@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { resolveUserPath, resolveWorkspaceDir, resolveAuditDir } from '../common/resolveOpenClawPaths';
 import type { AuditSnapshot, AuditEvent, ScanAnchors } from './types';
 
 /**
@@ -18,10 +19,26 @@ export class AuditController {
   /**
    * 获取审计目录根路径
    * 
-   * 优先使用 OpenClawService 解析的 workspaceDir，
-   * 降级到 ~/.openclaw/workspace/.openclawAudits
+   * 参考 OpenClaw 源码：external-refs/openclaw/src/config/paths.ts
+   * 
+   * 优先级：
+   * 1. OPENCLAW_AUDIT_DIR 环境变量
+   * 2. OPENCLAW_WORKSPACE_DIR/.openclawAudits
+   * 3. OpenClawService 解析的 workspaceDir
+   * 4. ~/.openclaw/workspace/.openclawAudits (默认)
    */
   private async getAuditDir(): Promise<string> {
+    // 优先级 1: 环境变量直接指定
+    if (process.env.OPENCLAW_AUDIT_DIR) {
+      return resolveUserPath(process.env.OPENCLAW_AUDIT_DIR);
+    }
+    
+    // 优先级 2: 基于 workspace 环境变量
+    if (process.env.OPENCLAW_WORKSPACE_DIR) {
+      return path.join(resolveUserPath(process.env.OPENCLAW_WORKSPACE_DIR), '.openclawAudits');
+    }
+    
+    // 优先级 3: 使用 OpenClawService 解析
     try {
       const paths = await this.openClawService.getResolvedPaths();
       if (paths.workspaceDir?.trim()) {
@@ -33,7 +50,9 @@ export class AuditController {
         err instanceof Error ? err.message : err,
       );
     }
-    return path.join(os.homedir(), '.openclaw', 'workspace', '.openclawAudits');
+    
+    // 优先级 4: 默认路径
+    return resolveAuditDir();
   }
 
   /**
