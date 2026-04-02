@@ -64,8 +64,9 @@ describe('AuditController', () => {
   describe('getCodeDeliveryDetails', () => {
     it('should return code_delivery events with pagination', async () => {
       // Mock audit dir and events file
-      mockedFs.access.mockResolvedValueOnce(undefined);
-      mockedFs.readFile.mockResolvedValueOnce(
+      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.readdir.mockResolvedValue(['2026-04.jsonl']);
+      mockedFs.readFile.mockResolvedValue(
         JSON.stringify([
           {
             type: 'code_delivery',
@@ -104,8 +105,9 @@ describe('AuditController', () => {
 
   describe('getQaDetails', () => {
     it('should return qa events with tag filter', async () => {
-      mockedFs.access.mockResolvedValueOnce(undefined);
-      mockedFs.readFile.mockResolvedValueOnce(
+      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.readdir.mockResolvedValue(['2026-04.jsonl']);
+      mockedFs.readFile.mockResolvedValue(
         JSON.stringify([
           {
             type: 'qa',
@@ -131,8 +133,9 @@ describe('AuditController', () => {
 
   describe('getAutomationDetails', () => {
     it('should return automation events with type filter', async () => {
-      mockedFs.access.mockResolvedValueOnce(undefined);
-      mockedFs.readFile.mockResolvedValueOnce(
+      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.readdir.mockResolvedValue(['2026-04.jsonl']);
+      mockedFs.readFile.mockResolvedValue(
         JSON.stringify([
           {
             type: 'automation',
