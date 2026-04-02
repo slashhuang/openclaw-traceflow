@@ -137,7 +137,8 @@ export class SessionsService {
     let filtered: Session[] = all;
     if (filter === 'archived' || filter === 'stale_index') {
       // 归档会话：查找带有 .reset. 标记的会话文件
-      const archivedSessions = await this.openclawService.listArchivedSessions();
+      const archivedSessions =
+        await this.openclawService.listArchivedSessions();
       filtered = archivedSessions as Session[];
     } else if (filter !== 'all') {
       filtered = all.filter((s) => s.status === filter);
@@ -148,6 +149,17 @@ export class SessionsService {
       total: filtered.length,
       page: Math.max(page, 1),
       pageSize,
+    };
+  }
+
+  async getAllSessions(filter: string = 'all'): Promise<{
+    items: Session[];
+    total: number;
+  }> {
+    const result = await this.listSessionsPaged(1, 1000, filter);
+    return {
+      items: result.items,
+      total: result.total,
     };
   }
 
