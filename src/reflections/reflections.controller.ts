@@ -95,10 +95,10 @@ export class ReflectionsController {
    */
   private async appendReflection(reflection: Partial<Reflection>): Promise<void> {
     const reflectionsFile = await this.getReflectionsFile();
-    const stateRoot = await this.getStateRoot();
     
-    // 确保目录存在
-    await fs.mkdir(stateRoot, { recursive: true });
+    // 确保目录存在（从文件路径推断目录）
+    const reflectionsDir = path.dirname(reflectionsFile);
+    await fs.mkdir(reflectionsDir, { recursive: true });
     
     // JSONL 格式：单行 JSON
     const line = JSON.stringify(reflection) + '\n';
