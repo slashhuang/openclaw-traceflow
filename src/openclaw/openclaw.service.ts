@@ -1424,23 +1424,29 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     try {
       const snapshot = await this.getArchivedResetSnapshot();
       const all = snapshot.all || [];
-      
+
       // 按 sessionId 分组，每个会话只保留最新的归档
-      const bySessionId = new Map<string, typeof all[0]>();
+      const bySessionId = new Map<string, (typeof all)[0]>();
       for (const usage of all) {
         const existing = bySessionId.get(usage.sessionId);
         if (!existing || usage.resetTimestamp > existing.resetTimestamp) {
           bySessionId.set(usage.sessionId, usage);
         }
       }
-      
+
       return Array.from(bySessionId.values()).map((usage) => ({
         sessionKey: `main/${usage.sessionId}`,
         sessionId: usage.sessionId,
         user: 'archived',
         typeLabel: '归档',
         status: 'archived',
-        lastActive: new Date(usage.resetTimestamp.replace(/(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})/, '$1:$2:$3')).getTime() || Date.now(),
+        lastActive:
+          new Date(
+            usage.resetTimestamp.replace(
+              /(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})/,
+              '$1:$2:$3',
+            ),
+          ).getTime() || Date.now(),
         duration: 0,
         tokenUsage: {
           input: 0,
