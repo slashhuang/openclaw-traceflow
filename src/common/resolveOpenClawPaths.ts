@@ -2,18 +2,21 @@
  * OpenClaw 路径解析工具
  * 
  * 参考 OpenClaw 源码：external-refs/openclaw/src/config/paths.ts
+ * 与 claw-commons/openclawCommonUtils/resolveOpenClawPaths.mjs 语义一致
  * 
  * 用法：
  * ```typescript
- * import { resolveUserPath, resolveWorkspaceDir, resolveAuditDir, resolveStateDir } from './resolveOpenClawPaths';
+ * import { resolveUserPath, resolveWorkspaceDir, resolveAuditDir, resolveStateDir, resolveSessionsDir } from './resolveOpenClawPaths';
  * 
  * const workspaceDir = resolveWorkspaceDir();
  * const auditDir = resolveAuditDir();
+ * const sessionsDir = resolveSessionsDir();
  * ```
  */
 
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 
 const HOME = process.env.HOME || process.env.USERPROFILE || '/root';
 
@@ -56,13 +59,25 @@ export function resolveWorkspaceDir(): string {
  * 
  * 优先级：
  * 1. OPENCLAW_STATE_DIR 环境变量
- * 2. ~/.openclaw/state (默认)
+ * 2. OPENCLAW_WORKSPACE_DIR/.clawStates (自定义 workspace 的 state 目录)
+ * 3. ~/.openclaw/state (默认)
  * 
  * @returns state 目录路径
  */
 export function resolveStateDir(): string {
   if (process.env.OPENCLAW_STATE_DIR) {
     return resolveUserPath(process.env.OPENCLAW_STATE_DIR);
+  }
+  // 如果使用了自定义 workspace，state 目录通常在 workspace/.clawStates
+  if (process.env.OPENCLAW_WORKSPACE_DIR) {
+    const workspaceDir = resolveUserPath(process.env.OPENCLAW_WORKSPACE_DIR);
+    const candidateStateDir = path.join(workspaceDir, '.clawStates');
+    try {
+      fs.accessSync(candidateStateDir);
+      return candidateStateDir;
+    } catch {
+      // 如果不存在，回退到默认路径
+    }
   }
   return path.join(HOME, '.openclaw', 'state');
 }
@@ -91,4 +106,23 @@ export function resolveAuditDir(): string {
  */
 export function resolveReflectionsDir(): string {
   return resolveAuditDir();
+}
+
+/**
+ * 解析 sessions 目录
+ * 
+ * 优先级：
+ * 1. OPENCLAW_SESSIONS_DIR 环境变量
+ * 2. stateDir/agents/main/sessions (自定义 state 目录)
+ * 3. ~/.openclaw/agents/main/sessions (默认)
+ * 
+ * @returns sessions 目录路径
+ */
+export function resolveSessionsDir(): string {
+  if (process.env.OPENCLAW_SESSIONS_DIR) {
+    return resolveUserPath(process.env.OPENCLAW_SESSIONS_DIR);
+  }
+  // 使用自定义 state 目录
+  const stateDir = resolveStateDir();
+  return path.join(stateDir, 'agents', 'main', 'sessions');
 }
