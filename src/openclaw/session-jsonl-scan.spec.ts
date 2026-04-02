@@ -1,6 +1,6 @@
 import { scanSessionJsonlLines } from './session-jsonl-scan';
 
-/** 与 claw-family 真实 bailian 失败回合一致：content 为空数组 + 顶层 errorMessage */
+/** 与生产环境某类 bailian 失败回合一致：content 为空数组 + 顶层 errorMessage */
 const REALISTIC_ASSISTANT_CONNECTION_ERROR = {
   type: 'message',
   id: 'ec6d0adb',

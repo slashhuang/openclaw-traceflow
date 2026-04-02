@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Copy claw-family companion skills into TraceFlow resources (monorepo only).
- * Run from openclaw-traceflow/: pnpm run sync:bundled-skills
+ * Copy companion OpenClaw skills from a sibling **claw-brains** clone into TraceFlow `resources/bundled-skills/`.
+ * Optional maintainer workflow: only when `../claw-brains/skills/` exists on disk (e.g. same machine workspace).
+ * Run: `pnpm run sync:bundled-skills` from openclaw-traceflow/
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const tfRoot = path.resolve(__dirname, '..');
-const monorepoSkills = path.resolve(tfRoot, '..', 'claw-family', 'skills');
+const monorepoSkills = path.resolve(tfRoot, '..', 'claw-brains', 'skills');
 
 /** @type {{ id: string; files: string[] }[]} */
 const SKILLS = [
@@ -39,7 +40,7 @@ function syncSkill(skillId, relFiles) {
 
   if (!fs.existsSync(marker)) {
     console.warn(
-      `[sync-bundled-skills] Skip ${skillId}: source not found (expected monorepo):`,
+      `[sync-bundled-skills] Skip ${skillId}: source not found (optional sibling ../claw-brains/skills):`,
       srcRoot,
     );
     return;

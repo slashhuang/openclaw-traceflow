@@ -11,7 +11,7 @@ test('should load /audit/code and display MR list', async ({ page }) => {
         {
           type: 'code_delivery',
           timestamp: '2026-04-01T10:00:00Z',
-          mr: { iid: 95, title: 'feat(audit): 支持 MR title 提取', project: 'claw-sources' },
+          mr: { iid: 95, title: 'feat(audit): 支持 MR title 提取', project: 'acme/platform' },
           senderId: 'xiaogang.h',
           tokenUsage: { input: 75000, output: 7000 },
           sessionId: 'main/xxx',

@@ -3,14 +3,18 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import { OpenClawService } from '../openclaw/openclaw.service';
-import { resolveUserPath, resolveWorkspaceDir, resolveAuditDir } from '../common/resolveOpenClawPaths';
+import {
+  resolveUserPath,
+  resolveWorkspaceDir,
+  resolveAuditDir,
+} from '../common/resolveOpenClawPaths';
 import type { AuditSnapshot, AuditEvent, ScanAnchors } from './types';
 
 /**
  * Agent 贡献审计 API
  *
  * 提供审计快照查询、事件列表、扫描触发等功能
- * 数据来源于 claw-family/skills/agent-audit/audit-scanner.mjs
+ * 扫描脚本：本仓库 `resources/bundled-skills/agent-audit/scripts/audit-scanner.mjs`（与 OpenClaw 侧 agent-audit 技能对齐）
  */
 @Controller('api/audit')
 export class AuditController {
@@ -35,7 +39,10 @@ export class AuditController {
 
     // 优先级 2: 基于 workspace 环境变量
     if (process.env.OPENCLAW_WORKSPACE_DIR) {
-      return path.join(resolveUserPath(process.env.OPENCLAW_WORKSPACE_DIR), '.openclawAudits');
+      return path.join(
+        resolveUserPath(process.env.OPENCLAW_WORKSPACE_DIR),
+        '.openclawAudits',
+      );
     }
 
     // 优先级 3: 使用 OpenClawService 解析
@@ -92,7 +99,7 @@ export class AuditController {
       return { success: true, data: snapshot };
     } catch (error) {
       console.error('[AuditController] getSnapshot error:', error);
-      if ((error as any).code === 'ENOENT') {
+      if (error.code === 'ENOENT') {
         return {
           success: false,
           code: 'SNAPSHOT_NOT_FOUND',
@@ -116,9 +123,7 @@ export class AuditController {
    * GET /api/audit/snapshot/2026-03
    */
   @Get('snapshot/:month')
-  async getSnapshotByMonth(
-    @Param('month') month: string,
-  ): Promise<{
+  async getSnapshotByMonth(@Param('month') month: string): Promise<{
     success: boolean;
     data?: AuditSnapshot;
     error?: string;
@@ -135,7 +140,11 @@ export class AuditController {
       return { success: true, data: snapshot };
     } catch (error) {
       console.error('[AuditController] getSnapshotByMonth error:', error);
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
         return {
           success: false,
           code: 'SNAPSHOT_MONTH_NOT_FOUND',
@@ -167,7 +176,12 @@ export class AuditController {
     @Query('type') type?: string,
     @Query('senderId') senderId?: string,
     @Query('limit') limit?: number,
-  ): Promise<{ success: boolean; events?: AuditEvent[]; total?: number; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    events?: AuditEvent[];
+    total?: number;
+    error?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
       const eventsDir = path.join(auditDir, 'events');
@@ -180,7 +194,10 @@ export class AuditController {
         eventFiles = [`${month}.jsonl`];
       } else {
         const files = await fs.readdir(eventsDir);
-        eventFiles = files.filter(f => f.endsWith('.jsonl')).sort().reverse();
+        eventFiles = files
+          .filter((f) => f.endsWith('.jsonl'))
+          .sort()
+          .reverse();
       }
 
       const events: AuditEvent[] = [];
@@ -191,7 +208,10 @@ export class AuditController {
 
         const filePath = path.join(eventsDir, file);
         const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter(line => line.trim());
+        const lines = content
+          .trim()
+          .split('\n')
+          .filter((line) => line.trim());
 
         for (const line of lines) {
           if (events.length >= maxEvents) break;
@@ -201,7 +221,8 @@ export class AuditController {
 
             // 过滤
             if (type && event.type !== type) continue;
-            if (senderId && 'senderId' in event && event.senderId !== senderId) continue;
+            if (senderId && 'senderId' in event && event.senderId !== senderId)
+              continue;
 
             events.push(event);
           } catch (e) {
@@ -213,15 +234,19 @@ export class AuditController {
       return { success: true, events, total: events.length };
     } catch (error) {
       console.error('[AuditController] getEvents error:', error);
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
         return {
           success: false,
-          error: '审计事件目录不存在,请先运行审计扫描器'
+          error: '审计事件目录不存在,请先运行审计扫描器',
         };
       }
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -251,7 +276,11 @@ export class AuditController {
    * }
    */
   @Get('anchors')
-  async getAnchors(): Promise<{ success: boolean; data?: ScanAnchors; error?: string }> {
+  async getAnchors(): Promise<{
+    success: boolean;
+    data?: ScanAnchors;
+    error?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
       const anchorsPath = path.join(auditDir, 'anchors.json');
@@ -263,15 +292,19 @@ export class AuditController {
       return { success: true, data: anchors };
     } catch (error) {
       console.error('[AuditController] getAnchors error:', error);
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        return { 
-          success: false, 
-          error: '扫描锚点不存在，请先运行审计扫描器' 
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        return {
+          success: false,
+          error: '扫描锚点不存在，请先运行审计扫描器',
         };
       }
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -279,7 +312,7 @@ export class AuditController {
   /**
    * 触发审计扫描
    *
-   * 调用 claw-family/skills/agent-audit/scripts/audit-scanner.mjs 执行增量扫描
+   * 调用本仓库 vendored `audit-scanner.mjs` 执行增量扫描
    *
    * @param full 是否全量重扫(默认 false)
    * @returns 扫描结果
@@ -297,23 +330,46 @@ export class AuditController {
    * }
    */
   @Post('scan')
-  async triggerScan(
-    @Query('full') full?: string,
-  ): Promise<{ success: boolean; message?: string; output?: string; error?: string }> {
+  async triggerScan(@Query('full') full?: string): Promise<{
+    success: boolean;
+    message?: string;
+    output?: string;
+    error?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
-      const sessionsDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'sessions');
-
-      // 构建命令
-      const scannerPath = path.join(
+      const sessionsDir = path.join(
         os.homedir(),
-        'githubRepo/claw-sources/claw-family/skills/agent-audit/scripts/audit-scanner.mjs',
+        '.openclaw',
+        'agents',
+        'main',
+        'sessions',
       );
+
+      const scannerPath = path.join(
+        process.cwd(),
+        'resources',
+        'bundled-skills',
+        'agent-audit',
+        'scripts',
+        'audit-scanner.mjs',
+      );
+
+      try {
+        await fs.access(scannerPath);
+      } catch {
+        return {
+          success: false,
+          error: `审计扫描器未找到：${scannerPath}（请从 TraceFlow 项目根启动，并确保已包含 resources/bundled-skills）`,
+        };
+      }
 
       const args = [
         scannerPath,
-        '--sessions-dir', sessionsDir,
-        '--audit-dir', auditDir,
+        '--sessions-dir',
+        sessionsDir,
+        '--audit-dir',
+        auditDir,
       ];
 
       if (full === 'true') {
@@ -344,14 +400,14 @@ export class AuditController {
 
   /**
    * 获取代码交付明细
-   * 
+   *
    * @param month 月份过滤（可选）
    * @param initiator 发起人 ID 过滤（可选）
    * @param repo 仓库名过滤（可选）
    * @param limit 返回数量限制（默认 100）
    * @param offset 分页偏移（默认 0）
    * @returns 代码交付明细事件列表
-   * 
+   *
    * @example
    * GET /api/audit/code?month=2026-03&initiator=xiaogang.h&limit=50
    */
@@ -362,83 +418,97 @@ export class AuditController {
     @Query('repo') repo?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset: number = 0,
-  ): Promise<{ success: boolean; events?: AuditEvent[]; total?: number; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    events?: AuditEvent[];
+    total?: number;
+    error?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
       const eventsDir = path.join(auditDir, 'events');
-      
+
       await fs.access(eventsDir);
-      
+
       // 确定要读取的文件
       let eventFiles: string[];
       if (month) {
         eventFiles = [`${month}.jsonl`];
       } else {
         const files = await fs.readdir(eventsDir);
-        eventFiles = files.filter(f => f.endsWith('.jsonl')).sort().reverse();
+        eventFiles = files
+          .filter((f) => f.endsWith('.jsonl'))
+          .sort()
+          .reverse();
       }
-      
+
       const events: AuditEvent[] = [];
       const maxEvents = limit || 100;
-      
+
       for (const file of eventFiles) {
         if (events.length >= maxEvents + offset) break;
-        
+
         const filePath = path.join(eventsDir, file);
         const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter(line => line.trim());
-        
+        const lines = content
+          .trim()
+          .split('\n')
+          .filter((line) => line.trim());
+
         for (const line of lines) {
           if (events.length >= maxEvents + offset) break;
-          
+
           try {
             const event = JSON.parse(line) as AuditEvent;
-            
+
             // 过滤：只取 code_delivery 类型
             if (event.type !== 'code_delivery') continue;
-            
+
             // 过滤发起人
             if (initiator && (event as any).senderId !== initiator) continue;
-            
+
             // 过滤仓库
             if (repo && event.mr?.project !== repo) continue;
-            
+
             events.push(event);
           } catch (e) {
-            console.warn('[AuditController] Failed to parse code_delivery event:', e);
+            console.warn(
+              '[AuditController] Failed to parse code_delivery event:',
+              e,
+            );
           }
         }
       }
-      
+
       // 应用分页
       const paginatedEvents = events.slice(offset, offset + maxEvents);
-      
+
       return { success: true, events: paginatedEvents, total: events.length };
     } catch (error) {
       console.error('[AuditController] getCodeDeliveryDetails error:', error);
-      if ((error as any).code === 'ENOENT') {
-        return { 
-          success: false, 
-          error: '审计事件目录不存在，请先运行审计扫描器' 
+      if (error.code === 'ENOENT') {
+        return {
+          success: false,
+          error: '审计事件目录不存在，请先运行审计扫描器',
         };
       }
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
   /**
    * 获取问答服务明细
-   * 
+   *
    * @param month 月份过滤（可选）
    * @param userId 用户 ID 过滤（可选）
    * @param tag 标签过滤（可选）
    * @param limit 返回数量限制（默认 100）
    * @param offset 分页偏移（默认 0）
    * @returns 问答服务明细事件列表
-   * 
+   *
    * @example
    * GET /api/audit/qa?month=2026-03&userId=xiaogang.h&tag=code/mr-create&limit=50
    */
@@ -449,82 +519,93 @@ export class AuditController {
     @Query('tag') tag?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset: number = 0,
-  ): Promise<{ success: boolean; events?: AuditEvent[]; total?: number; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    events?: AuditEvent[];
+    total?: number;
+    error?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
       const eventsDir = path.join(auditDir, 'events');
-      
+
       await fs.access(eventsDir);
-      
+
       // 确定要读取的文件
       let eventFiles: string[];
       if (month) {
         eventFiles = [`${month}.jsonl`];
       } else {
         const files = await fs.readdir(eventsDir);
-        eventFiles = files.filter(f => f.endsWith('.jsonl')).sort().reverse();
+        eventFiles = files
+          .filter((f) => f.endsWith('.jsonl'))
+          .sort()
+          .reverse();
       }
-      
+
       const events: AuditEvent[] = [];
       const maxEvents = limit || 100;
-      
+
       for (const file of eventFiles) {
         if (events.length >= maxEvents + offset) break;
-        
+
         const filePath = path.join(eventsDir, file);
         const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter(line => line.trim());
-        
+        const lines = content
+          .trim()
+          .split('\n')
+          .filter((line) => line.trim());
+
         for (const line of lines) {
           if (events.length >= maxEvents + offset) break;
-          
+
           try {
             const event = JSON.parse(line) as AuditEvent;
-            
+
             // 过滤：只取 qa 类型
             if (event.type !== 'qa') continue;
-            
+
             // 过滤用户
             if (userId && (event as any).senderId !== userId) continue;
-            
+
             // 过滤标签
             if (tag && (!event.tags || !event.tags.includes(tag))) continue;
-            
+
             events.push(event);
           } catch (e) {
             console.warn('[AuditController] Failed to parse qa event:', e);
           }
         }
       }
-      
+
       // 应用分页
       const paginatedEvents = events.slice(offset, offset + maxEvents);
-      
+
       return { success: true, events: paginatedEvents, total: events.length };
     } catch (error) {
       console.error('[AuditController] getQaDetails error:', error);
-      if ((error as any).code === 'ENOENT') {
-        return { 
-          success: false, 
-          error: '审计事件目录不存在，请先运行审计扫描器' 
+      if (error.code === 'ENOENT') {
+        return {
+          success: false,
+          error: '审计事件目录不存在，请先运行审计扫描器',
         };
       }
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
   /**
    * 获取自动化运行明细
-   * 
+   *
    * @param month 月份过滤（可选）
    * @param type 自动化类型过滤（可选）
    * @param limit 返回数量限制（默认 100）
    * @param offset 分页偏移（默认 0）
    * @returns 自动化运行明细事件列表
-   * 
+   *
    * @example
    * GET /api/audit/automation?month=2026-03&type=daily-ai-news&limit=50
    */
@@ -534,66 +615,80 @@ export class AuditController {
     @Query('type') type?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset: number = 0,
-  ): Promise<{ success: boolean; events?: AuditEvent[]; total?: number; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    events?: AuditEvent[];
+    total?: number;
+    error?: string;
+  }> {
     try {
       const auditDir = await this.getAuditDir();
       const eventsDir = path.join(auditDir, 'events');
-      
+
       await fs.access(eventsDir);
-      
+
       // 确定要读取的文件
       let eventFiles: string[];
       if (month) {
         eventFiles = [`${month}.jsonl`];
       } else {
         const files = await fs.readdir(eventsDir);
-        eventFiles = files.filter(f => f.endsWith('.jsonl')).sort().reverse();
+        eventFiles = files
+          .filter((f) => f.endsWith('.jsonl'))
+          .sort()
+          .reverse();
       }
-      
+
       const events: AuditEvent[] = [];
       const maxEvents = limit || 100;
-      
+
       for (const file of eventFiles) {
         if (events.length >= maxEvents + offset) break;
-        
+
         const filePath = path.join(eventsDir, file);
         const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter(line => line.trim());
-        
+        const lines = content
+          .trim()
+          .split('\n')
+          .filter((line) => line.trim());
+
         for (const line of lines) {
           if (events.length >= maxEvents + offset) break;
-          
+
           try {
             const event = JSON.parse(line) as AuditEvent;
-            
+
             // 过滤：只取 automation 类型
             if (event.type !== 'automation') continue;
-            
+
             // 过滤类型
             if (type && (event as any).automationType !== type) continue;
-            
+
             events.push(event);
           } catch (e) {
-            console.warn('[AuditController] Failed to parse automation event:', e);
+            console.warn(
+              '[AuditController] Failed to parse automation event:',
+              e,
+            );
           }
         }
       }
-      
+
       // 应用分页
       const paginatedEvents = events.slice(offset, offset + maxEvents);
-      
+
       return { success: true, events: paginatedEvents, total: events.length };
     } catch (error) {
       console.error('[AuditController] getAutomationDetails error:', error);
-      if ((error as any).code === 'ENOENT') {
-        return { 
-          success: false, 
-          error: '审计事件目录不存在，请先运行审计扫描器' 
+      if (error.code === 'ENOENT') {
+        return {
+          success: false,
+          error: '审计事件目录不存在，请先运行审计扫描器',
         };
       }
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

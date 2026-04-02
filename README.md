@@ -15,20 +15,20 @@
 
 ## Why TraceFlow (vs OpenClaw default management console)
 
-| Capability | OpenClaw default management console | TraceFlow |
-|------------|-------------------------------------|-----------|
-| Bundled with Gateway | Yes | No (separate app) |
-| Skill call tracing (inferred from `read` paths) | — | Yes |
-| Per-user skill stats | — | Yes |
-| Token thresholds & rankings | Basic | Stronger |
-| Agent & harness (OpenClaw-aligned labels) | — | Yes |
-| Latency P50/P95/P99 | — | Yes |
-| Gateway connection behavior | Long-lived WS | Long-lived WS (reused for `status`, `usage`, `logs.tail`, `skills.status`, etc.) |
-| Deployment | With Gateway | PM2, own port |
-| UI language | Mainly one language | English + Chinese |
-| Automation friendliness | Basic | JSON HTTP APIs + log WebSocket streaming |
-| **Statistical scope spelled out in-product (ℹ)** | Rare | **Yes** — major blocks explain what is included/excluded (e.g. live `*.jsonl` vs `*.jsonl.reset.*`, active vs archived tokens, `totalTokensFresh` caveats) |
-| **Operator-safe Gateway overview without `operator.read`** | N/A | **Yes** — path checks use connect snapshot; dashboard health/overview uses **`health`** RPC (scope-exempt) when backend WS has cleared scopes (see monorepo root **`AGENTS.md`**) |
+| Capability                                                 | OpenClaw default management console | TraceFlow                                                                                                                                                                  |
+| ---------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bundled with Gateway                                       | Yes                                 | No (separate app)                                                                                                                                                          |
+| Skill call tracing (inferred from `read` paths)            | —                                   | Yes                                                                                                                                                                        |
+| Per-user skill stats                                       | —                                   | Yes                                                                                                                                                                        |
+| Token thresholds & rankings                                | Basic                               | Stronger                                                                                                                                                                   |
+| Agent & harness (OpenClaw-aligned labels)                  | —                                   | Yes                                                                                                                                                                        |
+| Latency P50/P95/P99                                        | —                                   | Yes                                                                                                                                                                        |
+| Gateway connection behavior                                | Long-lived WS                       | Long-lived WS (reused for `status`, `usage`, `logs.tail`, `skills.status`, etc.)                                                                                           |
+| Deployment                                                 | With Gateway                        | PM2, own port                                                                                                                                                              |
+| UI language                                                | Mainly one language                 | English + Chinese                                                                                                                                                          |
+| Automation friendliness                                    | Basic                               | JSON HTTP APIs + log WebSocket streaming                                                                                                                                   |
+| **Statistical scope spelled out in-product (ℹ)**           | Rare                                | **Yes** — major blocks explain what is included/excluded (e.g. live `*.jsonl` vs `*.jsonl.reset.*`, active vs archived tokens, `totalTokensFresh` caveats)                 |
+| **Operator-safe Gateway overview without `operator.read`** | N/A                                 | **Yes** — path checks use connect snapshot; dashboard health/overview uses **`health`** RPC (scope-exempt) when backend WS has cleared scopes（详见下文 _Gateway scopes_） |
 
 ---
 
@@ -48,11 +48,11 @@
 
 ## Requirements
 
-| Requirement | Notes |
-|-------------|--------|
-| Node.js | `>= 20.11.0` (20 LTS recommended) |
-| pnpm | `>= 9.0.0` |
-| PM2 | Optional but recommended for production (`deploy:pm2`) |
+| Requirement | Notes                                                  |
+| ----------- | ------------------------------------------------------ |
+| Node.js     | `>= 20.11.0` (20 LTS recommended)                      |
+| pnpm        | `>= 9.0.0`                                             |
+| PM2         | Optional but recommended for production (`deploy:pm2`) |
 
 ---
 
@@ -91,6 +91,17 @@ TraceFlow is a **separate web service** that talks to your running **OpenClaw Ga
 
 **Product design:** The **harness-visible** vision, **platform vs user** system prompt layering, and TraceFlow UX roadmap are in **[docs/agent-harness-and-system-prompt.md](./docs/agent-harness-and-system-prompt.md)**.
 
+### Gateway scopes (why `health` matters)
+
+When TraceFlow connects to the Gateway as **`mode: backend`** **without** a paired device identity, OpenClaw may **clear `scopes`** on that connection after `connect`. RPCs that require **`operator.read`** (for example some `skills.status` / `usage` paths) can then fail with **`missing scope: operator.read`**.
+
+TraceFlow’s approach (keep this behavior when changing code):
+
+- **Runtime path discovery** should rely on the **`connect` snapshot** (`stateDir` / `configPath`), not on `operator.read`-gated probes alone.
+- **Dashboard health / overview** should prefer the Gateway **`health`** RPC (treated as scope-exempt in practice) and map its payload into UI shapes.
+
+Code anchors: `src/openclaw/gateway-overview-health.ts`, `gateway-persistent-client.ts`, `gateway-ws-paths.ts`.
+
 ---
 
 ## Configuration (zero-config first)
@@ -99,24 +110,24 @@ TraceFlow is designed to work out of the box. In most local setups, you can run 
 
 ### Common case (usually the only one you need)
 
-| Variable | When to set it | Default |
-|----------|----------------|---------|
+| Variable               | When to set it                                          | Default                  |
+| ---------------------- | ------------------------------------------------------- | ------------------------ |
 | `OPENCLAW_GATEWAY_URL` | Your Gateway is not reachable at localhost/default port | `http://localhost:18789` |
 
 Set Gateway auth (token/password) in the **Settings** page when required.
 
 ### Optional overrides (advanced)
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `HOST` | Bind address | `0.0.0.0` |
-| `PORT` | HTTP port | `3001` |
-| `DATA_DIR` | Local data (metrics DB, etc.) | `./data` |
-| `OPENCLAW_GATEWAY_TOKEN` / `OPENCLAW_GATEWAY_PASSWORD` | Gateway auth for WS/RPC | unset |
-| `OPENCLAW_STATE_DIR` / `OPENCLAW_WORKSPACE_DIR` | Path overrides | auto |
-| `OPENCLAW_LOG_PATH` | Fallback log file if Gateway logs are unavailable | unset |
-| `OPENCLAW_ACCESS_MODE` | Protect `/api/setup/*` (`local-only` · `token` · `none`) | `none` |
-| `OPENCLAW_RUNTIME_ACCESS_TOKEN` | Bearer token used with `OPENCLAW_ACCESS_MODE=token` | unset |
+| Variable                                               | Purpose                                                  | Default   |
+| ------------------------------------------------------ | -------------------------------------------------------- | --------- |
+| `HOST`                                                 | Bind address                                             | `0.0.0.0` |
+| `PORT`                                                 | HTTP port                                                | `3001`    |
+| `DATA_DIR`                                             | Local data (metrics DB, etc.)                            | `./data`  |
+| `OPENCLAW_GATEWAY_TOKEN` / `OPENCLAW_GATEWAY_PASSWORD` | Gateway auth for WS/RPC                                  | unset     |
+| `OPENCLAW_STATE_DIR` / `OPENCLAW_WORKSPACE_DIR`        | Path overrides                                           | auto      |
+| `OPENCLAW_LOG_PATH`                                    | Fallback log file if Gateway logs are unavailable        | unset     |
+| `OPENCLAW_ACCESS_MODE`                                 | Protect `/api/setup/*` (`local-only` · `token` · `none`) | `none`    |
+| `OPENCLAW_RUNTIME_ACCESS_TOKEN`                        | Bearer token used with `OPENCLAW_ACCESS_MODE=token`      | unset     |
 
 More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 
@@ -126,23 +137,23 @@ More detail: **`config/README.md`** and optional `config/openclaw.runtime.json`.
 
 ## UI routes
 
-| Path | Purpose |
-|------|---------|
-| `/` · `/dashboard` | Overview: Gateway health, tokens, latency, tools, etc. |
-| `/sessions` · `/sessions/:id` · `/sessions/:id/archives` | Session list, detail, and archived epochs |
-| `/system-prompt` (`/agent-harness` redirects here) | Agent & harness: Project Context, OpenClaw Structure, skills snapshot, etc. |
-| `/workspace` | Workspace bootstrap files (`AGENTS.md` / `SOUL.md` / `IDENTITY.md` / `USER.md`) |
-| `/markdown-preview` | Rendered markdown preview for workspace bootstrap docs |
-| `/pricing` | Model pricing |
-| `/logs` | Live logs (Socket.IO) |
-| `/settings` | Gateway URL, paths, access |
+| Path                                                     | Purpose                                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `/` · `/dashboard`                                       | Overview: Gateway health, tokens, latency, tools, etc.                          |
+| `/sessions` · `/sessions/:id` · `/sessions/:id/archives` | Session list, detail, and archived epochs                                       |
+| `/system-prompt` (`/agent-harness` redirects here)       | Agent & harness: Project Context, OpenClaw Structure, skills snapshot, etc.     |
+| `/workspace`                                             | Workspace bootstrap files (`AGENTS.md` / `SOUL.md` / `IDENTITY.md` / `USER.md`) |
+| `/markdown-preview`                                      | Rendered markdown preview for workspace bootstrap docs                          |
+| `/pricing`                                               | Model pricing                                                                   |
+| `/logs`                                                  | Live logs (Socket.IO)                                                           |
+| `/settings`                                              | Gateway URL, paths, access                                                      |
 
 ### Sessions and the “Participant” column
 
 - **One row** is one **conversation thread** in OpenClaw (one `sessionId` / one transcript). In **group** chats, many people usually share the **same** session row.
 - **`sessionKey`** encodes **routing/shape** (provider, group/channel/DM, etc.); it is not the same thing as “who” appears in the participant column.
 - **`agent:<agentId>:main`** is OpenClaw’s **default “main” DM bucket** when direct chats use the `main` session scope; TraceFlow labels it **Main session** (中文 UI: **主会话**), not “heartbeat.” Scheduled heartbeat traffic may still land in the same transcript—**the key shape alone does not mean “heartbeat session.”**
-- **Participant (list):** TraceFlow scans each transcript JSONL for distinct sender identities (`Sender` / `Conversation info` metadata blocks, `senderLabel`, `message.sender`, etc.). If there are **multiple** distinct human senders, the column shows **`firstIdentity (+N)`** where **`N`** is the count of *additional* identities (not the total headcount).
+- **Participant (list):** TraceFlow scans each transcript JSONL for distinct sender identities (`Sender` / `Conversation info` metadata blocks, `senderLabel`, `message.sender`, etc.). If there are **multiple** distinct human senders, the column shows **`firstIdentity (+N)`** where **`N`** is the count of _additional_ identities (not the total headcount).
 - **Participant (detail):** When multiple identities exist, the detail page shows the first plus **+N**; click **+N** for a popover with the full deduped list (same source as the list scan). Group rosters may be larger than what appears in the transcript—only **observed senders** are listed.
 - **Session detail · Messages:** single-column list. Each message is **one line** by default; **click the row** to expand the full body; use the **arrow** button to collapse (so selecting text in the expanded body does not collapse the row).
 - **`unknown`** usually means the index had no id or the first transcript lines could not infer one—see session detail help text.
@@ -167,11 +178,11 @@ With **very large** session counts, worst-case work can still grow (notably full
 
 Only **`/api/setup/*`** (first-time config, test connection, saved settings) is gated by **`OPENCLAW_ACCESS_MODE`**. Other read-style APIs are not uniformly Bearer-protected; **do not expose TraceFlow to the public internet** without network controls or a reverse proxy with auth.
 
-| Mode | Behavior |
-|------|----------|
-| `local-only` | Only local IPs may change settings |
-| `token` | Changes require `Authorization: Bearer <OPENCLAW_RUNTIME_ACCESS_TOKEN>` |
-| `none` | No check (trusted networks only) |
+| Mode         | Behavior                                                                |
+| ------------ | ----------------------------------------------------------------------- |
+| `local-only` | Only local IPs may change settings                                      |
+| `token`      | Changes require `Authorization: Bearer <OPENCLAW_RUNTIME_ACCESS_TOKEN>` |
+| `none`       | No check (trusted networks only)                                        |
 
 ---
 
@@ -179,22 +190,22 @@ Only **`/api/setup/*`** (first-time config, test connection, saved settings) is 
 
 Useful for scripts and monitoring. Full list lives in `src/**/*controller.ts`.
 
-| Path | Method | Description |
-|------|--------|-------------|
-| `/api/health` | GET | Health + Gateway connection summary |
-| `/api/status` | GET | Gateway `status` / `usage` JSON |
-| **`/api/dashboard/overview`** | **GET** | Aggregated dashboard payload; optional `?timeRangeMs=` |
-| `/api/sessions` | GET | Session list |
-| `/api/sessions/:id` | GET | Session detail |
-| `/api/sessions/:id/kill` | POST | Kill session |
-| `/api/sessions/:id/evaluations*` | GET/POST/DELETE | Session evaluations (`latest`, history, detail, create) |
-| `/api/metrics/*` | GET | Latency, tools/skills, token summaries |
-| `/api/prompts/:promptId/evaluations*` | GET/POST/DELETE | Prompt evaluations (`latest`, history, detail, create) |
-| `/api/evaluation-prompt` | GET/PUT/DELETE | Session evaluation template |
-| `/api/workspace-bootstrap-evaluation-prompt` | GET/PUT/DELETE | Workspace bootstrap evaluation template |
-| `/api/workspace/*` | GET/PUT | Workspace file read/write APIs |
-| `/api/logs` | GET | Recent log lines |
-| `/api/setup/*` | GET/POST | Setup (protected by access mode) |
+| Path                                         | Method          | Description                                             |
+| -------------------------------------------- | --------------- | ------------------------------------------------------- |
+| `/api/health`                                | GET             | Health + Gateway connection summary                     |
+| `/api/status`                                | GET             | Gateway `status` / `usage` JSON                         |
+| **`/api/dashboard/overview`**                | **GET**         | Aggregated dashboard payload; optional `?timeRangeMs=`  |
+| `/api/sessions`                              | GET             | Session list                                            |
+| `/api/sessions/:id`                          | GET             | Session detail                                          |
+| `/api/sessions/:id/kill`                     | POST            | Kill session                                            |
+| `/api/sessions/:id/evaluations*`             | GET/POST/DELETE | Session evaluations (`latest`, history, detail, create) |
+| `/api/metrics/*`                             | GET             | Latency, tools/skills, token summaries                  |
+| `/api/prompts/:promptId/evaluations*`        | GET/POST/DELETE | Prompt evaluations (`latest`, history, detail, create)  |
+| `/api/evaluation-prompt`                     | GET/PUT/DELETE  | Session evaluation template                             |
+| `/api/workspace-bootstrap-evaluation-prompt` | GET/PUT/DELETE  | Workspace bootstrap evaluation template                 |
+| `/api/workspace/*`                           | GET/PUT         | Workspace file read/write APIs                          |
+| `/api/logs`                                  | GET             | Recent log lines                                        |
+| `/api/setup/*`                               | GET/POST        | Setup (protected by access mode)                        |
 
 ---
 
@@ -206,12 +217,12 @@ Socket.IO namespace **`logs`**: `logs:subscribe` · `logs:unsubscribe` · server
 
 ## Troubleshooting
 
-| Issue | What to check |
-|-------|----------------|
-| Gateway unreachable | `OPENCLAW_GATEWAY_URL`, firewall; set token/password in Settings |
+| Issue                                                             | What to check                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gateway unreachable                                               | `OPENCLAW_GATEWAY_URL`, firewall; set token/password in Settings                                                                                                                                                                                                                 |
 | **Test connection** fails with **`missing scope: operator.read`** | TraceFlow uses a device-less backend WebSocket; Gateway clears scopes, so older builds that called `skills.status` after connect failed. Current code uses connect **snapshot** for path checks and **`health` RPC** for overview (scope-exempt). See repo root **`AGENTS.md`**. |
-| Empty logs | Gateway `logs.tail` may be unavailable without operator scope (falls back to empty); or set `OPENCLAW_LOG_PATH` |
-| Token metrics show zero; archived bucket empty on Dashboard | Confirm sessions produce usage; check `/api/metrics/token-summary` and `/api/sessions/token-usage`. Archived often stays zero (no `/new`, reset files without usage, etc.); see **`docs/token-metrics-dual-track-example.md`** for field traceability and sample JSON |
+| Empty logs                                                        | Gateway `logs.tail` may be unavailable without operator scope (falls back to empty); or set `OPENCLAW_LOG_PATH`                                                                                                                                                                  |
+| Token metrics show zero; archived bucket empty on Dashboard       | Confirm sessions produce usage; check `/api/metrics/token-summary` and `/api/sessions/token-usage`. Archived often stays zero (no `/new`, reset files without usage, etc.); see **`docs/token-metrics-dual-track-example.md`** for field traceability and sample JSON            |
 
 ---
 
@@ -235,6 +246,6 @@ MIT © [slashhuang](https://github.com/slashhuang)
 
 ### Author links
 
-- [X](https://x.com/brucelee_1991)  
-- [小红书](https://www.xiaohongshu.com/user/profile/5845481182ec395656dfb393)  
+- [X](https://x.com/brucelee_1991)
+- [小红书](https://www.xiaohongshu.com/user/profile/5845481182ec395656dfb393)
 - [知乎](https://www.zhihu.com/people/huang-da-xian-14-14)

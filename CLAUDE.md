@@ -1,189 +1,117 @@
 # CLAUDE.md
 
-This file guides Claude Code and other AI assistants working in **`openclaw-traceflow/`**（monorepo `claw-sources` 内以 git subtree 维护的一方子项目）。上游仓库：`git@github.com:slashhuang/openclaw-traceflow.git`。
+本文件面向在 **`openclaw-traceflow/`** 仓库内工作的 Claude Code / Cursor 等助手。**本仓库是独立开源项目**：克隆本仓库即可开发与发布，**不要求**任何 Monorepo、subtree 或私有配套仓。
 
-**Monorepo 总览**（根目录结构、子项目分工、Gateway `missing scope` 说明）：仓库根 **[`../AGENTS.md`](../AGENTS.md)**。
+- **用户文档**：[README.md](README.md)（英文）、[README.zh-CN.md](README.zh-CN.md)（中文）
+- **上游发布**：`git@github.com:slashhuang/openclaw-traceflow.git`（以你 `git remote -v` 为准）
 
 ## 项目概述
 
-OpenClaw TraceFlow：OpenClaw Agent **可观测**仪表盘（NestJS + React）。通过 **Gateway WebSocket（长连接）** 与 **本地会话数据** 提供会话、Skill、Token、延迟、System Prompt、价格与日志等能力。
+OpenClaw TraceFlow：面向 OpenClaw Agent 的 **可观测** Web 应用（NestJS + React）。通过 **Gateway WebSocket（长连接）** 与 **本机 OpenClaw 数据目录** 提供会话、Skill、Token、延迟、System Prompt、价格与日志等能力。
 
-面向使用者的说明：**[README.md](README.md)**（英文）、**[README.zh-CN.md](README.zh-CN.md)**（中文）；开发与 AI 助手以本文件与代码为准。
+### Gateway scopes（修改 OpenClaw 集成时必读）
 
-### 数据口径与差异化（简述）
+当 TraceFlow 以 **backend** 且无设备身份连接 Gateway 时，OpenClaw 可能在 `connect` 后 **清空 scopes**。依赖 **`operator.read`** 的 RPC 会报 **`missing scope: operator.read`**。
 
-- **UI（ℹ）：** 主要页面在区块级说明统计范围（live `*.jsonl` vs `*.jsonl.reset.*`、活跃/归档 Token、`totalTokensFresh` 等），与 i18n 键 `*.pageScopeDesc` / `*CardScopeDesc` 对齐。
-- **Gateway 无设备 backend：** connect 后 scopes 可能被清空；路径探测用 connect **snapshot**，概览映射用 **`health` RPC**（见 monorepo **[`../AGENTS.md`](../AGENTS.md)**），勿依赖需 `operator.read` 的 RPC 作为唯一数据源。
-- **性能：** `MetricsService.refreshToolStatsSnapshot` 使用会话 **fingerprint** 跳过未变 transcript 的重复解析；会话存储增量扫描；详情大文件 head/tail。上限与债项见 **[`ROADMAP.md`](ROADMAP.md)**。
+实现约定（勿破坏）：
 
-## README（开源文档）
+- **路径 / 运行时目录**：用 `connect` 响应的 **snapshot**（`stateDir` / `configPath`），不要只靠 `skills.status` 等需 operator 的探测。
+- **仪表盘 health / 概览**：用 Gateway **`health` RPC**，再映射为 UI 所需结构。
 
-- 修改 **README.md** / **README.zh-CN.md** 时，**保持现有章节顺序与标题层级不变**。当前约定顺序为：Why TraceFlow → UI snapshots → Requirements → **Quick start** → **Tech stack** → **Overview** → Configuration → UI routes → … → License（**Tech stack / Overview 在 Quick start 之后**，勿移回文首）。
-- 允许在**既有小节内**增删改段落与列表项；中英文需同步更新**对应语义**的段落。
-- 需要新增说明时，优先写入**已有小节**（如「会话与参与者」）；非必要勿插入新的顶级 `##` 以免打乱读者习惯与翻译对照。
+代码入口：`src/openclaw/gateway-overview-health.ts`、`gateway-persistent-client.ts`、`gateway-ws-paths.ts`。产品说明已写入 **README** 的 _Gateway scopes_ 小节。
 
-## Git 与双远端（monorepo `main`）
+### 数据口径与性能（简述）
 
-**改动代码与执行 `git commit` / `git push` 是两件事**。用户说**提交**→ 默认只做本地 `git add` / `git commit`，**不要**自动 push；用户明确**推送 / 同步远端**时再 push。未要求时不要代提交、代推送。不要为了 subtree **默认**执行 `git fetch openclaw-traceflow`（除非用户单独要求）。
+- UI **ℹ** 与 i18n 键说明统计范围（live `*.jsonl` vs `*.jsonl.reset.*`、活跃/归档 Token、`totalTokensFresh` 等）。
+- `MetricsService.refreshToolStatsSnapshot` 使用会话 **fingerprint** 减少重复解析；大文件 head/tail；债项见 [ROADMAP.md](ROADMAP.md)。
 
-本目录在 monorepo 中由 **git subtree** 同步到独立仓库 **`git@github.com:slashhuang/openclaw-traceflow.git`**（远程名常为 `openclaw-traceflow`）。
+## README 维护约定
 
-当用户要求把 **`main`** 上含本目录的提交**推上去**时，在仓库根**依次**执行：
+修改 **README.md** / **README.zh-CN.md** 时：**保持现有章节顺序与顶级 `##` 标题层级不变**（Why TraceFlow → … → Quick start → Tech stack → Overview → …）。中英文同步**语义**；新内容优先写入已有小节。
 
-1. `git push origin main` — 更新 **`claw-sources`**（`origin`）。
-2. `git subtree push --prefix=openclaw-traceflow openclaw-traceflow main` — 更新 **openclaw-traceflow** 独立仓库。
+## Git 与助手行为
 
-仅执行第 1 步不会更新独立仓。
+用户说「提交」→ 默认只做本地 `git add` / `git commit`，**不要**自动 `push`，除非用户明确要求推送。
 
 ## 技术栈
 
-- **后端**: NestJS 11 + TypeScript  
-- **前端**: React 19 + Vite 8 + React Router 7 + Ant Design 5 + Pro Layout + react-intl（中/英）  
-- **图表**: Recharts 3  
-- **实时**: Socket.IO（日志流；仪表盘 HTTP 轮询）  
-- **存储**: sql.js（SQLite），`data/metrics.db`  
-- **Gateway**: `GatewayConnectionService` + `TraceflowGatewayPersistentClient`（长驻 WS，配置变更时重建）
+- **后端**: NestJS 11 + TypeScript
+- **前端**: React 19 + Vite 8 + React Router 7 + Ant Design 5 + Pro Layout + react-intl
+- **图表**: Recharts 3
+- **实时**: Socket.IO（日志流；仪表盘 HTTP 轮询）
+- **存储**: sql.js（SQLite），`data/metrics.db`
+- **Gateway**: `GatewayConnectionService` + `TraceflowGatewayPersistentClient`
 
 ## 目录结构（核心）
 
 ```
 src/
-├── main.ts
-├── app.module.ts
-├── app.controller.ts          # SPA fallback
+├── main.ts, app.module.ts, app.controller.ts
 ├── config/
-├── openclaw/
-│   ├── openclaw.module.ts     # OpenClawService + GatewayConnectionService（@Global）
-│   ├── openclaw.service.ts
-│   ├── gateway-connection.service.ts   # 单例：按 URL+token 签名缓存 WS 客户端
-│   ├── gateway-persistent-client.ts    # 与 OpenClaw 默认 Control UI 同类：connect 后复用 request
-│   ├── gateway-rpc.ts                  # 一次性 WS RPC（备用/低频路径）
-│   └── gateway-ws-paths.ts             # HTTP→WS URL；fetchRuntimePathsFromGateway（路径解析）
-├── auth/auth.guard.ts
-├── setup/
-├── health/
-├── dashboard/dashboard.controller.ts   # GET /api/dashboard/overview
-├── sessions/
-├── logs/
-├── metrics/
-├── skills/
-├── actions/
-└── config/pricing-config.*
+├── openclaw/          # Gateway WS、health 映射、路径解析
+├── auth/, setup/, health/, dashboard/, sessions/, logs/, metrics/
+├── traceflow-skills/  # 内置 skills 清单 API
+└── common/resolveOpenClawPaths.ts
 
+resources/bundled-skills/   # 与 OpenClaw 配套的 vendored skills（如 agent-audit）
 frontend/src/
-├── pages/ Dashboard, Sessions, SessionDetail, Skills, SystemPrompt, TokenMonitor, Pricing, Logs, Settings
-├── api/index.js
-└── locales/en-US.js, zh-CN.js    # 键需一一对应（约 330 keys）
 ```
 
 ## 常用命令
 
 ```bash
 pnpm install
-pnpm run start:dev          # 后端 watch
-pnpm run dev                # 后端 + 前端 concurrently
+pnpm run start:dev
+pnpm run dev
 pnpm run build
-pnpm run build:frontend
 pnpm run build:all
-pnpm run start:prod
-pnpm run deploy:pm2         # install + build + PM2
+pnpm run deploy:pm2
 pnpm test
 ```
 
-## API（与 README / README.zh-CN 一致；实现以 controller 为准）
+## API（实现以 controller 为准）
 
-| 端点 | 说明 |
-|------|------|
-| `GET /api/health` | 健康状态（含 Gateway 连接摘要） |
-| `GET /api/status` | Gateway status/usage 概览 |
-| **`GET /api/dashboard/overview`** | **仪表盘聚合**（health、status、sessions、logs、metrics…）；前端主入口 |
-| `GET /api/sessions` | 会话列表 |
-| `GET /api/sessions/:id` | 会话详情 |
-| `POST /api/sessions/:id/kill` | 终止会话 |
-| `GET /api/logs` | 最近日志 |
-| `GET /api/metrics/latency` | P50/P95/P99 |
-| `GET /api/metrics/tools` | tools + skills Top 5 |
-| `GET /api/metrics/concurrency` | 并发（可能占位） |
-| `POST /api/actions/restart` | 本机 `openclaw gateway restart`（非远程 URL） |
-| `GET /api/setup/status` | 配置状态（受 access mode 保护） |
-| `POST /api/setup/configure` | 保存配置 |
-| `POST /api/setup/test-connection` | 测试 Gateway |
-| `GET /api/skills/system-prompt/probe` | System Prompt 嗅探（workspace 引导文件等） |
-| `PUT /api/skills/system-prompt/workspace-file` | 写入核心引导 `AGENTS/SOUL/IDENTITY/USER.md`（需 AuthGuard；`accessMode=none` 时默认禁止，除非 `OPENCLAW_WORKSPACE_WRITE=true`；仅当 TraceFlow 进程能访问解析出的 workspace 路径时有效） |
-| `GET /api/audit/snapshot` | 贡献审计快照；无 `latest.json` 时 `success: false` 且 `code: SNAPSHOT_NOT_FOUND`（仍带 `error` 文案） |
-| `GET /api/traceflow-skills` | TraceFlow 配套 OpenClaw skills 的 vendored 文件列表与正文（`/traceflow-skills` 页） |
-| `GET /api/reflections` | 反思列表；无 `reflections.jsonl` 时 `source.reflectionsFileExists: false` 且 `code: REFLECTIONS_SOURCE_MISSING` |
+| 端点                                               | 说明                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET /api/health`                                  | 健康（含 Gateway 摘要）                                                              |
+| `GET /api/dashboard/overview`                      | 仪表盘聚合（前端主入口）                                                             |
+| `GET /api/sessions` · `GET /api/sessions/:id`      | 会话                                                                                 |
+| `POST /api/sessions/:id/kill`                      | 终止会话                                                                             |
+| `GET /api/logs`                                    | 最近日志                                                                             |
+| `GET /api/metrics/*`                               | 延迟 / 工具 / 并发                                                                   |
+| `GET /api/audit/snapshot` · `POST /api/audit/scan` | 审计（扫描器路径：`resources/bundled-skills/agent-audit/scripts/audit-scanner.mjs`） |
+| `GET /api/traceflow-skills`                        | 内置 skills 文件列表与正文                                                           |
+
+完整列表见历史版本或 README；新增端点后同步 README 与本表。
 
 ## WebSocket
 
-- **Gateway**: 由 `TraceflowGatewayPersistentClient` 维护（非每次请求新建连接）。  
-- **TraceFlow 服务端日志**: Socket.IO 命名空间 `logs`：`logs:subscribe` / `logs:unsubscribe` / `logs:new`。
+- Gateway：单例长连接 `TraceflowGatewayPersistentClient`。
+- 服务端日志：`logs` 命名空间 — `logs:subscribe` / `logs:unsubscribe` / `logs:new`。
 
-## 前端行为（避免文档写错）
+## 前端注意
 
-- **Dashboard** `Dashboard.jsx`：页签 **visible** 时约 **10s** 轮询 `GET /api/dashboard/overview`（不是 3s）。  
-- `fetchData` 使用 **ref** 防并发，勿把 `inFlight` 放进 `useCallback` 依赖，否则会连环请求。
+- Dashboard 页签 **visible** 时约 **10s** 轮询 `GET /api/dashboard/overview`（非 3s）。
+- `fetchData` 用 **ref** 防并发，勿把 `inFlight` 放进 `useCallback` 依赖链。
 
-## 配置默认值（`config.service.ts`）
+## 配置默认值
 
-- `OPENCLAW_GATEWAY_URL` 默认 **`http://localhost:18789`**（OpenClaw Gateway 默认端口）  
-- `HOST` 默认 **`0.0.0.0`**，`PORT` **`3001`**  
-- `DATA_DIR` → `./data`；可选 `config/openclaw.runtime.json`（见 `config/README.md`）
+见 `config.service.ts`：`OPENCLAW_GATEWAY_URL` 默认 `http://localhost:18789`，`PORT` 默认 `3001`，`DATA_DIR` 默认 `./data`。详见 [config/README.md](config/README.md)。
 
-## 部署
+## 路径解析（本仓库内）
 
-生产构建后可用 `node dist/main.js` 或 `pnpm run deploy:pm2`（见 `scripts/deploy-pm2.sh`）。环境变量见上文「配置默认值」。
+**本仓库事实源**：`src/common/resolveOpenClawPaths.ts`。所有 OpenClaw 数据路径须通过此处解析，**禁止**硬编码 `~/.openclaw/...`。
 
-## 开发注意
+若在其他项目（如 Agent 部署仓）维护同名逻辑，应保持**语义一致**；TraceFlow **不依赖**那些仓库即可构建运行。
 
-- 前端构建输出：`public/app/`  
-- SPA 路由：`app.controller.ts`  
-- i18n：新增文案需同时改 `frontend/src/locales/en-US.js` 与 `zh-CN.js`  
-- 修改 Gateway 相关行为时同步更新 **README.md**、**README.zh-CN.md**、本文件与 **`config/README.md`**
-- **性能与已知瓶颈**：`MetricsService.refreshToolStatsSnapshot()` 对每个会话调用 `getSessionDetail`（会话多时 O(n) 磁盘/解析）；后台 `MetricsModule` 定时任务同路径；详见 **`ROADMAP.md`**
+### 更新 `resolveOpenClawPaths` 时
+
+1. 改 `src/common/resolveOpenClawPaths.ts`
+2. 若有伙伴仓库拷贝了同文件，按需手动同步
+3. 跑相关测试与审计扫描路径校验
 
 ---
 
-## 路径解析规范（openclawCommonUtils）
+## 维护者备忘（可选）
 
-**统一工具库**：`src/common/resolveOpenClawPaths.ts`
-
-所有涉及 OpenClaw 路径解析的代码**必须使用**此工具库，**禁止硬编码** `~/.openclaw/xxx`。
-
-### 使用方式
-
-```typescript
-import { resolveUserPath, resolveWorkspaceDir, resolveAuditDir, resolveStateDir } from './common/resolveOpenClawPaths';
-
-const workspaceDir = resolveWorkspaceDir();
-const auditDir = resolveAuditDir();
-```
-
-### 路径优先级
-
-| 函数 | 优先级 1 | 优先级 2 | 默认 |
-|------|---------|---------|------|
-| `resolveWorkspaceDir()` | `OPENCLAW_WORKSPACE_DIR` | - | `~/.openclaw/workspace` |
-| `resolveStateDir()` | `OPENCLAW_STATE_DIR` | - | `~/.openclaw/state` |
-| `resolveAuditDir()` | `OPENCLAW_AUDIT_DIR` | `workspaceDir/.openclawAudits` | `~/.openclaw/workspace/.openclawAudits` |
-
-### 环境变量支持
-
-| 变量名 | 说明 |
-|--------|------|
-| `OPENCLAW_WORKSPACE_DIR` | 自定义 workspace 目录 |
-| `OPENCLAW_STATE_DIR` | 自定义 state 目录 |
-| `OPENCLAW_AUDIT_DIR` | 自定义 audit/reflections 目录 |
-
-### 路径格式支持
-
-- `~/xxx` → `/home/user/xxx`
-- `$HOME/xxx` → `/home/user/xxx`
-- 绝对路径 → 原样返回
-
-### 更新流程
-
-1. 修改 `src/common/resolveOpenClawPaths.ts`
-2. 同步更新 monorepo 根目录 `openclawCommonUtils/resolveOpenClawPaths.ts`
-3. 测试所有使用路径解析的功能
-4. 提交更改
+TraceFlow 可与 **OpenClaw Gateway**、**agent-audit** 等技能配合使用；集成方自行决定目录布局。**开源文档与 README 中不要假设**读者拥有 `claw-brains`、`claw-commons` 等私有或并列仓库。

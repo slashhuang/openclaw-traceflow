@@ -1,7 +1,7 @@
 /**
  * Agent 贡献审计系统类型定义
- * 
- * 数据来源：claw-family/skills/agent-audit/scripts/audit-scanner.mjs
+ *
+ * 数据由 `audit-scanner.mjs` 写入；扫描器随本仓库 `resources/bundled-skills/agent-audit/` 分发
  * 数据位置：~/.openclaw/workspace/.openclawAudits/
  */
 

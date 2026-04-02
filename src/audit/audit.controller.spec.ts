@@ -18,14 +18,16 @@ describe('AuditController', () => {
         {
           provide: OpenClawService,
           useValue: {
-            getResolvedPaths: jest.fn().mockResolvedValue({ workspaceDir: '/tmp' }),
+            getResolvedPaths: jest
+              .fn()
+              .mockResolvedValue({ workspaceDir: '/tmp' }),
           },
         },
       ],
     }).compile();
 
     controller = moduleRef.get<AuditController>(AuditController);
-    openClawService = moduleRef.get(OpenClawService) as jest.Mocked<OpenClawService>;
+    openClawService = moduleRef.get(OpenClawService);
   });
 
   describe('getCodeDeliveryDetails', () => {
@@ -36,7 +38,11 @@ describe('AuditController', () => {
           {
             type: 'code_delivery',
             timestamp: '2026-04-01T10:00:00Z',
-            mr: { iid: 95, title: 'feat(audit): ...', project: 'claw-sources' },
+            mr: {
+              iid: 95,
+              title: 'feat(audit): ...',
+              project: 'acme/platform',
+            },
             senderId: 'xiaogang.h',
             tokenUsage: { input: 75000, output: 7000 },
             sessionId: 'main/xxx',
@@ -44,7 +50,7 @@ describe('AuditController', () => {
           {
             type: 'code_delivery',
             timestamp: '2026-04-01T10:01:00Z',
-            mr: { iid: 94, title: 'fix(audit): ...', project: 'claw-sources' },
+            mr: { iid: 94, title: 'fix(audit): ...', project: 'acme/platform' },
             senderId: 'xiaogang.h',
             tokenUsage: { input: 65000, output: 5000 },
             sessionId: 'main/yyy',
