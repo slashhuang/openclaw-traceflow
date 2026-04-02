@@ -37,29 +37,27 @@ export class ReflectionsController {
   constructor(private readonly openClawService: OpenClawService) {}
 
   /**
-   * 获取 state 根目录
-   */
-  private async getStateRoot(): Promise<string> {
-    try {
-      const paths = await this.openClawService.getResolvedPaths();
-      if (paths.stateDir?.trim()) {
-        return paths.stateDir.trim();
-      }
-    } catch (err) {
-      console.warn(
-        '[ReflectionsController] getResolvedPaths failed, falling back to default:',
-        err instanceof Error ? err.message : err,
-      );
-    }
-    return path.join(os.homedir(), '.openclaw', 'state');
-  }
-
-  /**
    * 获取反思记录文件路径
+   * 
+   * 优先级（与 self-improvement skill 保持一致）：
+   * 1. OPENCLAW_AUDIT_DIR 环境变量
+   * 2. OPENCLAW_WORKSPACE_DIR/.openclawAudits
+   * 3. ~/.openclaw/workspace/.openclawAudits
    */
   private async getReflectionsFile(): Promise<string> {
-    const stateRoot = await this.getStateRoot();
-    return path.join(stateRoot, 'reflections.jsonl');
+    // 1. 环境变量 OPENCLAW_AUDIT_DIR
+    if (process.env.OPENCLAW_AUDIT_DIR?.trim()) {
+      return path.resolve(process.env.OPENCLAW_AUDIT_DIR.trim(), 'reflections.jsonl');
+    }
+
+    // 2. OPENCLAW_WORKSPACE_DIR/.openclawAudits
+    if (process.env.OPENCLAW_WORKSPACE_DIR?.trim()) {
+      const workspaceDir = path.resolve(process.env.OPENCLAW_WORKSPACE_DIR.trim());
+      return path.join(workspaceDir, '.openclawAudits', 'reflections.jsonl');
+    }
+
+    // 3. ~/.openclaw/workspace/.openclawAudits
+    return path.join(os.homedir(), '.openclaw', 'workspace', '.openclawAudits', 'reflections.jsonl');
   }
 
   /**
