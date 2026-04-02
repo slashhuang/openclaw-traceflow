@@ -1,13 +1,14 @@
 ---
 name: self-improvement
-description: "Captures learnings, errors, corrections, and insights to enable continuous improvement."
+description: 'Captures learnings, errors, corrections, and insights to enable continuous improvement.'
 metadata:
   {
-    "openclaw": {
-      "emoji": "🔄",
-      "requires": { "bins": ["git", "python3"] },
-      "runtime": true,
-    },
+    'openclaw':
+      {
+        'emoji': '🔄',
+        'requires': { 'bins': ['git', 'python3'] },
+        'runtime': true,
+      },
   }
 ---
 
@@ -25,7 +26,7 @@ metadata:
 ### 文件结构
 
 ```
-.openclawAudits/
+.openclawSelfImprovements/
 └── reflections.jsonl    # 反思记录（JSONL 格式）
 ```
 
@@ -58,29 +59,29 @@ metadata:
 
 ### 字段说明
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `id` | 反思记录 ID | `LRN-20260402-001` |
-| `type` | 类型 | `correction`, `insight`, `knowledge_gap`, `best_practice` |
-| `dimension` | 维度 | `ai`, `user`, `interaction` |
-| `area` | 领域 | `config`, `skill`, `prompt`, `infra`, `docs` |
-| `priority` | 优先级 | `critical`, `high`, `medium`, `low` |
-| `status` | 状态 | `pending`, `in_progress`, `resolved`, `promoted` |
+| 字段        | 说明        | 示例                                                      |
+| ----------- | ----------- | --------------------------------------------------------- |
+| `id`        | 反思记录 ID | `LRN-20260402-001`                                        |
+| `type`      | 类型        | `correction`, `insight`, `knowledge_gap`, `best_practice` |
+| `dimension` | 维度        | `ai`, `user`, `interaction`                               |
+| `area`      | 领域        | `config`, `skill`, `prompt`, `infra`, `docs`              |
+| `priority`  | 优先级      | `critical`, `high`, `medium`, `low`                       |
+| `status`    | 状态        | `pending`, `in_progress`, `resolved`, `promoted`          |
 
 ## 环境变量
 
-- `OPENCLAW_AUDIT_DIR` — 覆盖输出目录
+- `OPENCLAW_AUDIT_DIR` — 覆盖输出目录（默认：`.openclawSelfImprovements`）
 
 ## 触发格式（供 runtime 参考）
 
 ```yaml
 triggers:
   keywords:
-    - "不对"
-    - "错了"
-    - "反思下"
-    - "fix"
-    - "修复"
+    - '不对'
+    - '错了'
+    - '反思下'
+    - 'fix'
+    - '修复'
   events:
     - command_failed
     - better_approach_found

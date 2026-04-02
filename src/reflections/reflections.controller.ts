@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Param, Body, Query, Res, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Query,
+  Res,
+  HttpStatus,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -38,26 +47,41 @@ export class ReflectionsController {
 
   /**
    * 获取反思记录文件路径
-   * 
+   *
    * 优先级（与 self-improvement skill 保持一致）：
    * 1. OPENCLAW_AUDIT_DIR 环境变量
-   * 2. OPENCLAW_WORKSPACE_DIR/.openclawAudits
-   * 3. ~/.openclaw/workspace/.openclawAudits
+   * 2. OPENCLAW_WORKSPACE_DIR/.openclawSelfImprovements
+   * 3. ~/.openclaw/workspace/.openclawSelfImprovements
    */
   private async getReflectionsFile(): Promise<string> {
     // 1. 环境变量 OPENCLAW_AUDIT_DIR
     if (process.env.OPENCLAW_AUDIT_DIR?.trim()) {
-      return path.resolve(process.env.OPENCLAW_AUDIT_DIR.trim(), 'reflections.jsonl');
+      return path.resolve(
+        process.env.OPENCLAW_AUDIT_DIR.trim(),
+        'reflections.jsonl',
+      );
     }
 
-    // 2. OPENCLAW_WORKSPACE_DIR/.openclawAudits
+    // 2. OPENCLAW_WORKSPACE_DIR/.openclawSelfImprovements
     if (process.env.OPENCLAW_WORKSPACE_DIR?.trim()) {
-      const workspaceDir = path.resolve(process.env.OPENCLAW_WORKSPACE_DIR.trim());
-      return path.join(workspaceDir, '.openclawAudits', 'reflections.jsonl');
+      const workspaceDir = path.resolve(
+        process.env.OPENCLAW_WORKSPACE_DIR.trim(),
+      );
+      return path.join(
+        workspaceDir,
+        '.openclawSelfImprovements',
+        'reflections.jsonl',
+      );
     }
 
-    // 3. ~/.openclaw/workspace/.openclawAudits
-    return path.join(os.homedir(), '.openclaw', 'workspace', '.openclawAudits', 'reflections.jsonl');
+    // 3. ~/.openclaw/workspace/.openclawSelfImprovements
+    return path.join(
+      os.homedir(),
+      '.openclaw',
+      'workspace',
+      '.openclawSelfImprovements',
+      'reflections.jsonl',
+    );
   }
 
   /**
@@ -76,7 +100,10 @@ export class ReflectionsController {
     }
 
     const content = await fs.readFile(reflectionsFile, 'utf-8');
-    const lines = content.trim().split('\n').filter((line) => line.trim());
+    const lines = content
+      .trim()
+      .split('\n')
+      .filter((line) => line.trim());
 
     const reflections: Reflection[] = [];
     for (const line of lines) {
@@ -93,13 +120,15 @@ export class ReflectionsController {
   /**
    * 写入反思记录（追加）
    */
-  private async appendReflection(reflection: Partial<Reflection>): Promise<void> {
+  private async appendReflection(
+    reflection: Partial<Reflection>,
+  ): Promise<void> {
     const reflectionsFile = await this.getReflectionsFile();
-    
+
     // 确保目录存在（从文件路径推断目录）
     const reflectionsDir = path.dirname(reflectionsFile);
     await fs.mkdir(reflectionsDir, { recursive: true });
-    
+
     // JSONL 格式：单行 JSON
     const line = JSON.stringify(reflection) + '\n';
     await fs.appendFile(reflectionsFile, line, 'utf-8');
@@ -133,7 +162,8 @@ export class ReflectionsController {
 
     // 按时间倒序
     reflections.sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 
     // 限制数量
@@ -158,7 +188,13 @@ export class ReflectionsController {
         : {}),
       filters: {
         dimensions: ['ai', 'user', 'interaction'],
-        categories: ['config', 'skill', 'prompt', 'input-clarity', 'interaction'],
+        categories: [
+          'config',
+          'skill',
+          'prompt',
+          'input-clarity',
+          'interaction',
+        ],
         priorities: ['high', 'medium', 'low'],
       },
     };
@@ -170,8 +206,8 @@ export class ReflectionsController {
   @Get(':id')
   async getReflection(@Param('id') id: string) {
     const { reflections } = await this.loadReflectionsFromFile();
-    const reflection = reflections.find(r => r.id === id);
-    
+    const reflection = reflections.find((r) => r.id === id);
+
     if (!reflection) {
       return { error: 'Reflection not found' };
     }
@@ -185,8 +221,8 @@ export class ReflectionsController {
   @Get(':id/diff')
   async getDiff(@Param('id') id: string) {
     const { reflections } = await this.loadReflectionsFromFile();
-    const reflection = reflections.find(r => r.id === id);
-    
+    const reflection = reflections.find((r) => r.id === id);
+
     if (!reflection) {
       return { error: 'Reflection not found' };
     }
@@ -199,8 +235,12 @@ export class ReflectionsController {
     const unified = [
       `--- ${reflection.diff.file} (old)`,
       `+++ ${reflection.diff.file} (new)`,
-      ...Object.entries(reflection.diff.old).map(([k, v]) => `- "${k}": ${JSON.stringify(v)}`),
-      ...Object.entries(reflection.diff.new).map(([k, v]) => `+ "${k}": ${JSON.stringify(v)}`),
+      ...Object.entries(reflection.diff.old).map(
+        ([k, v]) => `- "${k}": ${JSON.stringify(v)}`,
+      ),
+      ...Object.entries(reflection.diff.new).map(
+        ([k, v]) => `+ "${k}": ${JSON.stringify(v)}`,
+      ),
     ].join('\n');
 
     return {
@@ -217,8 +257,8 @@ export class ReflectionsController {
   @Get(':id/full')
   async getFullContent(@Param('id') id: string) {
     const { reflections } = await this.loadReflectionsFromFile();
-    const reflection = reflections.find(r => r.id === id);
-    
+    const reflection = reflections.find((r) => r.id === id);
+
     if (!reflection) {
       return { error: 'Reflection not found' };
     }
@@ -230,7 +270,8 @@ export class ReflectionsController {
     // 检测文件类型
     const file = reflection.diff?.file || 'config.json';
     const ext = path.extname(file).toLowerCase();
-    const language = ext === '.json' ? 'json' : ext === '.md' ? 'markdown' : 'text';
+    const language =
+      ext === '.json' ? 'json' : ext === '.md' ? 'markdown' : 'text';
 
     return {
       file,
@@ -245,26 +286,32 @@ export class ReflectionsController {
   @Post(':id/apply')
   async applyReflection(
     @Param('id') id: string,
-    @Body() body: { action?: 'apply' | 'ignore' | 'escalate'; note?: string } = {},
+    @Body()
+    body: { action?: 'apply' | 'ignore' | 'escalate'; note?: string } = {},
   ) {
     const { reflections } = await this.loadReflectionsFromFile();
     const index = reflections.findIndex((r) => r.id === id);
-    
+
     if (index === -1) {
       return { error: 'Reflection not found' };
     }
 
     const action = body.action || 'apply';
-    reflections[index].status = action === 'apply' ? 'applied' : action === 'ignore' ? 'ignored' : 'escalated';
+    reflections[index].status =
+      action === 'apply'
+        ? 'applied'
+        : action === 'ignore'
+          ? 'ignored'
+          : 'escalated';
     reflections[index].appliedAt = new Date().toISOString();
-    
+
     if (body.note) {
       reflections[index].note = body.note;
     }
 
     // 重写整个文件
     const reflectionsFile = await this.getReflectionsFile();
-    const content = reflections.map(r => JSON.stringify(r)).join('\n') + '\n';
+    const content = reflections.map((r) => JSON.stringify(r)).join('\n') + '\n';
     await fs.writeFile(reflectionsFile, content, 'utf-8');
 
     return { success: true, reflection: reflections[index] };
