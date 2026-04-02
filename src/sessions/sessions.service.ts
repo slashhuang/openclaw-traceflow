@@ -134,11 +134,11 @@ export class SessionsService {
     pageSize: number;
   }> {
     const all = await this.listSessions();
-    let filtered = all;
+    let filtered: Session[] = all;
     if (filter === 'archived' || filter === 'stale_index') {
       // 归档会话：查找带有 .reset. 标记的会话文件
       const archivedSessions = await this.openclawService.listArchivedSessions();
-      filtered = archivedSessions;
+      filtered = archivedSessions as Session[];
     } else if (filter !== 'all') {
       filtered = all.filter((s) => s.status === filter);
     }

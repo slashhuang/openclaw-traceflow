@@ -1441,9 +1441,14 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         typeLabel: '归档',
         status: 'archived',
         lastActive: new Date(usage.resetTimestamp).getTime(),
+        duration: 0,
         tokenUsage: {
+          input: 0,
+          output: 0,
           total: usage.totalTokens || 0,
+          contextUtilizationReliable: false,
         },
+        messageCount: 0,
       }));
     } catch (error) {
       this.logger.error('Failed to list archived sessions', error);
