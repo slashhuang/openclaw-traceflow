@@ -63,11 +63,24 @@ const CodeDeliveryList = () => {
       title: 'MR',
       dataIndex: 'mr',
       key: 'mr',
-      render: (_, record: AuditEvent) => (
-        <div>
-          📝 MR #{record.mr?.iid}: {record.mr?.title || 'N/A'}
-        </div>
-      ),
+      render: (_, record: AuditEvent) => {
+        const mrUrl = record.mr?.url;
+        const mrTitle = record.mr?.title || 'N/A';
+        const mrIid = record.mr?.iid;
+        
+        if (mrUrl) {
+          return (
+            <a href={mrUrl} target="_blank" rel="noopener noreferrer">
+              📝 MR #{mrIid}: {mrTitle}
+            </a>
+          );
+        }
+        return (
+          <div>
+            📝 MR #{mrIid}: {mrTitle}
+          </div>
+        );
+      },
     },
     {
       title: '发起人',
