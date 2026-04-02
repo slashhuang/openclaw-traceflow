@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { SessionsService } from '../sessions/sessions.service';
 import {
   resolveUserPath,
   resolveWorkspaceDir,
@@ -14,11 +15,14 @@ import type { AuditSnapshot, AuditEvent, ScanAnchors } from './types';
  * Agent 贡献审计 API
  *
  * 提供审计快照查询、事件列表、扫描触发等功能
- * 扫描脚本：本仓库 `resources/bundled-skills/agent-audit/scripts/audit-scanner.mjs`（与 OpenClaw 侧 agent-audit 技能对齐）
+ * 扫描脚本：本仓库 `resources/bundled-skills/agent-audit/scripts/audit-scanner.mjs`(与 OpenClaw 侧 agent-audit 技能对齐)
  */
 @Controller('api/audit')
 export class AuditController {
-  constructor(private readonly openClawService: OpenClawService) {}
+  constructor(
+    private readonly openClawService: OpenClawService,
+    private readonly sessionsService: SessionsService,
+  ) {}
 
   /**
    * 获取审计目录根路径
@@ -95,6 +99,17 @@ export class AuditController {
       await fs.access(snapshotPath);
       const content = await fs.readFile(snapshotPath, 'utf-8');
       const snapshot = JSON.parse(content) as AuditSnapshot;
+
+      // 动态添加会话统计(包括归档会话)
+      const allSessions = await this.sessionsService.getAllSessions('all');
+      const archivedSessions = await this.sessionsService.getAllSessions('archived');
+
+      snapshot.sessions = {
+        total: allSessions.total,
+        active: allSessions.items.filter((s) => s.status === 'active').length,
+        idle: allSessions.items.filter((s) => s.status === 'idle').length,
+        archived: archivedSessions.total,
+      };
 
       return { success: true, data: snapshot };
     } catch (error) {
@@ -299,7 +314,7 @@ export class AuditController {
       ) {
         return {
           success: false,
-          error: '扫描锚点不存在，请先运行审计扫描器',
+          error: '扫描锚点不存在,请先运行审计扫描器',
         };
       }
       return {
@@ -360,7 +375,7 @@ export class AuditController {
       } catch {
         return {
           success: false,
-          error: `审计扫描器未找到：${scannerPath}（请从 TraceFlow 项目根启动，并确保已包含 resources/bundled-skills）`,
+          error: `审计扫描器未找到:${scannerPath}(请从 TraceFlow 项目根启动,并确保已包含 resources/bundled-skills)`,
         };
       }
 
@@ -401,11 +416,11 @@ export class AuditController {
   /**
    * 获取代码交付明细
    *
-   * @param month 月份过滤（可选）
-   * @param initiator 发起人 ID 过滤（可选）
-   * @param repo 仓库名过滤（可选）
-   * @param limit 返回数量限制（默认 100）
-   * @param offset 分页偏移（默认 0）
+   * @param month 月份过滤(可选)
+   * @param initiator 发起人 ID 过滤(可选)
+   * @param repo 仓库名过滤(可选)
+   * @param limit 返回数量限制(默认 100)
+   * @param offset 分页偏移(默认 0)
    * @returns 代码交付明细事件列表
    *
    * @example
@@ -461,7 +476,7 @@ export class AuditController {
           try {
             const event = JSON.parse(line) as AuditEvent;
 
-            // 过滤：只取 code_delivery 类型
+            // 过滤:只取 code_delivery 类型
             if (event.type !== 'code_delivery') continue;
 
             // 过滤发起人
@@ -489,7 +504,7 @@ export class AuditController {
       if (error.code === 'ENOENT') {
         return {
           success: false,
-          error: '审计事件目录不存在，请先运行审计扫描器',
+          error: '审计事件目录不存在,请先运行审计扫描器',
         };
       }
       return {
@@ -502,11 +517,11 @@ export class AuditController {
   /**
    * 获取问答服务明细
    *
-   * @param month 月份过滤（可选）
-   * @param userId 用户 ID 过滤（可选）
-   * @param tag 标签过滤（可选）
-   * @param limit 返回数量限制（默认 100）
-   * @param offset 分页偏移（默认 0）
+   * @param month 月份过滤(可选)
+   * @param userId 用户 ID 过滤(可选)
+   * @param tag 标签过滤(可选)
+   * @param limit 返回数量限制(默认 100)
+   * @param offset 分页偏移(默认 0)
    * @returns 问答服务明细事件列表
    *
    * @example
@@ -562,7 +577,7 @@ export class AuditController {
           try {
             const event = JSON.parse(line) as AuditEvent;
 
-            // 过滤：只取 qa 类型
+            // 过滤:只取 qa 类型
             if (event.type !== 'qa') continue;
 
             // 过滤用户
@@ -587,7 +602,7 @@ export class AuditController {
       if (error.code === 'ENOENT') {
         return {
           success: false,
-          error: '审计事件目录不存在，请先运行审计扫描器',
+          error: '审计事件目录不存在,请先运行审计扫描器',
         };
       }
       return {
@@ -600,10 +615,10 @@ export class AuditController {
   /**
    * 获取自动化运行明细
    *
-   * @param month 月份过滤（可选）
-   * @param type 自动化类型过滤（可选）
-   * @param limit 返回数量限制（默认 100）
-   * @param offset 分页偏移（默认 0）
+   * @param month 月份过滤(可选)
+   * @param type 自动化类型过滤(可选)
+   * @param limit 返回数量限制(默认 100)
+   * @param offset 分页偏移(默认 0)
    * @returns 自动化运行明细事件列表
    *
    * @example
@@ -658,7 +673,7 @@ export class AuditController {
           try {
             const event = JSON.parse(line) as AuditEvent;
 
-            // 过滤：只取 automation 类型
+            // 过滤:只取 automation 类型
             if (event.type !== 'automation') continue;
 
             // 过滤类型
@@ -683,7 +698,7 @@ export class AuditController {
       if (error.code === 'ENOENT') {
         return {
           success: false,
-          error: '审计事件目录不存在，请先运行审计扫描器',
+          error: '审计事件目录不存在,请先运行审计扫描器',
         };
       }
       return {

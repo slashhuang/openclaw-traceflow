@@ -135,10 +135,13 @@ export class SessionsService {
   }> {
     const all = await this.listSessions();
     let filtered: Session[] = all;
-    if (filter === 'archived' || filter === 'stale_index') {
+    if (filter === 'archived') {
       // 归档会话：查找带有 .reset. 标记的会话文件
       const archivedSessions = await this.openclawService.listArchivedSessions();
       filtered = archivedSessions as Session[];
+    } else if (filter === 'stale_index') {
+      // 过期索引：tokenUsageMeta.totalTokensFresh === false 的会话
+      filtered = all.filter((s) => s.tokenUsageMeta?.totalTokensFresh === false);
     } else if (filter !== 'all') {
       filtered = all.filter((s) => s.status === filter);
     }
@@ -148,6 +151,20 @@ export class SessionsService {
       total: filtered.length,
       page: Math.max(page, 1),
       pageSize,
+    };
+  }
+
+  /**
+   * 获取所有会话（不分页），供 audit.controller 使用
+   */
+  async getAllSessions(filter: string = 'all'): Promise<{
+    items: Session[];
+    total: number;
+  }> {
+    const result = await this.listSessionsPaged(1, 1000, filter);
+    return {
+      items: result.items,
+      total: result.total,
     };
   }
 

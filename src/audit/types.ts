@@ -98,6 +98,14 @@ export interface CostStats {
   totalOutputTokens: number;
 }
 
+/** 会话统计 */
+export interface SessionStats {
+  total: number;
+  active: number;
+  idle: number;
+  archived: number;
+}
+
 /** 审计快照 */
 export interface AuditSnapshot {
   generatedAt: string;
@@ -106,6 +114,7 @@ export interface AuditSnapshot {
   qaService: QaServiceStats;
   automation: AutomationStats;
   cost: CostStats;
+  sessions?: SessionStats; // 可选，由 TraceFlow 动态添加
 }
 
 // ─── 扫描锚点 ───────────────────────────────────────────────
