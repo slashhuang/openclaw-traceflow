@@ -1440,7 +1440,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         user: 'archived',
         typeLabel: '归档',
         status: 'archived',
-        lastActive: new Date(usage.resetTimestamp).getTime(),
+        lastActive: new Date(usage.resetTimestamp.replace(/(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})/, '$1:$2:$3')).getTime() || Date.now(),
         duration: 0,
         tokenUsage: {
           input: 0,

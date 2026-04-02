@@ -154,6 +154,20 @@ export class SessionsService {
     };
   }
 
+  /**
+   * 获取所有会话（不分页），供 audit.controller 使用
+   */
+  async getAllSessions(filter: string = 'all'): Promise<{
+    items: Session[];
+    total: number;
+  }> {
+    const result = await this.listSessionsPaged(1, 1000, filter);
+    return {
+      items: result.items,
+      total: result.total,
+    };
+  }
+
   async getSessionById(
     id: string,
     resetTimestamp?: string,
