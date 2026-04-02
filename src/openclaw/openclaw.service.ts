@@ -1406,6 +1406,52 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 列出所有归档会话（从 .reset. 文件推断）
+   */
+  async listArchivedSessions(): Promise<
+    Array<{
+      sessionKey: string;
+      sessionId: string;
+      user: string;
+      typeLabel: string;
+      status: string;
+      lastActive: number;
+      tokenUsage: {
+        total: number;
+      };
+    }>
+  > {
+    try {
+      const snapshot = await this.getArchivedResetSnapshot();
+      const all = snapshot.all || [];
+      
+      // 按 sessionId 分组，每个会话只保留最新的归档
+      const bySessionId = new Map<string, typeof all[0]>();
+      for (const usage of all) {
+        const existing = bySessionId.get(usage.sessionId);
+        if (!existing || usage.resetTimestamp > existing.resetTimestamp) {
+          bySessionId.set(usage.sessionId, usage);
+        }
+      }
+      
+      return Array.from(bySessionId.values()).map((usage) => ({
+        sessionKey: `main/${usage.sessionId}`,
+        sessionId: usage.sessionId,
+        user: 'archived',
+        typeLabel: '归档',
+        status: 'archived',
+        lastActive: new Date(usage.resetTimestamp).getTime(),
+        tokenUsage: {
+          total: usage.totalTokens || 0,
+        },
+      }));
+    } catch (error) {
+      this.logger.error('Failed to list archived sessions', error);
+      return [];
+    }
+  }
+
+  /**
    * 从 .reset. 归档文件中提取 token 用量（/new 重置前的历史）
    * 每个 .reset. 文件代表 OpenClaw 的一次归档 epoch，全部纳入；用量取最后一条带 totalTokens 的消息（无则 0）
    */
