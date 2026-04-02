@@ -24,7 +24,10 @@ describe('AuditController', () => {
           useValue: {
             getResolvedPaths: jest
               .fn()
-              .mockResolvedValue({ workspaceDir: '/tmp' }),
+              .mockResolvedValue({ workspaceDir: '/tmp', stateDir: '/tmp' }),
+            getDashboardGatewayBundle: jest.fn().mockRejectedValue(new Error('not implemented')),
+            getStatusOverview: jest.fn().mockResolvedValue(null),
+            checkConnection: jest.fn().mockResolvedValue({ connected: false, error: undefined }),
           },
         },
         {
@@ -64,9 +67,9 @@ describe('AuditController', () => {
   describe('getCodeDeliveryDetails', () => {
     it('should return code_delivery events with pagination', async () => {
       // Mock audit dir and events file
-      mockedFs.access.mockResolvedValue(undefined);
-      mockedFs.readdir.mockResolvedValue(['2026-04.jsonl']);
-      mockedFs.readFile.mockResolvedValue(
+      mockedFs.access.mockResolvedValueOnce(undefined);
+      mockedFs.readdir.mockResolvedValueOnce(['2026-04.jsonl']);
+      mockedFs.readFile.mockResolvedValueOnce(
         JSON.stringify([
           {
             type: 'code_delivery',
@@ -105,9 +108,9 @@ describe('AuditController', () => {
 
   describe('getQaDetails', () => {
     it('should return qa events with tag filter', async () => {
-      mockedFs.access.mockResolvedValue(undefined);
-      mockedFs.readdir.mockResolvedValue(['2026-04.jsonl']);
-      mockedFs.readFile.mockResolvedValue(
+      mockedFs.access.mockResolvedValueOnce(undefined);
+      mockedFs.readdir.mockResolvedValueOnce(['2026-04.jsonl']);
+      mockedFs.readFile.mockResolvedValueOnce(
         JSON.stringify([
           {
             type: 'qa',
@@ -133,9 +136,9 @@ describe('AuditController', () => {
 
   describe('getAutomationDetails', () => {
     it('should return automation events with type filter', async () => {
-      mockedFs.access.mockResolvedValue(undefined);
-      mockedFs.readdir.mockResolvedValue(['2026-04.jsonl']);
-      mockedFs.readFile.mockResolvedValue(
+      mockedFs.access.mockResolvedValueOnce(undefined);
+      mockedFs.readdir.mockResolvedValueOnce(['2026-04.jsonl']);
+      mockedFs.readFile.mockResolvedValueOnce(
         JSON.stringify([
           {
             type: 'automation',
