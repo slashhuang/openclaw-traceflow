@@ -14,8 +14,8 @@ import type { AuditSnapshot, AuditEvent, ScanAnchors } from './types';
 /**
  * Agent 贡献审计 API
  *
- * 提供审计快照查询、事件列表、扫描触发等功能
- * 扫描脚本：本仓库 `resources/bundled-skills/agent-audit/scripts/audit-scanner.mjs`(与 OpenClaw 侧 agent-audit 技能对齐)
+ * 提供审计快照查询、事件列表等功能
+ *
  */
 @Controller('api/audit')
 export class AuditController {
@@ -327,106 +327,6 @@ export class AuditController {
   /**
    * 触发审计扫描
    *
-   * 调用本仓库 vendored `audit-scanner.mjs` 执行增量扫描
-   *
-   * @param full 是否全量重扫(默认 false)
-   * @returns 扫描结果
-   *
-   * @example
-   * POST /api/audit/scan
-   * POST /api/audit/scan?full=true
-   *
-   * @example Response
-   * {
-   *   "success": true,
-   *   "message": "审计扫描完成",
-   *   "output": "[audit] 扫描完成,处理 1234 行...",
-   *   "error": null
-   * }
-   */
-  @Post('scan')
-  async triggerScan(@Query('full') full?: string): Promise<{
-    success: boolean;
-    message?: string;
-    output?: string;
-    error?: string;
-  }> {
-    try {
-      const auditDir = await this.getAuditDir();
-      const sessionsDir = path.join(
-        os.homedir(),
-        '.openclaw',
-        'agents',
-        'main',
-        'sessions',
-      );
-
-      const scannerPath = path.join(
-        process.cwd(),
-        'resources',
-        'bundled-skills',
-        'agent-audit',
-        'scripts',
-        'audit-scanner.mjs',
-      );
-
-      try {
-        await fs.access(scannerPath);
-      } catch {
-        return {
-          success: false,
-          error: `审计扫描器未找到:${scannerPath}(请从 TraceFlow 项目根启动,并确保已包含 resources/bundled-skills)`,
-        };
-      }
-
-      const args = [
-        scannerPath,
-        '--sessions-dir',
-        sessionsDir,
-        '--audit-dir',
-        auditDir,
-      ];
-
-      if (full === 'true') {
-        args.push('--full');
-      }
-
-      // 执行扫描器
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-
-      const { stdout, stderr } = await execAsync(`node ${args.join(' ')}`);
-
-      return {
-        success: true,
-        message: '审计扫描完成',
-        output: stdout,
-        error: stderr || undefined,
-      };
-    } catch (error) {
-      console.error('[AuditController] triggerScan error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  }
-
-  /**
-   * 获取代码交付明细
-   *
-   * @param month 月份过滤(可选)
-   * @param initiator 发起人 ID 过滤(可选)
-   * @param repo 仓库名过滤(可选)
-   * @param limit 返回数量限制(默认 100)
-   * @param offset 分页偏移(默认 0)
-   * @returns 代码交付明细事件列表
-   *
-   * @example
-   * GET /api/audit/code?month=2026-03&initiator=xiaogang.h&limit=50
-   */
-  @Get('code')
   async getCodeDeliveryDetails(
     @Query('month') month?: string,
     @Query('initiator') initiator?: string,
