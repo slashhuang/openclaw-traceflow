@@ -143,6 +143,8 @@ export default function Sessions() {
         return 'blue';
       case 'failed':
         return 'red';
+      case 'archived':
+        return 'purple';
       default:
         return 'default';
     }
@@ -165,9 +167,7 @@ export default function Sessions() {
     { value: 'all', label: intl.formatMessage({ id: 'common.all' }) },
     { value: 'active', label: intl.formatMessage({ id: 'sessions.filter.active' }) },
     { value: 'idle', label: intl.formatMessage({ id: 'sessions.filter.idle' }) },
-    { value: 'completed', label: intl.formatMessage({ id: 'sessions.filter.completed' }) },
-    { value: 'failed', label: intl.formatMessage({ id: 'sessions.filter.failed' }) },
-
+    { value: 'archived', label: intl.formatMessage({ id: 'sessions.filter.archived' }) },
     { value: 'stale_index', label: intl.formatMessage({ id: 'sessions.filter.staleIndex' }) },
   ];
 

@@ -217,14 +217,56 @@ export const Audit: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="自动化运行"
-              value={snapshot.automation.totalRuns}
+              title="会话总数"
+              value={snapshot.sessions?.total || 0}
               prefix={<ThunderboltOutlined />}
               valueStyle={{ color: '#fa8c16' }}
             />
           </Card>
         </Col>
       </Row>
+
+      {/* 会话统计 */}
+      {snapshot.sessions && (
+        <Row gutter={16} style={{ marginBottom: 24 }}>
+          <Col span={6}>
+            <Card>
+              <Statistic
+                title="进行中"
+                value={snapshot.sessions.active}
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card>
+              <Statistic
+                title="空闲"
+                value={snapshot.sessions.idle}
+                valueStyle={{ color: '#faad14' }}
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card>
+              <Statistic
+                title="归档"
+                value={snapshot.sessions.archived}
+                valueStyle={{ color: '#722ed1' }}
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card>
+              <Statistic
+                title="总计"
+                value={snapshot.sessions.total}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       {/* 审计明细入口卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
