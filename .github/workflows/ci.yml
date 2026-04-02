@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -24,13 +24,13 @@ jobs:
           version: 10
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Run lint (backend)
-        run: pnpm run lint
+        run: pnpm run lint --max-warnings=0
 
       - name: Run lint (frontend)
-        run: pnpm run lint:frontend
+        run: pnpm run lint:frontend --max-warnings=0
 
   build:
     name: Build
