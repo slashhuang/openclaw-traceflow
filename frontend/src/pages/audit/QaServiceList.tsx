@@ -81,9 +81,16 @@ const QaServiceList = () => {
     },
     {
       title: '问题摘要',
-      dataIndex: 'questionSummary',
-      key: 'questionSummary',
-      render: (_, record: AuditEvent) => record.questionSummary || 'N/A',
+      dataIndex: 'userMessage',
+      key: 'userMessage',
+      render: (_, record: AuditEvent) => {
+        const msg = record.userMessage || 'N/A';
+        // 截断过长的消息
+        if (msg.length > 100) {
+          return <span title={msg}>{msg.substring(0, 100)}...</span>;
+        }
+        return msg;
+      },
     },
     {
       title: 'Token',
