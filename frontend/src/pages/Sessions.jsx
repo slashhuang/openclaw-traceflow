@@ -53,13 +53,25 @@ function formatBytes(n) {
 function SortableTitle({ label, active, order, onClick }) {
   return (
     <span
-      style={{ cursor: 'pointer', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+      style={{
+        cursor: 'pointer',
+        userSelect: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+      }}
       onClick={onClick}
       role="button"
       tabIndex={0}
     >
       <span>{label}</span>
-      {active ? (order === 'desc' ? <ArrowDownOutlined style={{ fontSize: 12 }} /> : <ArrowUpOutlined style={{ fontSize: 12 }} />) : null}
+      {active ? (
+        order === 'desc' ? (
+          <ArrowDownOutlined style={{ fontSize: 12 }} />
+        ) : (
+          <ArrowUpOutlined style={{ fontSize: 12 }} />
+        )
+      ) : null}
     </span>
   );
 }
@@ -78,9 +90,13 @@ export default function Sessions() {
   const fetchSessions = async (nextPage = page, nextFilter = filter) => {
     setLoading(true);
     try {
-      const sessionsResult = await sessionsApi.list({ page: nextPage, pageSize, filter: nextFilter });
+      const sessionsResult = await sessionsApi.list({
+        page: nextPage,
+        pageSize,
+        filter: nextFilter,
+      });
       const data = sessionsResult || { items: [], total: 0 };
-      const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+      const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
       setSessions(items);
       setTotal(Number(data?.total || items.length || 0));
     } catch (e) {
@@ -143,6 +159,8 @@ export default function Sessions() {
         return 'blue';
       case 'failed':
         return 'red';
+      case 'archived':
+        return 'purple';
       default:
         return 'default';
     }
@@ -165,9 +183,7 @@ export default function Sessions() {
     { value: 'all', label: intl.formatMessage({ id: 'common.all' }) },
     { value: 'active', label: intl.formatMessage({ id: 'sessions.filter.active' }) },
     { value: 'idle', label: intl.formatMessage({ id: 'sessions.filter.idle' }) },
-    { value: 'completed', label: intl.formatMessage({ id: 'sessions.filter.completed' }) },
-    { value: 'failed', label: intl.formatMessage({ id: 'sessions.filter.failed' }) },
-
+    { value: 'archived', label: intl.formatMessage({ id: 'sessions.filter.archived' }) },
     { value: 'stale_index', label: intl.formatMessage({ id: 'sessions.filter.staleIndex' }) },
   ];
 
@@ -206,7 +222,11 @@ export default function Sessions() {
                 ? intl.formatMessage({ id: 'sessions.chatKind.direct' })
                 : null;
         const chatKindColor =
-          chatKind === 'group' || chatKind === 'channel' ? 'purple' : chatKind === 'direct' ? 'geekblue' : undefined;
+          chatKind === 'group' || chatKind === 'channel'
+            ? 'purple'
+            : chatKind === 'direct'
+              ? 'geekblue'
+              : undefined;
         return (
           <Link
             to={`/sessions/${encodeURIComponent(r.sessionId)}`}
@@ -346,10 +366,18 @@ export default function Sessions() {
                   textOverflow: 'ellipsis',
                   marginTop: 2,
                 }}
-                title={showLastSpeaker ? `${intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })} · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}` : undefined}
+                title={
+                  showLastSpeaker
+                    ? `${intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })} · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}`
+                    : undefined
+                }
               >
-                {intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })}
-                {showLastSpeaker && ` · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}`}
+                {intl.formatMessage(
+                  { id: 'sessions.participantCount' },
+                  { count: participantCount },
+                )}
+                {showLastSpeaker &&
+                  ` · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}`}
               </Typography.Text>
             )}
           </Link>
@@ -421,7 +449,12 @@ export default function Sessions() {
         if (r.messageCountCapped) {
           const n = r.messageCountScanMaxLines ?? 1000;
           return (
-            <Tooltip title={intl.formatMessage({ id: 'sessions.column.messagesExceededScanTooltip' }, { n })}>
+            <Tooltip
+              title={intl.formatMessage(
+                { id: 'sessions.column.messagesExceededScanTooltip' },
+                { n },
+              )}
+            >
               <span style={{ cursor: 'help' }}>{text}</span>
             </Tooltip>
           );
@@ -472,7 +505,15 @@ export default function Sessions() {
     },
     {
       title: (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', width: '100%' }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            justifyContent: 'flex-end',
+            width: '100%',
+          }}
+        >
           <Tooltip title={intl.formatMessage({ id: 'sessions.column.recordedTokensTooltip' })}>
             <span style={{ cursor: 'help' }}>
               <SortableTitle
@@ -512,7 +553,14 @@ export default function Sessions() {
               width: '100%',
             }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                justifyContent: 'flex-end',
+              }}
+            >
               <Tooltip
                 title={
                   unreliable
@@ -532,9 +580,7 @@ export default function Sessions() {
             </span>
             <Tooltip
               title={
-                unreliable
-                  ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' })
-                  : undefined
+                unreliable ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' }) : undefined
               }
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -602,7 +648,15 @@ export default function Sessions() {
       }}
       bodyStyle={{ padding: 16 }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Typography.Title level={4} style={{ margin: 0 }}>
             {intl.formatMessage({ id: 'sessions.title' })}
