@@ -213,6 +213,22 @@ export const Reflections: React.FC = () => {
 
   const columns: ColumnsType<Reflection> = [
     {
+      title: '时间',
+      dataIndex: 'timestamp',
+      key: 'timestamp',
+      width: 160,
+      render: (timestamp: string) => (
+        <Text type="secondary" style={{ fontSize: 13 }}>
+          {new Date(timestamp).toLocaleString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </Text>
+      ),
+    },
+    {
       title: '维度',
       dataIndex: 'dimension',
       key: 'dimension',
@@ -264,26 +280,9 @@ export const Reflections: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 150,
       render: (_, record) => (
         <Space size="small">
-          {record.status === 'pending' && (
-            <>
-              <Button
-                size="small"
-                type="primary"
-                onClick={() => handleApply(record.id, 'apply')}
-              >
-                应用
-              </Button>
-              <Button
-                size="small"
-                onClick={() => handleApply(record.id, 'ignore')}
-              >
-                忽略
-              </Button>
-            </>
-          )}
           {record.diff && (
             <Button size="small" onClick={() => handleViewDiff(record.id)}>
               查看 Diff
