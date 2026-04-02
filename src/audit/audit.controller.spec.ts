@@ -16,6 +16,8 @@ describe('AuditController', () => {
   let metricsService: jest.Mocked<MetricsService>;
 
   beforeEach(async () => {
+    // Reset all mocks before each test
+    jest.clearAllMocks();
     const moduleRef: TestingModule = await Test.createTestingModule({
       controllers: [AuditController],
       providers: [
