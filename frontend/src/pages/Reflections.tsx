@@ -9,13 +9,12 @@ import {
   Tag,
   Button,
   Space,
-  Modal,
   message,
   Select,
   Statistic,
   Row,
   Col,
-  Divider,
+  Text,
 } from 'antd';
 import {
   RobotOutlined,
@@ -82,8 +81,7 @@ export const Reflections: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('pending');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [dimensionFilter, setDimensionFilter] = useState<string>('all');
-  const [diffModalVisible, setDiffModalVisible] = useState(false);
-  const [selectedDiff, setSelectedDiff] = useState<any>(null);
+
 
   /**
    * 加载反思列表
@@ -117,49 +115,9 @@ export const Reflections: React.FC = () => {
     loadReflections();
   }, [loadReflections]);
 
-  /**
-   * 应用反思
-   */
-  const handleApply = async (id: string, action: 'apply' | 'ignore') => {
-    try {
-      const response = await fetch(`/api/reflections/${id}/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      
-      if (response.ok) {
-        message.success(action === 'apply' ? '已应用建议' : '已忽略');
-        loadReflections();
-      } else {
-        message.error('操作失败');
-      }
-    } catch (error) {
-      message.error('操作失败');
-      console.error(error);
-    }
-  };
 
-  /**
-   * 查看 Diff
-   */
-  const handleViewDiff = async (id: string) => {
-    try {
-      const response = await fetch(`/api/reflections/${id}/diff`);
-      const data = await response.json();
-      
-      if (data.error) {
-        message.error(data.error);
-        return;
-      }
-      
-      setSelectedDiff(data);
-      setDiffModalVisible(true);
-    } catch (error) {
-      message.error('获取 Diff 失败');
-      console.error(error);
-    }
-  };
+
+
 
   /**
    * 获取维度图标
@@ -280,29 +238,11 @@ export const Reflections: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
-      render: (_, record) => (
-        <Space size="small">
-          {record.diff && (
-            <Button size="small" onClick={() => handleViewDiff(record.id)}>
-              查看 Diff
-            </Button>
-          )}
-          {record.userGuidance && (
-            <Button
-              size="small"
-              onClick={() => {
-                Modal.info({
-                  title: '用户指南',
-                  content: record.userGuidance,
-                  width: 500,
-                });
-              }}
-            >
-              查看指南
-            </Button>
-          )}
-        </Space>
+      width: 80,
+      render: () => (
+        <Text type="secondary" style={{ fontSize: 13 }}>
+          仅记录
+        </Text>
       ),
     },
   ];
@@ -446,49 +386,6 @@ export const Reflections: React.FC = () => {
         />
       </Card>
 
-      {/* Diff 弹窗 */}
-      <Modal
-        title="配置变更"
-        open={diffModalVisible}
-        onCancel={() => setDiffModalVisible(false)}
-        footer={[
-          <Button
-            key="copy"
-            onClick={() => {
-              navigator.clipboard.writeText(selectedDiff?.unified || '');
-              message.success('已复制到剪贴板');
-            }}
-          >
-            复制
-          </Button>,
-          <Button key="close" onClick={() => setDiffModalVisible(false)}>
-            关闭
-          </Button>,
-        ]}
-        width={700}
-      >
-        {selectedDiff && (
-          <div>
-            <Paragraph>
-              <Text strong>文件：</Text>
-              {selectedDiff.file}
-            </Paragraph>
-            <Divider />
-            <pre
-              style={{
-                background: '#f5f5f5',
-                padding: 16,
-                borderRadius: 4,
-                overflow: 'auto',
-                fontSize: 13,
-                fontFamily: 'monospace',
-              }}
-            >
-              {selectedDiff.unified}
-            </pre>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };
