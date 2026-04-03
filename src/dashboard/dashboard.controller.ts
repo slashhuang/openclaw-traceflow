@@ -48,33 +48,40 @@ export class DashboardController {
           : { connected: chk.connected, error: chk.error };
     }
 
-    const [health, sessions, latency, tokenSummary, archivedSessions] =
-      await Promise.all([
-        this.healthService
-          .getHealthStatus({ connectionOverride })
-          .catch(() => null),
-        this.sessionsService.listSessions().catch(() => []),
-        this.metricsService
-          .getLatencyMetrics()
-          .catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
-        this.metricsService.getTokenSummary().catch(() => ({
-          totalInput: 0,
-          totalOutput: 0,
-          totalTokens: 0,
-          activeInput: 0,
-          activeOutput: 0,
-          activeTokens: 0,
-          archivedInput: 0,
-          archivedOutput: 0,
-          archivedTokens: 0,
-          nearLimitCount: 0,
-          limitReachedCount: 0,
-          sessionCount: 0,
-        })),
-        this.sessionsService
-          .getAllSessions('archived')
-          .catch(() => ({ items: [], total: 0 })),
-      ]);
+    const [
+      health,
+      sessions,
+      latency,
+      tokenSummary,
+      archivedSessions,
+      agentSessionOverview,
+    ] = await Promise.all([
+      this.healthService
+        .getHealthStatus({ connectionOverride })
+        .catch(() => null),
+      this.sessionsService.listSessions().catch(() => []),
+      this.metricsService
+        .getLatencyMetrics()
+        .catch(() => ({ p50: 0, p95: 0, p99: 0, count: 0 })),
+      this.metricsService.getTokenSummary().catch(() => ({
+        totalInput: 0,
+        totalOutput: 0,
+        totalTokens: 0,
+        activeInput: 0,
+        activeOutput: 0,
+        activeTokens: 0,
+        archivedInput: 0,
+        archivedOutput: 0,
+        archivedTokens: 0,
+        nearLimitCount: 0,
+        limitReachedCount: 0,
+        sessionCount: 0,
+      })),
+      this.sessionsService
+        .getAllSessions('archived')
+        .catch(() => ({ items: [], total: 0 })),
+      this.sessionsService.getAgentSessionOverview().catch(() => []),
+    ]);
 
     // 构建归档计数映射（按 sessionId 分组）
     const archiveCountMap: Record<string, number> = {};
@@ -86,6 +93,8 @@ export class DashboardController {
       health,
       statusOverview: statusOverview ?? { error: 'Gateway 未连接或不可用' },
       sessions,
+      /** PRD：按 agent 分区的会话概览（总/活跃/空闲/归档，磁盘） */
+      agentSessionOverview,
       recentLogs: logs,
       metrics: {
         latency,
