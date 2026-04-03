@@ -556,6 +556,7 @@ export class FileSystemSessionStorage implements SessionStorage {
       return {
         sessionKey,
         sessionId,
+        agentId: agent,
         userId,
         systemSent,
         status: this.inferSessionStatus(sessionData, actualStats.mtimeMs),
