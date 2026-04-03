@@ -21,7 +21,7 @@ import { fetchRuntimePathsFromGateway } from './gateway-ws-paths';
 const execFileAsync = promisify(execFile);
 
 export type OpenClawPathsSource = {
-  configPath: 'gateway' | 'env' | 'cli' | 'none';
+  configPath: 'gateway' | 'env' | 'cli' | 'explicit' | 'none';
   stateDir: 'gateway' | 'env' | 'explicit' | 'inferred' | 'fallback';
   workspaceDir: 'gateway' | 'config-file' | 'cli' | 'explicit' | 'sessions-json' | 'none';
 };
@@ -205,6 +205,8 @@ export async function resolveOpenClawPaths(options: {
   explicitStateDir?: string;
   /** 手动指定工作目录，优先级最高 */
   explicitWorkspaceDir?: string;
+  /** 对齐 OPENCLAW_CONFIG_PATH，优先于环境变量 */
+  explicitConfigPath?: string;
   gatewayHttpUrl?: string;
   gatewayToken?: string;
   gatewayPassword?: string;
@@ -262,6 +264,15 @@ export async function resolveOpenClawPaths(options: {
       }
     } else {
       gatewayHint = gw.error;
+    }
+  }
+
+  const explicitCfg = options.explicitConfigPath?.trim();
+  if (explicitCfg) {
+    const p = expandHome(explicitCfg);
+    if (fs.existsSync(p)) {
+      configPath = p;
+      source.configPath = 'explicit';
     }
   }
 
