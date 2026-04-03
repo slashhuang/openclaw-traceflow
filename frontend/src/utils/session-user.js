@@ -1,6 +1,6 @@
 /**
  * 会话用户解析：与后端 common/session-user-resolver 保持一致
- * 供 Dashboard、Sessions 等页面共用
+ * 供 Sessions 等页面共用
  */
 
 /**
