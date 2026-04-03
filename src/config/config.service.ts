@@ -1,6 +1,7 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Optional, Inject } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
+import { OnboardingStorageService } from '../onboarding/onboarding-storage.service';
 
 export interface Config {
   // 服务器配置
@@ -59,9 +60,11 @@ export interface ConfigReader {
 export class ConfigService implements ConfigReader, OnModuleInit {
   private config: Config;
   private configPath: string;
-  private onboardingStorage: any; // 延迟导入避免循环依赖
 
-  constructor() {
+  constructor(
+    @Optional() @Inject(OnboardingStorageService)
+    private readonly onboardingStorage?: OnboardingStorageService,
+  ) {
     // 使用 realpathSync 解析符号链接，确保路径正确
     const realCwd = fs.realpathSync(process.cwd());
     this.configPath = path.join(realCwd, 'config', 'openclaw.runtime.json');
@@ -69,15 +72,9 @@ export class ConfigService implements ConfigReader, OnModuleInit {
   }
 
   async onModuleInit() {
-    // 延迟导入 OnboardingStorageService 避免循环依赖
-    try {
-      const { OnboardingStorageService } = await import('../onboarding/onboarding-storage.service');
-      this.onboardingStorage = new OnboardingStorageService();
-
-      // 尝试从 ~/.openclawTraceFlow 加载配置并合并
+    // 如果注入了 OnboardingStorageService，尝试从 ~/.openclawTraceFlow 加载配置并合并
+    if (this.onboardingStorage) {
       await this.loadOnboardingConfigIfExists();
-    } catch (error) {
-      console.warn('Failed to load onboarding storage:', error);
     }
   }
 
