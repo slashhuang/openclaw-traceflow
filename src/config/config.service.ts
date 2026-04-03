@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -15,6 +15,14 @@ export interface Config {
   openclawStateDir?: string;
   /** 手动指定工作目录（可选，留空则从 Gateway/CLI 解析） */
   openclawWorkspaceDir?: string;
+  /**
+   * 主配置文件路径（对齐 OPENCLAW_CONFIG_PATH），默认 $OPENCLAW_STATE_DIR/openclaw.json
+   */
+  openclawConfigPath?: string;
+  /**
+   * bootstrap 逻辑文件名 → 绝对路径，用于与 OpenClaw hook/自定义布局对齐时的编辑目标
+   */
+  bootstrapFileOverrides?: Record<string, string>;
 
   // 访问保护配置
   accessToken?: string;
@@ -48,15 +56,58 @@ export interface ConfigReader {
 }
 
 @Injectable()
-export class ConfigService implements ConfigReader {
+export class ConfigService implements ConfigReader, OnModuleInit {
   private config: Config;
   private configPath: string;
+  private onboardingStorage: any; // 延迟导入避免循环依赖
 
   constructor() {
     // 使用 realpathSync 解析符号链接，确保路径正确
     const realCwd = fs.realpathSync(process.cwd());
     this.configPath = path.join(realCwd, 'config', 'openclaw.runtime.json');
     this.config = this.loadConfig();
+  }
+
+  async onModuleInit() {
+    // 延迟导入 OnboardingStorageService 避免循环依赖
+    try {
+      const { OnboardingStorageService } = await import('../onboarding/onboarding-storage.service');
+      this.onboardingStorage = new OnboardingStorageService();
+
+      // 尝试从 ~/.openclawTraceFlow 加载配置并合并
+      await this.loadOnboardingConfigIfExists();
+    } catch (error) {
+      console.warn('Failed to load onboarding storage:', error);
+    }
+  }
+
+  private async loadOnboardingConfigIfExists() {
+    if (!this.onboardingStorage) {
+      return;
+    }
+
+    try {
+      const onboardingConfig = await this.onboardingStorage.loadOnboardingConfig();
+      if (onboardingConfig) {
+        // 合并 onboarding 配置到当前配置（onboarding 配置优先级最高）
+        this.config = {
+          ...this.config,
+          openclawStateDir: onboardingConfig.openclaw.stateDir || this.config.openclawStateDir,
+          openclawWorkspaceDir: onboardingConfig.openclaw.workspaceDir || this.config.openclawWorkspaceDir,
+          openclawConfigPath: onboardingConfig.openclaw.configPath || this.config.openclawConfigPath,
+          openclawGatewayUrl: onboardingConfig.gateway.url || this.config.openclawGatewayUrl,
+          openclawGatewayToken: onboardingConfig.gateway.token || this.config.openclawGatewayToken,
+          openclawGatewayPassword: onboardingConfig.gateway.password || this.config.openclawGatewayPassword,
+          host: onboardingConfig.traceflow.host || this.config.host,
+          port: onboardingConfig.traceflow.port || this.config.port,
+          accessMode: onboardingConfig.traceflow.accessMode || this.config.accessMode,
+          accessToken: onboardingConfig.traceflow.accessToken || this.config.accessToken,
+        };
+        console.log('Loaded configuration from ~/.openclawTraceFlow');
+      }
+    } catch (error) {
+      console.warn('Failed to load onboarding config:', error);
+    }
   }
 
   private loadConfig(): Config {
@@ -99,6 +150,8 @@ export class ConfigService implements ConfigReader {
         process.env.OPENCLAW_GATEWAY_PASSWORD || undefined,
       openclawStateDir: process.env.OPENCLAW_STATE_DIR || undefined,
       openclawWorkspaceDir: process.env.OPENCLAW_WORKSPACE_DIR || undefined,
+      openclawConfigPath:
+        process.env.OPENCLAW_CONFIG_PATH || process.env.CLAWDBOT_CONFIG_PATH || undefined,
       accessToken: process.env.OPENCLAW_RUNTIME_ACCESS_TOKEN || undefined,
       accessMode:
         (process.env.OPENCLAW_ACCESS_MODE as Config['accessMode']) || undefined,
