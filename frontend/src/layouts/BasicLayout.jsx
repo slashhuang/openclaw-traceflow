@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ProLayout } from '@ant-design/pro-layout';
 import {
-  DashboardOutlined,
   MessageOutlined,
   FileTextOutlined,
   UnorderedListOutlined,
@@ -13,11 +12,12 @@ import {
   DatabaseOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Dropdown, message, Space, Tag, Tooltip, theme } from 'antd';
+import { Button, Dropdown, Space, Tag, Tooltip, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import { useLocaleTheme } from '../providers/LocaleThemeProvider';
 import { healthApi } from '../api';
+import { SETTINGS_GATEWAY_PATH } from '../constants/settingsPaths';
 
 const HEADER_HEALTH_POLL_INTERVAL_MS = 10000;
 
@@ -28,12 +28,8 @@ export default function BasicLayout() {
   const { token } = theme.useToken();
   const { locale, setLocale, themeMode, setThemeMode, isDark } = useLocaleTheme();
   const [health, setHealth] = useState(null);
-  const didNotifyHealthErrorRef = useRef(false);
   const healthFetchInFlightRef = useRef(false);
-  const shouldPollHeaderHealth = location.pathname !== '/';
-
   useEffect(() => {
-    if (!shouldPollHeaderHealth) return undefined;
     const fetchHealth = async () => {
       if (healthFetchInFlightRef.current) return;
       healthFetchInFlightRef.current = true;
@@ -42,10 +38,6 @@ export default function BasicLayout() {
         setHealth(data);
       } catch {
         setHealth(null);
-        if (!didNotifyHealthErrorRef.current) {
-          didNotifyHealthErrorRef.current = true;
-          message.error(intl.formatMessage({ id: 'gateway.healthError' }));
-        }
       } finally {
         healthFetchInFlightRef.current = false;
       }
@@ -53,18 +45,9 @@ export default function BasicLayout() {
     fetchHealth();
     const t = setInterval(fetchHealth, HEADER_HEALTH_POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [intl, shouldPollHeaderHealth]);
-
-  const gatewayDisconnected = health && !health.openclawConnected;
-  const gatewayError = health?.gatewayError;
+  }, [intl]);
 
   const menuData = [
-    {
-      path: '/',
-      key: '/',
-      name: intl.formatMessage({ id: 'menu.dashboard' }),
-      icon: <DashboardOutlined />,
-    },
     {
       path: '/sessions',
       key: '/sessions',
@@ -114,10 +97,36 @@ export default function BasicLayout() {
           (health?.status || health?.openclawConnected != null) && (
             <Tooltip
               key="health-poll"
-              title={intl.formatMessage(
-                { id: 'header.healthPollHint' },
-                { seconds: HEADER_HEALTH_POLL_INTERVAL_MS / 1000 },
-              )}
+              overlayStyle={{ maxWidth: 420 }}
+              title={
+                health?.openclawConnected === false ? (
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                      {intl.formatMessage({ id: 'gateway.banner.title' })}
+                    </div>
+                    {health?.gatewayError ? (
+                      <div
+                        style={{
+                          marginBottom: 8,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          opacity: 0.95,
+                        }}
+                      >
+                        {health.gatewayError}
+                      </div>
+                    ) : null}
+                    <div style={{ opacity: 0.85 }}>
+                      {intl.formatMessage({ id: 'header.gatewayClickToSettings' })}
+                    </div>
+                  </div>
+                ) : (
+                  intl.formatMessage(
+                    { id: 'header.healthPollHint' },
+                    { seconds: HEADER_HEALTH_POLL_INTERVAL_MS / 1000 },
+                  )
+                )
+              }
             >
               <Space size={4}>
                 {health?.status && (
@@ -132,11 +141,23 @@ export default function BasicLayout() {
                 {health?.openclawConnected != null && (
                   <Tag
                     color={health.openclawConnected ? 'success' : 'error'}
+                    role={health.openclawConnected ? undefined : 'button'}
+                    tabIndex={health.openclawConnected ? undefined : 0}
+                    onClick={() => {
+                      if (!health.openclawConnected) navigate(SETTINGS_GATEWAY_PATH);
+                    }}
+                    onKeyDown={(e) => {
+                      if (!health.openclawConnected && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        navigate(SETTINGS_GATEWAY_PATH);
+                      }
+                    }}
                     style={{
                       fontWeight: 600,
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 8,
+                      cursor: health.openclawConnected ? 'default' : 'pointer',
                     }}
                   >
                     <ApiOutlined />
@@ -199,24 +220,8 @@ export default function BasicLayout() {
           </Dropdown>,
         ].filter(Boolean)
       }
-      onMenuHeaderClick={() => navigate('/')}
+      onMenuHeaderClick={() => navigate('/sessions')}
     >
-      {gatewayDisconnected && (
-        <Alert
-          type="error"
-          showIcon
-          style={{ marginBottom: 16 }}
-          message={
-            <Space wrap>
-              <strong>{intl.formatMessage({ id: 'gateway.banner.title' })}</strong>
-              {gatewayError && <span>{gatewayError}</span>}
-              <a onClick={() => navigate('/settings')} style={{ cursor: 'pointer' }}>
-                {intl.formatMessage({ id: 'gateway.banner.settings' })} →
-              </a>
-            </Space>
-          }
-        />
-      )}
       <div
         style={{
           padding: '0 24px 24px',
