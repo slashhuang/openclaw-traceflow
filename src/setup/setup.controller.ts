@@ -11,6 +11,10 @@ export interface SetupRequest {
   openclawGatewayPassword?: string;
   openclawStateDir?: string;
   openclawWorkspaceDir?: string;
+  /** 对齐 OPENCLAW_CONFIG_PATH */
+  openclawConfigPath?: string;
+  /** bootstrap 逻辑文件名 → 绝对路径 */
+  bootstrapFileOverrides?: Record<string, string>;
   accessMode?: 'local-only' | 'token' | 'none';
   accessToken?: string;
 }
@@ -111,6 +115,8 @@ export class SetupController {
         openclawGatewayUrl: config.openclawGatewayUrl,
         openclawStateDir: config.openclawStateDir,
         openclawWorkspaceDir: config.openclawWorkspaceDir,
+        openclawConfigPath: config.openclawConfigPath,
+        bootstrapFileOverrides: config.bootstrapFileOverrides,
         accessMode: config.accessMode,
         hasAccessToken: !!config.accessToken,
         hasGatewayToken: !!config.openclawGatewayToken,
@@ -215,6 +221,16 @@ export class SetupController {
       }
       if (body.openclawWorkspaceDir !== undefined) {
         updates.openclawWorkspaceDir = body.openclawWorkspaceDir || undefined;
+      }
+      if (body.openclawConfigPath !== undefined) {
+        updates.openclawConfigPath = body.openclawConfigPath || undefined;
+      }
+      if (body.bootstrapFileOverrides !== undefined) {
+        updates.bootstrapFileOverrides =
+          body.bootstrapFileOverrides &&
+          typeof body.bootstrapFileOverrides === 'object'
+            ? body.bootstrapFileOverrides
+            : undefined;
       }
       if (body.accessMode !== undefined) {
         updates.accessMode = body.accessMode;
