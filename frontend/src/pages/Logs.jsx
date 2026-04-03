@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col, Divider } from 'antd';
+import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col, Alert } from 'antd';
 import { useIntl } from 'react-intl';
-import { logsApi } from '../api';
+import { logsApi, healthApi } from '../api';
 import SectionScopeHint from '../components/SectionScopeHint';
+import { SETTINGS_GATEWAY_PATH } from '../constants/settingsPaths';
 
 const { Search } = Input;
 
@@ -96,8 +98,12 @@ function LogPanel({ title, logs, loading, filterLevel, searchKeyword, onFilterCh
 
 export default function Logs() {
   const intl = useIntl();
+  const navigate = useNavigate();
   const { token } = theme.useToken();
-  
+  /** null：健康检查中；true/false：是否已连接 Gateway（PRD §2.2：Gateway 日志按需展示） */
+  const [gatewayConnected, setGatewayConnected] = useState(null);
+  const gatewayOkRef = useRef(null);
+
   // Gateway 日志状态
   const [gatewayLogs, setGatewayLogs] = useState([]);
   const [gatewayLoading, setGatewayLoading] = useState(true);
@@ -115,6 +121,28 @@ export default function Logs() {
   
   const socketRef = useRef(null);
   const refreshTimerRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    healthApi
+      .getHealth()
+      .then((h) => {
+        if (cancelled) return;
+        const ok = h ? !!h.openclawConnected : false;
+        gatewayOkRef.current = ok;
+        setGatewayConnected(ok);
+        if (!ok) setGatewayLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        gatewayOkRef.current = false;
+        setGatewayConnected(false);
+        setGatewayLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 加载 Gateway 日志
   const loadGatewayLogs = async (showLoading = false) => {
@@ -147,18 +175,18 @@ export default function Logs() {
     }
   };
 
-  // 加载所有日志
   const loadAllLogs = async (showLoading = false) => {
-    await Promise.all([
-      loadGatewayLogs(showLoading),
-      loadTraceflowLogs(showLoading),
-    ]);
+    await loadTraceflowLogs(showLoading);
+    if (gatewayOkRef.current === false) {
+      if (showLoading) setGatewayLoading(false);
+      return;
+    }
+    await loadGatewayLogs(showLoading);
   };
 
   useEffect(() => {
     loadAllLogs(true);
 
-    // WebSocket 连接（用于 Gateway 日志实时推送）
     socketRef.current = io(window.location.origin, {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
@@ -169,18 +197,17 @@ export default function Logs() {
     });
     socketRef.current.on('disconnect', () => setSocketConnected(false));
     socketRef.current.on('logs:new', (log) => {
-      // 根据 source 字段区分日志来源
       if (log.source === 'traceflow') {
         setTraceflowLogs((prev) => [...prev, log].slice(-500));
-      } else {
+      } else if (gatewayOkRef.current !== false) {
         setGatewayLogs((prev) => [...prev, log].slice(-500));
       }
     });
 
-    // 10 秒自动刷新
     refreshTimerRef.current = setInterval(() => {
       if (autoRefresh) {
-        loadAllLogs(false);
+        loadTraceflowLogs(false);
+        if (gatewayOkRef.current !== false) loadGatewayLogs(false);
       }
     }, 10000);
 
@@ -265,22 +292,38 @@ export default function Logs() {
       </div>
 
       <Row gutter={16}>
-        {/* 左侧：Gateway 日志 */}
+        {/* 左侧：Gateway 日志（依赖 Gateway 在线；未连接时引导至设置） */}
         <Col span={12}>
-          <LogPanel
-            title={<span style={{ color: token.colorPrimary }}>🔵 Gateway 日志</span>}
-            logs={gatewayLogs}
-            loading={gatewayLoading}
-            filterLevel={filterLevel}
-            searchKeyword={searchKeyword}
-            onFilterChange={setFilterLevel}
-            onSearch={handleSearch}
-            onRefresh={() => loadGatewayLogs(true)}
-            autoRefresh={autoRefresh}
-            lastRefreshTime={lastRefreshTime}
-            socketConnected={socketConnected}
-            color={token.colorPrimary}
-          />
+          {gatewayConnected === false ? (
+            <Card size="small" title={<span style={{ color: token.colorPrimary }}>🔵 Gateway 日志</span>}>
+              <Alert
+                type="warning"
+                showIcon
+                message={intl.formatMessage({ id: 'logs.gatewayOfflineTitle' })}
+                description={intl.formatMessage({ id: 'logs.gatewayOfflineDesc' })}
+                action={
+                  <Button type="primary" size="small" onClick={() => navigate(SETTINGS_GATEWAY_PATH)}>
+                    {intl.formatMessage({ id: 'gateway.banner.settings' })}
+                  </Button>
+                }
+              />
+            </Card>
+          ) : (
+            <LogPanel
+              title={<span style={{ color: token.colorPrimary }}>🔵 Gateway 日志</span>}
+              logs={gatewayLogs}
+              loading={gatewayConnected === null || gatewayLoading}
+              filterLevel={filterLevel}
+              searchKeyword={searchKeyword}
+              onFilterChange={setFilterLevel}
+              onSearch={handleSearch}
+              onRefresh={() => loadGatewayLogs(true)}
+              autoRefresh={autoRefresh}
+              lastRefreshTime={lastRefreshTime}
+              socketConnected={socketConnected}
+              color={token.colorPrimary}
+            />
+          )}
         </Col>
 
         {/* 右侧：TraceFlow 日志 */}
