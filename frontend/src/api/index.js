@@ -59,6 +59,8 @@ export const statusApi = {
 };
 
 export const sessionsApi = {
+  /** PRD §3.2：按 agent 会话概览（与 /sessions 着陆同源） */
+  getAgentOverview: () => api.get('/sessions/agent-overview').then((res) => res.data),
   list: (params) => api.get('/sessions', { params }).then(res => res.data),
   getDetail: (id, params) =>
     api
@@ -109,11 +111,6 @@ export const setupApi = {
 
 export const metricsApi = {
   getLatency: () => api.get('/metrics/latency').then(res => res.data),
-};
-
-export const dashboardApi = {
-  /** @param {{ timeRangeMs?: number }} [params] - 不传则后端默认 24h；传极大值可近似全量 metrics */
-  getOverview: (params) => api.get('/dashboard/overview', { params }).then((res) => res.data),
 };
 
 export const actionsApi = {
