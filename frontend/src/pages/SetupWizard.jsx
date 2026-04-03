@@ -11,7 +11,6 @@ export default function SetupWizard({ onComplete }) {
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingToken, setGeneratingToken] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   const gatewayUrl = Form.useWatch('openclawGatewayUrl', form) || 'http://localhost:18789';
@@ -35,7 +34,6 @@ export default function SetupWizard({ onComplete }) {
         openclawGatewayToken: vals.openclawGatewayToken || undefined,
         openclawGatewayPassword: vals.openclawGatewayPassword || undefined,
       });
-      setConnected(!!result.connected);
       const resultMessage = result.error || result.message || (result.connected ? '连接成功' : '连接失败');
       message.destroy(toastKey);
       if (result.connected) {
@@ -48,7 +46,6 @@ export default function SetupWizard({ onComplete }) {
       const errorMessage = extractApiErrorMessage(e, '连接失败');
       message.destroy(toastKey);
       message.error({ content: errorMessage });
-      setConnected(false);
       setTestResult({ ok: false, message: errorMessage });
     } finally {
       setTesting(false);
@@ -77,6 +74,9 @@ export default function SetupWizard({ onComplete }) {
     try {
       const vals = form.getFieldsValue();
       await setupApi.configure({
+        openclawStateDir: (vals.openclawStateDir || '').trim() || undefined,
+        openclawWorkspaceDir: (vals.openclawWorkspaceDir || '').trim() || undefined,
+        openclawConfigPath: (vals.openclawConfigPath || '').trim() || undefined,
         openclawGatewayUrl: vals.openclawGatewayUrl,
         openclawGatewayToken: vals.openclawGatewayToken || undefined,
         openclawGatewayPassword: vals.openclawGatewayPassword || undefined,
@@ -128,9 +128,10 @@ export default function SetupWizard({ onComplete }) {
           current={step}
           style={{ marginBottom: 24 }}
           items={[
-            { title: intl.formatMessage({ id: 'setup.step1.title' }).split('：')[0] || '1' },
-            { title: intl.formatMessage({ id: 'setup.step2.title' }).split('：')[0] || '2' },
-            { title: intl.formatMessage({ id: 'setup.step3.title' }).split('：')[0] || '3' },
+            { title: intl.formatMessage({ id: 'setup.nav.paths' }) },
+            { title: intl.formatMessage({ id: 'setup.nav.gateway' }) },
+            { title: intl.formatMessage({ id: 'setup.nav.access' }) },
+            { title: intl.formatMessage({ id: 'setup.nav.confirm' }) },
           ]}
         />
         <Form
@@ -139,13 +140,34 @@ export default function SetupWizard({ onComplete }) {
           initialValues={{
             openclawGatewayUrl: 'http://localhost:18789',
             accessMode: 'none',
+            openclawStateDir: '',
+            openclawWorkspaceDir: '',
+            openclawConfigPath: '',
           }}
         >
           {step === 0 && (
             <>
+              <Typography.Title level={5}>{intl.formatMessage({ id: 'setup.paths.title' })}</Typography.Title>
+              <Typography.Paragraph type="secondary">{intl.formatMessage({ id: 'setup.paths.desc' })}</Typography.Paragraph>
+              <Form.Item name="openclawStateDir" label={intl.formatMessage({ id: 'settings.stateDir' })}>
+                <Input placeholder="~/.openclaw" />
+              </Form.Item>
+              <Form.Item name="openclawWorkspaceDir" label={intl.formatMessage({ id: 'settings.workspaceDir' })}>
+                <Input placeholder="~/.openclaw/workspace" />
+              </Form.Item>
+              <Form.Item name="openclawConfigPath" label={intl.formatMessage({ id: 'setup.paths.configPath' })}>
+                <Input placeholder="~/.openclaw/openclaw.json" />
+              </Form.Item>
+              <Button type="primary" onClick={() => setStep(1)}>
+                {intl.formatMessage({ id: 'setup.next' })}
+              </Button>
+            </>
+          )}
+          {step === 1 && (
+            <>
               <Typography.Title level={5}>{intl.formatMessage({ id: 'setup.step1.title' })}</Typography.Title>
               <Typography.Paragraph type="secondary">{intl.formatMessage({ id: 'setup.step1.desc' })}</Typography.Paragraph>
-              <Form.Item name="openclawGatewayUrl" label={intl.formatMessage({ id: 'setup.gatewayUrl' })} rules={[{ required: true }]}>
+              <Form.Item name="openclawGatewayUrl" label={intl.formatMessage({ id: 'setup.gatewayUrl' })}>
                 <Input placeholder="http://localhost:18789" />
               </Form.Item>
               <Form.Item name="openclawGatewayToken" label={intl.formatMessage({ id: 'setup.gatewayToken' })}>
@@ -154,13 +176,15 @@ export default function SetupWizard({ onComplete }) {
               <Form.Item name="openclawGatewayPassword" label={intl.formatMessage({ id: 'setup.gatewayPassword' })}>
                 <Input.Password />
               </Form.Item>
-              <Space>
+              <Space wrap>
                 <Button onClick={handleTest} loading={testing}>
                   {testing ? intl.formatMessage({ id: 'setup.testing' }) : intl.formatMessage({ id: 'setup.test' })}
                 </Button>
-                <Button type="primary" disabled={!connected} onClick={() => setStep(1)}>
+                <Button onClick={() => setStep(0)}>{intl.formatMessage({ id: 'setup.prev' })}</Button>
+                <Button type="primary" onClick={() => setStep(2)}>
                   {intl.formatMessage({ id: 'setup.next' })}
                 </Button>
+                <Button onClick={() => setStep(2)}>{intl.formatMessage({ id: 'setup.skipGateway' })}</Button>
               </Space>
               {testResult && (
                 <Alert
@@ -173,7 +197,7 @@ export default function SetupWizard({ onComplete }) {
               )}
             </>
           )}
-          {step === 1 && (
+          {step === 2 && (
             <>
               <Typography.Title level={5}>{intl.formatMessage({ id: 'setup.step2.title' })}</Typography.Title>
               <Typography.Paragraph type="secondary">{intl.formatMessage({ id: 'setup.step2.desc' })}</Typography.Paragraph>
@@ -236,27 +260,44 @@ export default function SetupWizard({ onComplete }) {
                 </>
               )}
               <Space>
-                <Button onClick={() => setStep(0)}>{intl.formatMessage({ id: 'setup.prev' })}</Button>
+                <Button onClick={() => setStep(1)}>{intl.formatMessage({ id: 'setup.prev' })}</Button>
                 <Button
                   type="primary"
                   disabled={accessMode === 'token' && !accessToken}
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                 >
                   {intl.formatMessage({ id: 'setup.next' })}
                 </Button>
               </Space>
             </>
           )}
-          {step === 2 && (
+          {step === 3 && (
             <>
               <Typography.Title level={5}>{intl.formatMessage({ id: 'setup.step3.title' })}</Typography.Title>
               <Typography.Paragraph type="secondary">{intl.formatMessage({ id: 'setup.step3.desc' })}</Typography.Paragraph>
               <Card size="small" style={{ marginBottom: 16 }}>
-                <div><Typography.Text type="secondary">Gateway URL</Typography.Text> <span>{gatewayUrl}</span></div>
-                <div><Typography.Text type="secondary">{intl.formatMessage({ id: 'settings.access' })}</Typography.Text> <Tag style={{ marginLeft: 8 }}>{accessMode}</Tag></div>
+                <div>
+                  <Typography.Text type="secondary">{intl.formatMessage({ id: 'settings.stateDir' })}</Typography.Text>{' '}
+                  <span>{(form.getFieldValue('openclawStateDir') || '').trim() || '—'}</span>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">{intl.formatMessage({ id: 'settings.workspaceDir' })}</Typography.Text>{' '}
+                  <span>{(form.getFieldValue('openclawWorkspaceDir') || '').trim() || '—'}</span>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">{intl.formatMessage({ id: 'settings.configPath' })}</Typography.Text>{' '}
+                  <span>{(form.getFieldValue('openclawConfigPath') || '').trim() || '—'}</span>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">Gateway URL</Typography.Text> <span>{gatewayUrl}</span>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">{intl.formatMessage({ id: 'settings.access' })}</Typography.Text>{' '}
+                  <Tag style={{ marginLeft: 8 }}>{accessMode}</Tag>
+                </div>
               </Card>
               <Space>
-                <Button onClick={() => setStep(1)}>{intl.formatMessage({ id: 'setup.prev' })}</Button>
+                <Button onClick={() => setStep(2)}>{intl.formatMessage({ id: 'setup.prev' })}</Button>
                 <Button type="primary" loading={saving} onClick={handleFinish}>
                   {saving ? intl.formatMessage({ id: 'setup.saving' }) : intl.formatMessage({ id: 'setup.complete' })}
                 </Button>
