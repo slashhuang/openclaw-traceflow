@@ -39,6 +39,7 @@ import {
   type HeadTailResult,
 } from './streaming-jsonl-reader';
 import { extractSenderFromMessageEntry } from '../common/extract-sender-from-message';
+import { resolveBootstrapFileAbsolutePath } from '../common/resolve-bootstrap-file-path';
 import {
   scanSessionJsonlLines,
   type SessionJsonlScanResult,
@@ -176,6 +177,9 @@ export interface OpenClawSession {
    */
   transcriptParticipantScanVersion?: number;
 
+  /** 磁盘布局中的 agent 目录名（如 main），来自 sessions 扫描 */
+  agentId?: string;
+
   /**
    * tokens 计数口径/数据来源说明。
    * 用于在 tokens=0 等情况下给用户一个可核验的解释。
@@ -278,6 +282,8 @@ export interface OpenClawSessionDetail extends OpenClawSession {
 
 type ArchivedResetUsage = {
   sessionId: string;
+  /** 来自 `agents/<agentId>/sessions` 路径；旧缓存条目可能缺省 */
+  agentId?: string;
   resetTimestamp: string;
   inputTokens: number;
   outputTokens: number;
@@ -577,6 +583,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     const paths = await resolveOpenClawPaths({
       explicitStateDir: cfg.openclawStateDir,
       explicitWorkspaceDir: cfg.openclawWorkspaceDir,
+      explicitConfigPath: cfg.openclawConfigPath,
       gatewayHttpUrl: cfg.openclawGatewayUrl,
       gatewayToken: cfg.openclawGatewayToken,
       gatewayPassword: cfg.openclawGatewayPassword,
@@ -748,6 +755,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
           resolveOpenClawPaths({
             explicitStateDir: cfg.openclawStateDir?.trim() || result.stateDir,
             explicitWorkspaceDir: cfg.openclawWorkspaceDir,
+            explicitConfigPath: cfg.openclawConfigPath,
           }),
           8000,
           'getResolvedPaths timeout',
@@ -769,6 +777,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         resolveOpenClawPaths({
           explicitStateDir: cfg.openclawStateDir,
           explicitWorkspaceDir: cfg.openclawWorkspaceDir,
+          explicitConfigPath: cfg.openclawConfigPath,
         }),
         8000,
         'getResolvedPaths timeout',
@@ -790,6 +799,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         resolveOpenClawPaths({
           explicitStateDir: cfg.openclawStateDir,
           explicitWorkspaceDir: cfg.openclawWorkspaceDir,
+          explicitConfigPath: cfg.openclawConfigPath,
         }),
         8000,
         'getResolvedPaths timeout',
@@ -1463,6 +1473,26 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 各 agent 下存在过归档转写（*.jsonl.reset.*）的去重 sessionId 数量，供仪表盘/会话路由与 list 口径对齐。
+   */
+  async getArchivedUniqueSessionCountByAgent(): Promise<
+    Record<string, number>
+  > {
+    const snapshot = await this.getArchivedResetSnapshot();
+    const byAgent = new Map<string, Set<string>>();
+    for (const u of snapshot.all) {
+      const aid = (u.agentId ?? 'unknown').trim() || 'unknown';
+      if (!byAgent.has(aid)) byAgent.set(aid, new Set());
+      byAgent.get(aid)!.add(u.sessionId);
+    }
+    const out: Record<string, number> = {};
+    for (const [aid, set] of byAgent) {
+      out[aid] = set.size;
+    }
+    return out;
+  }
+
+  /**
    * 从 .reset. 归档文件中提取 token 用量（/new 重置前的历史）
    * 每个 .reset. 文件代表 OpenClaw 的一次归档 epoch，全部纳入；用量取最后一条带 totalTokens 的消息（无则 0）
    */
@@ -1596,10 +1626,14 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
             resetTimestamp,
           );
           if (!usage) continue;
+          const usageWithAgent: ArchivedResetUsage = {
+            ...usage,
+            agentId: agent,
+          };
           nextByFile.set(filePath, {
             mtimeMs: stats.mtimeMs,
             size: stats.size,
-            usage,
+            usage: usageWithAgent,
           });
         }
       }
@@ -1970,6 +2004,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       return {
         sessionKey,
         sessionId: sessionFile.sessionId,
+        agentId: agent,
         userId,
         systemSent,
         status: resetTs
@@ -2023,6 +2058,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private readWorkspaceInjectedContents(
     workspaceDir: string,
     files: SystemPromptProbeResult['workspaceFiles'],
+    bootstrapFileOverrides?: Record<string, string> | null,
   ): WorkspaceFileContent[] {
     const MAX_CHARS = 400_000;
     const MAX_FILES = 40;
@@ -2050,12 +2086,18 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         });
         continue;
       }
+      const logicalName = path.basename(String(f.name || f.path || '').trim());
+      const overrideAbs = logicalName
+        ? bootstrapFileOverrides?.[logicalName]?.trim()
+        : undefined;
       const rel = String(f.path || f.name || '').trim();
-      if (!rel) continue;
+      if (!rel && !overrideAbs) continue;
       try {
-        const candidate = path.isAbsolute(rel)
-          ? path.resolve(rel)
-          : path.resolve(wsReal, rel);
+        const candidate = overrideAbs
+          ? path.resolve(overrideAbs)
+          : path.isAbsolute(rel)
+            ? path.resolve(rel)
+            : path.resolve(wsReal, rel);
         let targetReal: string;
         try {
           targetReal = fs.existsSync(candidate)
@@ -2064,9 +2106,9 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         } catch {
           targetReal = candidate;
         }
-        // 报告中的文件路径来自 openclaw 注入，preset 等可能在 workspace 外，允许读取
+        // 报告中的文件路径来自 openclaw 注入；Traceflow 侧 override 允许 workspace 外
         const isAbsolutePath = path.isAbsolute(rel);
-        if (!isAbsolutePath) {
+        if (!overrideAbs && !isAbsolutePath) {
           const relToWs = path.relative(wsReal, targetReal);
           if (relToWs.startsWith('..') || path.isAbsolute(relToWs)) {
             out.push({
@@ -2135,6 +2177,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     }
 
     const paths = await this.getResolvedPaths();
+    const cfg = this.configService.getConfig();
     const workspaceDir = paths.workspaceDir?.trim();
     if (!workspaceDir) {
       throw new BadRequestException(
@@ -2153,8 +2196,12 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('无法解析 workspace 目录');
     }
 
-    const target = path.join(wsReal, basename);
-    const targetResolved = path.resolve(target);
+    const targetResolved = resolveBootstrapFileAbsolutePath(
+      basename,
+      wsReal,
+      cfg.bootstrapFileOverrides,
+    );
+    const overridePath = cfg.bootstrapFileOverrides?.[basename]?.trim();
     let targetReal: string;
     if (fs.existsSync(targetResolved)) {
       try {
@@ -2166,9 +2213,11 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       targetReal = targetResolved;
     }
 
-    const relToWs = path.relative(wsReal, targetReal);
-    if (relToWs.startsWith('..') || path.isAbsolute(relToWs)) {
-      throw new BadRequestException('目标路径不在 workspace 内');
+    if (!overridePath) {
+      const relToWs = path.relative(wsReal, targetReal);
+      if (relToWs.startsWith('..') || path.isAbsolute(relToWs)) {
+        throw new BadRequestException('目标路径不在 workspace 内');
+      }
     }
 
     if (fs.existsSync(targetReal)) {
@@ -2635,8 +2684,13 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     const workspaceDirStr = report.workspaceDir
       ? String(report.workspaceDir)
       : '';
+    const tfCfg = this.configService.getConfig();
     const workspaceFileContents = workspaceDirStr
-      ? this.readWorkspaceInjectedContents(workspaceDirStr, workspaceFiles)
+      ? this.readWorkspaceInjectedContents(
+          workspaceDirStr,
+          workspaceFiles,
+          tfCfg.bootstrapFileOverrides,
+        )
       : [];
 
     // 仅离线重建：不读取 transcript、不调用工具目录，以避免任何"真实请求链路"。
