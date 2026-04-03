@@ -50,6 +50,32 @@ export function inferSessionTypeLabel(
   return '用户';
 }
 
+/**
+ * 群聊 / 频道 / 单聊（与前端 session-user inferSessionChatKind 一致；主会话桶视为 direct）。
+ */
+export function inferSessionChatKind(
+  sessionKey: string,
+  sessionId: string,
+): 'group' | 'channel' | 'direct' | null {
+  const key = sessionKey || sessionId || '';
+  const full = key.includes('/') ? key.split('/').pop() || key : key;
+  if (isCanonicalAgentMainSessionKey(full)) return 'direct';
+  if (full.includes(':cron:')) return null;
+  if (full.startsWith('boot-') || full.includes(':boot')) return null;
+  if (full.includes(':wave:')) return null;
+  if (key.includes(':group:')) return 'group';
+  if (key.includes(':channel:')) return 'channel';
+  if (
+    key.includes(':feishu:') ||
+    key.includes(':slack:') ||
+    key.includes(':telegram:') ||
+    key.includes(':discord:')
+  ) {
+    return 'direct';
+  }
+  return null;
+}
+
 /** 将 unknown 映射为 greeting/heartbeat/cron 等可读标签 */
 export function resolveDisplayUser(
   userId: string | undefined,
