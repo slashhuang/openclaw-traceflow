@@ -12,8 +12,6 @@ import {
   FolderOutlined,
   DatabaseOutlined,
   ThunderboltOutlined,
-  BarChartOutlined,
-  AppstoreOutlined,
 } from '@ant-design/icons';
 import { Alert, Button, Dropdown, message, Space, Tag, Tooltip, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -61,21 +59,40 @@ export default function BasicLayout() {
   const gatewayError = health?.gatewayError;
 
   const menuData = [
-    { path: '/', key: '/', name: intl.formatMessage({ id: 'menu.dashboard' }), icon: <DashboardOutlined /> },
-    { path: '/sessions', key: '/sessions', name: intl.formatMessage({ id: 'menu.sessions' }), icon: <MessageOutlined /> },
-    { path: '/system-prompt', key: '/system-prompt', name: intl.formatMessage({ id: 'menu.systemPrompt' }), icon: <FileTextOutlined /> },
+    {
+      path: '/',
+      key: '/',
+      name: intl.formatMessage({ id: 'menu.dashboard' }),
+      icon: <DashboardOutlined />,
+    },
+    {
+      path: '/sessions',
+      key: '/sessions',
+      name: intl.formatMessage({ id: 'menu.sessions' }),
+      icon: <MessageOutlined />,
+    },
+    {
+      path: '/system-prompt',
+      key: '/system-prompt',
+      name: intl.formatMessage({ id: 'menu.systemPrompt' }),
+      icon: <FileTextOutlined />,
+    },
     { path: '/workspace', key: '/workspace', name: '工作区与记忆', icon: <FolderOutlined /> },
     { path: '/states', key: '/states', name: 'States', icon: <DatabaseOutlined /> },
     { path: '/reflections', key: '/reflections', name: '反思列表', icon: <ThunderboltOutlined /> },
-    { path: '/audit', key: '/audit', name: '贡献审计', icon: <BarChartOutlined /> },
+    // 贡献审计、TraceFlow 配套 Skills：路由保留，侧栏不展示入口（直达 URL 仍可用）
 
-    { path: '/logs', key: '/logs', name: intl.formatMessage({ id: 'menu.logs' }), icon: <UnorderedListOutlined /> },
-    { path: '/settings', key: '/settings', name: intl.formatMessage({ id: 'menu.settings' }), icon: <SettingOutlined /> },
     {
-      path: '/traceflow-skills',
-      key: '/traceflow-skills',
-      name: intl.formatMessage({ id: 'menu.traceflowSkills' }),
-      icon: <AppstoreOutlined />,
+      path: '/logs',
+      key: '/logs',
+      name: intl.formatMessage({ id: 'menu.logs' }),
+      icon: <UnorderedListOutlined />,
+    },
+    {
+      path: '/settings',
+      key: '/settings',
+      name: intl.formatMessage({ id: 'menu.settings' }),
+      icon: <SettingOutlined />,
     },
   ];
 
@@ -90,22 +107,25 @@ export default function BasicLayout() {
       location={{ pathname: location.pathname }}
       menuDataRender={() => menuData}
       menuItemRender={(item, dom) =>
-        item.path && !String(item.path).includes(':') ? (
-          <Link to={item.path}>{dom}</Link>
-        ) : (
-          dom
-        )
+        item.path && !String(item.path).includes(':') ? <Link to={item.path}>{dom}</Link> : dom
       }
       actionsRender={() =>
         [
           (health?.status || health?.openclawConnected != null) && (
             <Tooltip
               key="health-poll"
-              title={intl.formatMessage({ id: 'header.healthPollHint' }, { seconds: HEADER_HEALTH_POLL_INTERVAL_MS / 1000 })}
+              title={intl.formatMessage(
+                { id: 'header.healthPollHint' },
+                { seconds: HEADER_HEALTH_POLL_INTERVAL_MS / 1000 },
+              )}
             >
               <Space size={4}>
                 {health?.status && (
-                  <Tag color={health.status === 'ok' || health.status === 'healthy' ? 'success' : 'default'}>
+                  <Tag
+                    color={
+                      health.status === 'ok' || health.status === 'healthy' ? 'success' : 'default'
+                    }
+                  >
                     {String(health.status)}
                   </Tag>
                 )}

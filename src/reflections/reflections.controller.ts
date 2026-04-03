@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import { OpenClawService } from '../openclaw/openclaw.service';
+import { resolveUserPath } from '../common/resolveOpenClawPaths';
 
 interface Reflection {
   id: string;
@@ -48,10 +49,11 @@ export class ReflectionsController {
   /**
    * 获取反思记录文件路径
    *
-   * 优先级（与 self-improvement skill 保持一致）：
-   * 1. OPENCLAW_AUDIT_DIR 环境变量
-   * 2. OPENCLAW_WORKSPACE_DIR/.openclawSelfImprovements
-   * 3. ~/.openclaw/workspace/.openclawSelfImprovements
+   * 优先级（与 self-improvement skill paths.py 一致，并补充与 AuditController 相同的 workspace 解析）：
+   * 1. OPENCLAW_AUDIT_DIR/reflections.jsonl
+   * 2. OPENCLAW_WORKSPACE_DIR/.openclawSelfImprovements/reflections.jsonl
+   * 3. OpenClawService.getResolvedPaths().workspaceDir（会话/配置推断，与审计页同源）
+   * 4. ~/.openclaw/workspace/.openclawSelfImprovements/reflections.jsonl
    */
   private async getReflectionsFile(): Promise<string> {
     // 1. 环境变量 OPENCLAW_AUDIT_DIR
@@ -64,7 +66,7 @@ export class ReflectionsController {
 
     // 2. OPENCLAW_WORKSPACE_DIR/.openclawSelfImprovements
     if (process.env.OPENCLAW_WORKSPACE_DIR?.trim()) {
-      const workspaceDir = path.resolve(
+      const workspaceDir = resolveUserPath(
         process.env.OPENCLAW_WORKSPACE_DIR.trim(),
       );
       return path.join(
@@ -74,7 +76,24 @@ export class ReflectionsController {
       );
     }
 
-    // 3. ~/.openclaw/workspace/.openclawSelfImprovements
+    // 3. 与审计 API 一致：从 Gateway/配置/会话推断 workspace，避免 TraceFlow 未设 env 时读错盘
+    try {
+      const paths = await this.openClawService.getResolvedPaths();
+      if (paths.workspaceDir?.trim()) {
+        return path.join(
+          path.resolve(paths.workspaceDir.trim()),
+          '.openclawSelfImprovements',
+          'reflections.jsonl',
+        );
+      }
+    } catch (err) {
+      console.warn(
+        '[ReflectionsController] getResolvedPaths failed, falling back to default:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+
+    // 4. ~/.openclaw/workspace/.openclawSelfImprovements
     return path.join(
       os.homedir(),
       '.openclaw',

@@ -1,5 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/**/*", "test/**/*", "frontend/e2e/**/*.ts"],
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "frontend/e2e/**/*.ts",
+    "frontend/src/**/*.ts",
+    "frontend/src/**/*.tsx"
+  ],
   "exclude": ["node_modules", "dist", "public"]
 }
