@@ -5,7 +5,6 @@ import { useIntl } from 'react-intl';
 import { setupApi } from './api';
 import BasicLayout from './layouts/BasicLayout';
 import SetupWizard from './pages/SetupWizard';
-import Dashboard from './pages/Dashboard';
 import Sessions from './pages/Sessions';
 import SessionDetail from './pages/SessionDetail';
 import SessionArchiveList from './pages/SessionArchiveList';
@@ -56,7 +55,7 @@ function AppInner() {
     <BrowserRouter>
       <Routes>
         <Route element={<BasicLayout />}>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Navigate to="/sessions" replace />} />
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/sessions/:id/archives" element={<SessionArchiveList />} />
           <Route path="/sessions/:id" element={<SessionDetail />} />
