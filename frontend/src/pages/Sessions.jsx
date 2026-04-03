@@ -1,19 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Card,
+  Col,
   Progress,
+  Row,
   Segmented,
   Space,
-  Spin,
+  Statistic,
   Table,
+  Alert,
   Tag,
   Typography,
   Tooltip,
   message,
+  Button,
+  theme,
+  Input,
+  Select,
 } from 'antd';
 import { useIntl } from 'react-intl';
-import { ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined } from '@ant-design/icons';
+import { ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import { sessionsApi } from '../api';
 import {
   inferSessionTypeLabel,
@@ -25,6 +32,20 @@ import { sessionTokenUtilizationPercent } from '../utils/session-tokens';
 import { sessionStatusLabel } from '../i18n/sessionStatusLabel';
 import TokenMetricHint from '../components/TokenMetricHint';
 import SectionScopeHint from '../components/SectionScopeHint';
+
+/** 与后端 inferSessionTypeLabel 及归档「归档」一致，供列筛选 value 对齐 */
+const SESSION_TYPE_LABEL_FILTERS = [
+  '主会话',
+  'cron',
+  'boot',
+  'Wave 用户',
+  'Slack',
+  'Telegram',
+  'Discord',
+  '飞书',
+  '用户',
+  '归档',
+];
 
 function formatDuration(ms) {
   if (!ms) return '—';
@@ -78,6 +99,13 @@ function SortableTitle({ label, active, order, onClick }) {
 
 export default function Sessions() {
   const intl = useIntl();
+  const { token } = theme.useToken();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const agentIdFromUrl = searchParams.get('agentId');
+  const hasAgentFilter = Boolean(agentIdFromUrl?.trim());
+  /** PRD §3.2：与仪表盘同源的按 agent 概览 */
+  const [agentOverview, setAgentOverview] = useState([]);
+  const [overviewLoading, setOverviewLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -86,15 +114,53 @@ export default function Sessions() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [total, setTotal] = useState(0);
+  /** 表头筛选（服务端，与 GET /api/sessions 查询参数对齐，PRD §3.2.4） */
+  const [colStatuses, setColStatuses] = useState([]);
+  const [colTypeLabels, setColTypeLabels] = useState([]);
+  const [colChatKinds, setColChatKinds] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const q = searchInput.trim();
+      setDebouncedQ(q);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setSearchInput('');
+    setDebouncedQ('');
+  }, [agentIdFromUrl]);
 
   const fetchSessions = async (nextPage = page, nextFilter = filter) => {
     setLoading(true);
     try {
-      const sessionsResult = await sessionsApi.list({
+      const params = {
         page: nextPage,
         pageSize,
         filter: nextFilter,
-      });
+        sortBy: sortKey,
+        sortOrder,
+      };
+      if (agentIdFromUrl?.trim()) {
+        params.agentId = agentIdFromUrl.trim();
+      }
+      if (colStatuses.length) {
+        params.statuses = colStatuses.join(',');
+      }
+      if (colTypeLabels.length) {
+        params.typeLabels = colTypeLabels.join(',');
+      }
+      if (colChatKinds.length) {
+        params.chatKinds = colChatKinds.join(',');
+      }
+      if (debouncedQ) {
+        params.q = debouncedQ;
+      }
+      const sessionsResult = await sessionsApi.list(params);
       const data = sessionsResult || { items: [], total: 0 };
       const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
       setSessions(items);
@@ -107,47 +173,42 @@ export default function Sessions() {
   };
 
   useEffect(() => {
-    fetchSessions(page, filter);
-  }, [page, filter]);
-
-  const filteredSorted = useMemo(() => {
-    const list = sessions;
-    const mul = sortOrder === 'desc' ? -1 : 1;
-    const getVal = (s) => {
-      switch (sortKey) {
-        case 'lastActive':
-          return s.lastActive ?? 0;
-        case 'duration':
-          return s.duration ?? 0;
-        case 'totalTokens':
-          return s.totalTokens ?? 0;
-        case 'messageCount':
-          return s.messageCount ?? 0;
-        case 'transcriptFileSizeBytes':
-          return s.transcriptFileSizeBytes ?? 0;
-        case 'estimatedTokensFromLog':
-          return s.estimatedTokensFromLog ?? 0;
-        case 'utilization': {
-          const pct = sessionTokenUtilizationPercent(s);
-          return pct ?? -1;
-        }
-        case 'status':
-          return String(s.status || '').toLowerCase();
-        case 'user': {
-          return String(formatSessionParticipantDisplay(s).toLowerCase());
-        }
-        default:
-          return 0;
-      }
+    let cancelled = false;
+    setOverviewLoading(true);
+    sessionsApi
+      .getAgentOverview()
+      .then((rows) => {
+        if (!cancelled) setAgentOverview(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentOverview([]);
+      })
+      .finally(() => {
+        if (!cancelled) setOverviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
     };
+  }, []);
 
-    return [...list].sort((a, b) => {
-      const va = getVal(a);
-      const vb = getVal(b);
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * mul;
-      return String(va).localeCompare(String(vb)) * mul;
-    });
-  }, [sessions, filter, sortKey, sortOrder]);
+  useEffect(() => {
+    fetchSessions(page, filter);
+  }, [
+    page,
+    filter,
+    agentIdFromUrl,
+    sortKey,
+    sortOrder,
+    debouncedQ,
+    colStatuses.join('\n'),
+    colTypeLabels.join('\n'),
+    colChatKinds.join('\n'),
+  ]);
+
+  const currentAgentSummary = useMemo(
+    () => agentOverview.find((a) => a.agentId === agentIdFromUrl?.trim()),
+    [agentOverview, agentIdFromUrl],
+  );
 
   const statusTagColor = (status) => {
     switch (status) {
@@ -175,10 +236,6 @@ export default function Sessions() {
     return 'normal';
   };
 
-  if (loading) {
-    return <Spin style={{ display: 'block', margin: 48 }} />;
-  }
-
   const filterOptions = [
     { value: 'all', label: intl.formatMessage({ id: 'common.all' }) },
     { value: 'active', label: intl.formatMessage({ id: 'sessions.filter.active' }) },
@@ -187,16 +244,48 @@ export default function Sessions() {
     { value: 'stale_index', label: intl.formatMessage({ id: 'sessions.filter.staleIndex' }) },
   ];
 
+  const showAgentColumn = !hasAgentFilter;
+
   const columns = [
+    ...(showAgentColumn
+      ? [
+          {
+            title: (
+              <SortableTitle
+                label={intl.formatMessage({ id: 'sessions.column.agent' })}
+                active={sortKey === 'agentId'}
+                order={sortOrder}
+                onClick={() => {
+                  setPage(1);
+                  if (sortKey !== 'agentId') {
+                    setSortKey('agentId');
+                    setSortOrder('asc');
+                  } else {
+                    setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+                  }
+                }}
+              />
+            ),
+            key: 'agentId',
+            width: 100,
+            render: (_, r) => (
+              <Typography.Text code ellipsis style={{ margin: 0, maxWidth: 96, display: 'block' }}>
+                {r.agentId || 'unknown'}
+              </Typography.Text>
+            ),
+          },
+        ]
+      : []),
     {
       title: (
         <SortableTitle
           label={intl.formatMessage({ id: 'sessions.column.session' })}
-          active={sortKey === 'user'}
+          active={sortKey === 'sessionKey'}
           order={sortOrder}
           onClick={() => {
-            if (sortKey !== 'user') {
-              setSortKey('user');
+            setPage(1);
+            if (sortKey !== 'sessionKey') {
+              setSortKey('sessionKey');
               setSortOrder('asc');
             } else {
               setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
@@ -282,6 +371,51 @@ export default function Sessions() {
       },
     },
     {
+      title: intl.formatMessage({ id: 'sessions.column.type' }),
+      key: 'typeLabel',
+      width: 92,
+      filters: SESSION_TYPE_LABEL_FILTERS.map((v) => ({ text: v, value: v })),
+      filteredValue: colTypeLabels.length ? colTypeLabels : null,
+      filterMultiple: true,
+      onFilter: () => true,
+      render: (_, r) => (
+        <Tag style={{ margin: 0 }}>
+          {r.typeLabel || inferSessionTypeLabel(r.sessionKey, r.sessionId)}
+        </Tag>
+      ),
+    },
+    {
+      title: intl.formatMessage({ id: 'sessions.column.chatKind' }),
+      key: 'chatKind',
+      width: 88,
+      filters: [
+        { text: intl.formatMessage({ id: 'sessions.chatKind.group' }), value: 'group' },
+        { text: intl.formatMessage({ id: 'sessions.chatKind.channel' }), value: 'channel' },
+        { text: intl.formatMessage({ id: 'sessions.chatKind.direct' }), value: 'direct' },
+        { text: intl.formatMessage({ id: 'sessions.chatKind.filterNone' }), value: '_none' },
+      ],
+      filteredValue: colChatKinds.length ? colChatKinds : null,
+      filterMultiple: true,
+      onFilter: () => true,
+      render: (_, r) => {
+        const kind = r.chatKind || inferSessionChatKind(r.sessionKey, r.sessionId);
+        if (!kind) return '—';
+        const label =
+          kind === 'group'
+            ? intl.formatMessage({ id: 'sessions.chatKind.group' })
+            : kind === 'channel'
+              ? intl.formatMessage({ id: 'sessions.chatKind.channel' })
+              : intl.formatMessage({ id: 'sessions.chatKind.direct' });
+        const color =
+          kind === 'group' || kind === 'channel' ? 'purple' : 'geekblue';
+        return (
+          <Tag color={color} style={{ margin: 0 }}>
+            {label}
+          </Tag>
+        );
+      },
+    },
+    {
       title: (
         <Tooltip title={intl.formatMessage({ id: 'sessions.column.statusTooltip' })}>
           <span style={{ cursor: 'help' }}>
@@ -290,6 +424,7 @@ export default function Sessions() {
               active={sortKey === 'status'}
               order={sortOrder}
               onClick={() => {
+                setPage(1);
                 if (sortKey !== 'status') {
                   setSortKey('status');
                   setSortOrder('asc');
@@ -303,6 +438,16 @@ export default function Sessions() {
       ),
       key: 'status',
       width: 120,
+      filters: [
+        { text: intl.formatMessage({ id: 'sessions.status.active' }), value: 'active' },
+        { text: intl.formatMessage({ id: 'sessions.status.idle' }), value: 'idle' },
+        { text: intl.formatMessage({ id: 'sessions.status.completed' }), value: 'completed' },
+        { text: intl.formatMessage({ id: 'sessions.status.failed' }), value: 'failed' },
+        { text: intl.formatMessage({ id: 'sessions.status.archived' }), value: 'archived' },
+      ],
+      filteredValue: colStatuses.length ? colStatuses : null,
+      filterMultiple: true,
+      onFilter: () => true,
       render: (_, r) => (
         <Tag color={statusTagColor(r.status)}>{sessionStatusLabel(intl, r.status)}</Tag>
       ),
@@ -316,6 +461,7 @@ export default function Sessions() {
               active={sortKey === 'user'}
               order={sortOrder}
               onClick={() => {
+                setPage(1);
                 if (sortKey !== 'user') {
                   setSortKey('user');
                   setSortOrder('asc');
@@ -391,6 +537,7 @@ export default function Sessions() {
           active={sortKey === 'lastActive'}
           order={sortOrder}
           onClick={() => {
+            setPage(1);
             if (sortKey !== 'lastActive') {
               setSortKey('lastActive');
               setSortOrder('desc');
@@ -411,6 +558,7 @@ export default function Sessions() {
           active={sortKey === 'duration'}
           order={sortOrder}
           onClick={() => {
+            setPage(1);
             if (sortKey !== 'duration') {
               setSortKey('duration');
               setSortOrder('desc');
@@ -432,6 +580,7 @@ export default function Sessions() {
           active={sortKey === 'messageCount'}
           order={sortOrder}
           onClick={() => {
+            setPage(1);
             if (sortKey !== 'messageCount') {
               setSortKey('messageCount');
               setSortOrder('desc');
@@ -469,6 +618,7 @@ export default function Sessions() {
           active={sortKey === 'transcriptFileSizeBytes'}
           order={sortOrder}
           onClick={() => {
+            setPage(1);
             if (sortKey !== 'transcriptFileSizeBytes') {
               setSortKey('transcriptFileSizeBytes');
               setSortOrder('desc');
@@ -521,6 +671,7 @@ export default function Sessions() {
                 active={sortKey === 'totalTokens' || sortKey === 'utilization'}
                 order={sortOrder}
                 onClick={() => {
+                  setPage(1);
                   if (sortKey !== 'utilization') {
                     setSortKey('utilization');
                     setSortOrder('desc');
@@ -612,6 +763,7 @@ export default function Sessions() {
               active={sortKey === 'estimatedTokensFromLog'}
               order={sortOrder}
               onClick={() => {
+                setPage(1);
                 if (sortKey !== 'estimatedTokensFromLog') {
                   setSortKey('estimatedTokensFromLog');
                   setSortOrder('desc');
@@ -662,6 +814,30 @@ export default function Sessions() {
             {intl.formatMessage({ id: 'sessions.title' })}
           </Typography.Title>
           <SectionScopeHint intl={intl} messageId="sessions.pageScopeDesc" />
+          <Select
+            showSearch
+            allowClear
+            loading={overviewLoading}
+            placeholder={intl.formatMessage({ id: 'sessions.agentSelectPlaceholder' })}
+            style={{ minWidth: 200 }}
+            value={agentIdFromUrl?.trim() || undefined}
+            options={agentOverview.map((a) => ({ label: a.agentId, value: a.agentId }))}
+            filterOption={(input, option) =>
+              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+            }
+            onChange={(v) => {
+              setPage(1);
+              if (!v) setSearchParams({});
+              else setSearchParams({ agentId: v });
+            }}
+          />
+          <Input.Search
+            allowClear
+            placeholder={intl.formatMessage({ id: 'sessions.searchPlaceholder' })}
+            style={{ width: 220 }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
         </div>
         <Segmented
           options={filterOptions.map((o) => ({ label: o.label, value: o.value }))}
@@ -672,6 +848,67 @@ export default function Sessions() {
           }}
         />
       </div>
+      {hasAgentFilter ? (
+        <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: '12px 16px' }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+            {intl.formatMessage({ id: 'sessions.agentSummaryHint' })}
+          </Typography.Text>
+          <Row gutter={[8, 8]}>
+            <Col xs={12} sm={6}>
+              <Statistic
+                title={intl.formatMessage({ id: 'dashboard.totalSessions' })}
+                value={currentAgentSummary?.sessionCount ?? 0}
+                valueStyle={{ fontSize: 15 }}
+              />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic
+                title={intl.formatMessage({ id: 'dashboard.active' })}
+                value={currentAgentSummary?.activeCount ?? 0}
+                valueStyle={{ fontSize: 15, color: token.colorSuccess }}
+              />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic
+                title={intl.formatMessage({ id: 'dashboard.idle' })}
+                value={currentAgentSummary?.idleCount ?? 0}
+                valueStyle={{ fontSize: 15, color: token.colorWarning }}
+              />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic
+                title={intl.formatMessage({ id: 'dashboard.archived' })}
+                value={currentAgentSummary?.archivedCount ?? 0}
+                valueStyle={{ fontSize: 15, color: token.colorTextSecondary }}
+              />
+            </Col>
+          </Row>
+        </Card>
+      ) : null}
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginTop: 12 }}
+        message={
+          agentIdFromUrl?.trim()
+            ? intl.formatMessage({ id: 'sessions.filterByAgent' }, { agentId: agentIdFromUrl.trim() })
+            : intl.formatMessage({ id: 'sessions.allAgentsHint' })
+        }
+        action={
+          agentIdFromUrl?.trim() ? (
+            <Button
+              size="small"
+              type="link"
+              onClick={() => {
+                setSearchParams({});
+                setPage(1);
+              }}
+            >
+              {intl.formatMessage({ id: 'sessions.clearAgentFilter' })}
+            </Button>
+          ) : null
+        }
+      />
       <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
         {intl.formatMessage({ id: 'sessions.sortHint' })}
       </Typography.Text>
@@ -682,11 +919,36 @@ export default function Sessions() {
         style={{ marginTop: 12 }}
         tableLayout="fixed"
         scroll={{ x: 'max-content' }}
-        rowKey="sessionId"
-        dataSource={filteredSorted}
+        loading={loading}
+        rowKey={(r) => `${r.agentId || 'na'}:${r.sessionId}`}
+        dataSource={sessions}
         columns={columns}
         locale={{ emptyText: intl.formatMessage({ id: 'sessions.empty' }) }}
         size="small"
+        onChange={(pag, filters, _sorter, extra) => {
+          const nextPage =
+            extra?.action === 'filter' ? 1 : (pag?.current ?? 1);
+          setPage(nextPage);
+          if (!filters) return;
+          if ('status' in filters) {
+            const st = filters.status;
+            setColStatuses(
+              st == null || !Array.isArray(st) ? [] : st.filter(Boolean),
+            );
+          }
+          if ('typeLabel' in filters) {
+            const tt = filters.typeLabel;
+            setColTypeLabels(
+              tt == null || !Array.isArray(tt) ? [] : tt.filter(Boolean),
+            );
+          }
+          if ('chatKind' in filters) {
+            const ck = filters.chatKind;
+            setColChatKinds(
+              ck == null || !Array.isArray(ck) ? [] : ck.filter(Boolean),
+            );
+          }
+        }}
         pagination={{
           pageSize,
           showSizeChanger: false,
