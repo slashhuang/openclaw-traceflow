@@ -28,7 +28,7 @@ export class StatesController {
         err instanceof Error ? err.message : err,
       );
     }
-    return path.join(os.homedir(), '.openclaw', 'state');
+    return path.join(os.homedir(), '.openclaw');
   }
 
   /**
