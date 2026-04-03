@@ -22,6 +22,7 @@ export default function Settings() {
   const location = useLocation();
   const evaluationPromptCardRef = useRef(null);
   const workspaceBootstrapPromptCardRef = useRef(null);
+  const gatewayCardRef = useRef(null);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -89,6 +90,12 @@ export default function Settings() {
 
   useEffect(() => {
     const hash = location.hash;
+    if (hash === '#gateway' && !loading) {
+      const t = window.setTimeout(() => {
+        gatewayCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      return () => window.clearTimeout(t);
+    }
     if (hash === '#evaluation-prompt' && !evalPromptLoading) {
       const t = window.setTimeout(() => {
         evaluationPromptCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -105,7 +112,7 @@ export default function Settings() {
       return () => window.clearTimeout(t);
     }
     return undefined;
-  }, [location.hash, evalPromptLoading, wsEvalPromptLoading]);
+  }, [location.hash, loading, evalPromptLoading, wsEvalPromptLoading]);
 
   useEffect(() => {
     (async () => {
@@ -116,6 +123,10 @@ export default function Settings() {
           openclawGatewayUrl: data.config.openclawGatewayUrl || '',
           openclawStateDir: data.config.openclawStateDir || data.config.openclawPaths?.stateDir || '',
           openclawWorkspaceDir: data.config.openclawWorkspaceDir || data.config.openclawPaths?.workspaceDir || '',
+          openclawConfigPath: data.config.openclawConfigPath || '',
+          bootstrapOverridesJson: data.config.bootstrapFileOverrides
+            ? JSON.stringify(data.config.bootstrapFileOverrides, null, 2)
+            : '{}',
           accessMode: data.config.accessMode || 'none',
           accessToken: '',
         });
@@ -160,12 +171,38 @@ export default function Settings() {
     message.loading({ content: '正在保存配置...', key: toastKey, duration: 0 });
     try {
       const v = await form.validateFields();
+      let bootstrapFileOverrides;
+      try {
+        const raw = (v.bootstrapOverridesJson || '').trim();
+        if (!raw || raw === '{}') {
+          bootstrapFileOverrides = {};
+        } else {
+          const parsed = JSON.parse(raw);
+          if (
+            typeof parsed !== 'object' ||
+            parsed === null ||
+            Array.isArray(parsed)
+          ) {
+            throw new Error('invalid');
+          }
+          bootstrapFileOverrides = parsed;
+        }
+      } catch {
+        message.destroy(toastKey);
+        message.error(
+          intl.formatMessage({ id: 'settings.bootstrapOverrides' }) +
+            '：JSON 格式无效，需为对象，如 {"AGENTS.md":"/abs/path"}',
+        );
+        return;
+      }
       await setupApi.configure({
         openclawGatewayUrl: v.openclawGatewayUrl,
         openclawGatewayToken: v.openclawGatewayToken || undefined,
         openclawGatewayPassword: v.openclawGatewayPassword || undefined,
         openclawStateDir: (v.openclawStateDir || '').trim() || undefined,
         openclawWorkspaceDir: (v.openclawWorkspaceDir || '').trim() || undefined,
+        openclawConfigPath: (v.openclawConfigPath || '').trim() || undefined,
+        bootstrapFileOverrides,
         accessMode: v.accessMode,
         accessToken: v.accessMode === 'token' ? v.accessToken : undefined,
       });
@@ -319,6 +356,7 @@ export default function Settings() {
       <Form form={form} layout="vertical">
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
+            <div id="gateway" ref={gatewayCardRef}>
             <Card
               title={intl.formatMessage({ id: 'settings.gateway' })}
               extra={<SectionScopeHint intl={intl} messageId="settings.gatewayCardScopeDesc" />}
@@ -350,15 +388,26 @@ export default function Settings() {
                 {showPaths && (
                   <div style={{ marginTop: 12 }}>
                     <Form.Item name="openclawStateDir" label={intl.formatMessage({ id: 'settings.stateDir' })}>
-                      <Input />
+                      <Input placeholder="~/.openclaw" />
                     </Form.Item>
                     <Form.Item name="openclawWorkspaceDir" label={intl.formatMessage({ id: 'settings.workspaceDir' })}>
-                      <Input />
+                      <Input placeholder="~/.openclaw/workspace" />
+                    </Form.Item>
+                    <Form.Item name="openclawConfigPath" label={intl.formatMessage({ id: 'settings.configPath' })}>
+                      <Input placeholder="$OPENCLAW_STATE_DIR/openclaw.json" />
+                    </Form.Item>
+                    <Form.Item
+                      name="bootstrapOverridesJson"
+                      label={intl.formatMessage({ id: 'settings.bootstrapOverrides' })}
+                      extra={intl.formatMessage({ id: 'settings.bootstrapOverridesHelp' })}
+                    >
+                      <Input.TextArea rows={5} style={{ fontFamily: 'monospace', fontSize: 12 }} placeholder="{}" />
                     </Form.Item>
                   </div>
                 )}
               </div>
             </Card>
+            </div>
           </Col>
           <Col xs={24} lg={12}>
             <Card
