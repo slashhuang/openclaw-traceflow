@@ -11,6 +11,7 @@ import {
   FolderOutlined,
   DatabaseOutlined,
   ThunderboltOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
 import { Button, Dropdown, Space, Tag, Tooltip, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -64,8 +65,18 @@ export default function BasicLayout() {
     { path: '/workspace', key: '/workspace', name: '工作区与记忆', icon: <FolderOutlined /> },
     { path: '/states', key: '/states', name: 'States', icon: <DatabaseOutlined /> },
     { path: '/reflections', key: '/reflections', name: '反思列表', icon: <ThunderboltOutlined /> },
-    // 贡献审计、TraceFlow 配套 Skills：路由保留，侧栏不展示入口（直达 URL 仍可用）
-
+    {
+      path: '/traceflow-skills',
+      key: '/traceflow-skills',
+      name: intl.formatMessage({ id: 'menu.traceflowSkills' }),
+      icon: <CodeOutlined />,
+    },
+    {
+      path: '/audit',
+      key: '/audit',
+      name: intl.formatMessage({ id: 'menu.audit' }),
+      icon: <CodeOutlined />,
+    },
     {
       path: '/logs',
       key: '/logs',

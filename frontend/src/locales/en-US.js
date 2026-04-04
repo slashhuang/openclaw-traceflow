@@ -18,6 +18,7 @@ export default {
   'menu.logs': 'Logs',
   'menu.settings': 'Settings',
   'menu.traceflowSkills': 'TraceFlow skills',
+  'menu.audit': 'Contribution Audit',
   'traceflowSkills.pageTitle': 'TraceFlow companion skills',
   'traceflowSkills.intro':
     'OpenClaw companion skills shipped with this open-source TraceFlow repository. Copy them into your OpenClaw skills layout as needed—TraceFlow does not install or run them for you.',

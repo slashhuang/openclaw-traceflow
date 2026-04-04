@@ -18,6 +18,7 @@ export default {
   'menu.logs': '日志',
   'menu.settings': '设置',
   'menu.traceflowSkills': 'TraceFlow 配套 Skills',
+  'menu.audit': '贡献审计',
   'traceflowSkills.pageTitle': 'TraceFlow 配套 Skills',
   'traceflowSkills.intro':
     '以下为本开源仓库随 TraceFlow 一并提供的 OpenClaw 配套 skill；请按你环境中的约定复制到 OpenClaw 的 skill 目录并自行安装。TraceFlow 不会代你安装或执行这些 skill。',
