@@ -237,7 +237,7 @@ export default function Sessions() {
   };
 
   const filterOptions = [
-    { value: 'all', label: intl.formatMessage({ id: 'common.all' }) },
+    { value: 'all', label: intl.formatMessage({ id: 'common.current' }) },
     { value: 'active', label: intl.formatMessage({ id: 'sessions.filter.active' }) },
     { value: 'idle', label: intl.formatMessage({ id: 'sessions.filter.idle' }) },
     { value: 'archived', label: intl.formatMessage({ id: 'sessions.filter.archived' }) },

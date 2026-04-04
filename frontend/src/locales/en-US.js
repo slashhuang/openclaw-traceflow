@@ -115,6 +115,7 @@ export default {
   'common.statsScopeHint': 'Statistical scope',
   'common.back': 'Back to list',
   'common.all': 'All',
+  'common.current': 'Current',
   'common.yes': 'OK',
   'settings.title': 'Settings',
   'settings.pageScopeDesc':

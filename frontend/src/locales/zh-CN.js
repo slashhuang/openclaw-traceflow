@@ -113,6 +113,7 @@ export default {
   'common.statsScopeHint': '统计口径说明',
   'common.back': '返回列表',
   'common.all': '全部',
+  'common.current': '进行中',
   'common.yes': '确定',
   'settings.title': '系统设置',
   'settings.pageScopeDesc':
@@ -381,7 +382,7 @@ export default {
   'sessions.searchPlaceholder': '搜索 sessionKey、参与者…',
   'sessions.agentSelectPlaceholder': '筛选 Agent（留空为全部）',
   'sessions.column.agent': 'Agent',
-  'sessions.allAgentsHint': '当前为全部 Agent 的会话列表，可在上方选择 Agent 以缩小范围。',
+  'sessions.allAgentsHint': '当前为所有进行中的会话，可在上方选择 Agent 以缩小范围。',
   'sessions.status.archived': '归档',
   'sessions.empty': '暂无会话',
   'sessions.filter.active': '活跃',
