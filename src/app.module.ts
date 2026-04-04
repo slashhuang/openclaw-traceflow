@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from './config/config.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { OpenClawModule } from './openclaw/openclaw.module';
 import { HealthModule } from './health/health.module';
 import { SessionsModule } from './sessions/sessions.module';
@@ -26,6 +27,7 @@ import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.c
 
 @Module({
   imports: [
+    OnboardingModule,
     ConfigModule,
     OpenClawModule,
     HealthModule,
