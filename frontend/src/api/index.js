@@ -61,6 +61,8 @@ export const statusApi = {
 export const sessionsApi = {
   /** PRD §3.2：按 agent 会话概览（与 /sessions 着陆同源） */
   getAgentOverview: () => api.get('/sessions/agent-overview').then((res) => res.data),
+  /** 筛选统计（供前端筛选项显示计数） */
+  getFilterStats: () => api.get('/sessions/filter-stats').then((res) => res.data),
   list: (params) => api.get('/sessions', { params }).then(res => res.data),
   getDetail: (id, params) =>
     api

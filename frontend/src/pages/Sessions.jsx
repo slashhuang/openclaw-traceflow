@@ -106,6 +106,7 @@ export default function Sessions() {
   /** PRD §3.2：与仪表盘同源的按 agent 概览 */
   const [agentOverview, setAgentOverview] = useState([]);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [filterStats, setFilterStats] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -192,6 +193,13 @@ export default function Sessions() {
   }, []);
 
   useEffect(() => {
+    sessionsApi
+      .getFilterStats()
+      .then((stats) => setFilterStats(stats))
+      .catch(() => setFilterStats(null));
+  }, []);
+
+  useEffect(() => {
     fetchSessions(page, filter);
   }, [
     page,
@@ -236,13 +244,41 @@ export default function Sessions() {
     return 'normal';
   };
 
-  const filterOptions = [
-    { value: 'all', label: intl.formatMessage({ id: 'common.current' }) },
-    { value: 'active', label: intl.formatMessage({ id: 'sessions.filter.active' }) },
-    { value: 'idle', label: intl.formatMessage({ id: 'sessions.filter.idle' }) },
-    { value: 'archived', label: intl.formatMessage({ id: 'sessions.filter.archived' }) },
-    { value: 'stale_index', label: intl.formatMessage({ id: 'sessions.filter.staleIndex' }) },
-  ];
+  const filterOptions = useMemo(() => {
+    const stats = filterStats;
+    return [
+      {
+        value: 'all',
+        label: stats
+          ? `${intl.formatMessage({ id: 'common.current' })} (${stats.all})`
+          : intl.formatMessage({ id: 'common.current' }),
+      },
+      {
+        value: 'active',
+        label: stats
+          ? `${intl.formatMessage({ id: 'sessions.filter.active' })} (${stats.active})`
+          : intl.formatMessage({ id: 'sessions.filter.active' }),
+      },
+      {
+        value: 'idle',
+        label: stats
+          ? `${intl.formatMessage({ id: 'sessions.filter.idle' })} (${stats.idle})`
+          : intl.formatMessage({ id: 'sessions.filter.idle' }),
+      },
+      {
+        value: 'archived',
+        label: stats
+          ? `${intl.formatMessage({ id: 'sessions.filter.archived' })} (${stats.archived})`
+          : intl.formatMessage({ id: 'sessions.filter.archived' }),
+      },
+      {
+        value: 'stale_index',
+        label: stats
+          ? `${intl.formatMessage({ id: 'sessions.filter.staleIndex' })} (${stats.stale_index})`
+          : intl.formatMessage({ id: 'sessions.filter.staleIndex' }),
+      },
+    ];
+  }, [filterStats, intl]);
 
   const showAgentColumn = !hasAgentFilter;
 

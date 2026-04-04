@@ -288,6 +288,42 @@ export class SessionsService {
     return rows;
   }
 
+  /**
+   * 获取各筛选条件的会话数量统计（供前端筛选项显示计数）
+   */
+  async getFilterStats(): Promise<{
+    all: number;
+    active: number;
+    idle: number;
+    completed: number;
+    failed: number;
+    archived: number;
+    stale_index: number;
+  }> {
+    const [all, archivedSessions] = await Promise.all([
+      this.listSessions(),
+      this.openclawService.listArchivedSessions().catch(() => []),
+    ]);
+
+    const active = all.filter((s) => s.status === 'active').length;
+    const idle = all.filter((s) => s.status === 'idle').length;
+    const completed = all.filter((s) => s.status === 'completed').length;
+    const failed = all.filter((s) => s.status === 'failed').length;
+    const stale_index = all.filter(
+      (s) => s.tokenUsageMeta?.totalTokensFresh === false,
+    ).length;
+
+    return {
+      all: all.length,
+      active,
+      idle,
+      completed,
+      failed,
+      archived: archivedSessions.length,
+      stale_index,
+    };
+  }
+
   async listSessionsPaged(
     page: number,
     pageSize: number,

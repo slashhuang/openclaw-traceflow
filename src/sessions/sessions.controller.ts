@@ -87,6 +87,12 @@ export class SessionsController {
     return this.sessionsService.getAgentSessionOverview();
   }
 
+  /** 筛选统计（供前端筛选项显示计数） */
+  @Get('filter-stats')
+  async getFilterStats() {
+    return this.sessionsService.getFilterStats();
+  }
+
   @Get('config/models')
   async getConfiguredModels(): Promise<{
     models: string[];
