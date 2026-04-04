@@ -66,18 +66,6 @@ export default function BasicLayout() {
     { path: '/states', key: '/states', name: 'States', icon: <DatabaseOutlined /> },
     { path: '/reflections', key: '/reflections', name: '反思列表', icon: <ThunderboltOutlined /> },
     {
-      path: '/traceflow-skills',
-      key: '/traceflow-skills',
-      name: intl.formatMessage({ id: 'menu.traceflowSkills' }),
-      icon: <CodeOutlined />,
-    },
-    {
-      path: '/audit',
-      key: '/audit',
-      name: intl.formatMessage({ id: 'menu.audit' }),
-      icon: <CodeOutlined />,
-    },
-    {
       path: '/logs',
       key: '/logs',
       name: intl.formatMessage({ id: 'menu.logs' }),
@@ -88,6 +76,18 @@ export default function BasicLayout() {
       key: '/settings',
       name: intl.formatMessage({ id: 'menu.settings' }),
       icon: <SettingOutlined />,
+    },
+    {
+      path: '/traceflow-skills',
+      key: '/traceflow-skills',
+      name: intl.formatMessage({ id: 'menu.traceflowSkills' }),
+      icon: <CodeOutlined />,
+    },
+    {
+      path: '/audit',
+      key: '/audit',
+      name: intl.formatMessage({ id: 'menu.audit' }),
+      icon: <CodeOutlined />,
     },
   ];
 
