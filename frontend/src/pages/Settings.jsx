@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Card, Form, Input, Button, Typography, message, Modal, Row, Col, Alert, Space, Tag, Segmented } from 'antd';
+import {
+  Card,
+  Form,
+  Input,
+  Button,
+  Typography,
+  message,
+  Modal,
+  Row,
+  Col,
+  Alert,
+  Space,
+  Tag,
+  Segmented,
+} from 'antd';
 import { useIntl } from 'react-intl';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,7 +27,6 @@ import {
   TRACE_FLOW_ACCESS_TOKEN_STORAGE_KEY,
 } from '../api';
 import SectionScopeHint from '../components/SectionScopeHint';
-import SelfImprovementHint from '../components/SelfImprovementHint';
 
 const EVAL_CONTEXT_PLACEHOLDER = '{context}';
 
@@ -45,8 +58,6 @@ export default function Settings() {
   const [wsEvalPromptSource, setWsEvalPromptSource] = useState('builtin');
   const [wsEvalPromptVersion, setWsEvalPromptVersion] = useState('workspace-bootstrap-eval-v1');
 
-  const [selfImprovementEnabled, setSelfImprovementEnabled] = useState(false);
-
   useEffect(() => {
     (async () => {
       try {
@@ -58,7 +69,10 @@ export default function Settings() {
         }
       } catch (e) {
         message.error(
-          extractApiErrorMessage(e, intl.formatMessage({ id: 'settings.evaluationPrompt.loadFailed' })),
+          extractApiErrorMessage(
+            e,
+            intl.formatMessage({ id: 'settings.evaluationPrompt.loadFailed' }),
+          ),
         );
       } finally {
         setEvalPromptLoading(false);
@@ -121,8 +135,10 @@ export default function Settings() {
         setSys(data.config);
         form.setFieldsValue({
           openclawGatewayUrl: data.config.openclawGatewayUrl || '',
-          openclawStateDir: data.config.openclawStateDir || data.config.openclawPaths?.stateDir || '',
-          openclawWorkspaceDir: data.config.openclawWorkspaceDir || data.config.openclawPaths?.workspaceDir || '',
+          openclawStateDir:
+            data.config.openclawStateDir || data.config.openclawPaths?.stateDir || '',
+          openclawWorkspaceDir:
+            data.config.openclawWorkspaceDir || data.config.openclawPaths?.workspaceDir || '',
           openclawConfigPath: data.config.openclawConfigPath || '',
           bootstrapOverridesJson: data.config.bootstrapFileOverrides
             ? JSON.stringify(data.config.bootstrapFileOverrides, null, 2)
@@ -178,11 +194,7 @@ export default function Settings() {
           bootstrapFileOverrides = {};
         } else {
           const parsed = JSON.parse(raw);
-          if (
-            typeof parsed !== 'object' ||
-            parsed === null ||
-            Array.isArray(parsed)
-          ) {
+          if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
             throw new Error('invalid');
           }
           bootstrapFileOverrides = parsed;
@@ -215,7 +227,10 @@ export default function Settings() {
       } catch {
         /* ignore */
       }
-      message.success({ content: intl.formatMessage({ id: 'settings.saveSuccess' }), key: toastKey });
+      message.success({
+        content: intl.formatMessage({ id: 'settings.saveSuccess' }),
+        key: toastKey,
+      });
     } catch (e) {
       if (e?.errorFields) {
         message.destroy(toastKey);
@@ -244,7 +259,10 @@ export default function Settings() {
       }
     } catch (e) {
       message.error(
-        extractApiErrorMessage(e, intl.formatMessage({ id: 'settings.evaluationPrompt.saveFailed' })),
+        extractApiErrorMessage(
+          e,
+          intl.formatMessage({ id: 'settings.evaluationPrompt.saveFailed' }),
+        ),
       );
     } finally {
       setEvalPromptSaving(false);
@@ -266,7 +284,10 @@ export default function Settings() {
           }
         } catch (e) {
           message.error(
-            extractApiErrorMessage(e, intl.formatMessage({ id: 'settings.evaluationPrompt.resetFailed' })),
+            extractApiErrorMessage(
+              e,
+              intl.formatMessage({ id: 'settings.evaluationPrompt.resetFailed' }),
+            ),
           );
         } finally {
           setEvalPromptSaving(false);
@@ -287,7 +308,9 @@ export default function Settings() {
         setWsEvalPromptTemplate(res.data.template ?? '');
         setWsEvalPromptSource(res.data.source ?? 'override');
         setWsEvalPromptVersion(res.data.promptVersion ?? 'workspace-bootstrap-eval-v1');
-        message.success(intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.saveSuccess' }));
+        message.success(
+          intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.saveSuccess' }),
+        );
       }
     } catch (e) {
       message.error(
@@ -312,7 +335,9 @@ export default function Settings() {
             setWsEvalPromptTemplate(res.data.template ?? '');
             setWsEvalPromptSource(res.data.source ?? 'builtin');
             setWsEvalPromptVersion(res.data.promptVersion ?? 'workspace-bootstrap-eval-v1');
-            message.success(intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.resetSuccess' }));
+            message.success(
+              intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.resetSuccess' }),
+            );
           }
         } catch (e) {
           message.error(
@@ -331,9 +356,21 @@ export default function Settings() {
   const accessMode = Form.useWatch('accessMode', form);
 
   const modes = [
-    { value: 'local-only', label: intl.formatMessage({ id: 'mode.local' }), desc: intl.formatMessage({ id: 'mode.local.desc' }) },
-    { value: 'token', label: intl.formatMessage({ id: 'mode.token' }), desc: intl.formatMessage({ id: 'mode.token.desc' }) },
-    { value: 'none', label: intl.formatMessage({ id: 'mode.none' }), desc: intl.formatMessage({ id: 'mode.none.desc' }) },
+    {
+      value: 'local-only',
+      label: intl.formatMessage({ id: 'mode.local' }),
+      desc: intl.formatMessage({ id: 'mode.local.desc' }),
+    },
+    {
+      value: 'token',
+      label: intl.formatMessage({ id: 'mode.token' }),
+      desc: intl.formatMessage({ id: 'mode.token.desc' }),
+    },
+    {
+      value: 'none',
+      label: intl.formatMessage({ id: 'mode.none' }),
+      desc: intl.formatMessage({ id: 'mode.none.desc' }),
+    },
   ];
 
   if (loading || !sys) {
@@ -342,71 +379,96 @@ export default function Settings() {
 
   return (
     <div>
-      <SelfImprovementHint
-        enabled={selfImprovementEnabled}
-        onEnable={() => {
-          setSelfImprovementEnabled(true);
-          message.success('Self-Improvement 已启用！AI 将自动反思并生成优化建议');
-        }}
-      />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>{intl.formatMessage({ id: 'settings.title' })}</Typography.Title>
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          {intl.formatMessage({ id: 'settings.title' })}
+        </Typography.Title>
         <SectionScopeHint intl={intl} messageId="settings.pageScopeDesc" />
       </div>
       <Form form={form} layout="vertical">
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <div id="gateway" ref={gatewayCardRef}>
-            <Card
-              title={intl.formatMessage({ id: 'settings.gateway' })}
-              extra={<SectionScopeHint intl={intl} messageId="settings.gatewayCardScopeDesc" />}
-            >
-              <Form.Item name="openclawGatewayUrl" label={intl.formatMessage({ id: 'setup.gatewayUrl' })}>
-                <Input placeholder="http://localhost:18789" />
-              </Form.Item>
-              <Form.Item name="openclawGatewayToken" label={intl.formatMessage({ id: 'setup.gatewayToken' })}>
-                <Input.Password />
-              </Form.Item>
-              <Form.Item name="openclawGatewayPassword" label={intl.formatMessage({ id: 'setup.gatewayPassword' })}>
-                <Input.Password />
-              </Form.Item>
-              <Button onClick={onTest} loading={testing}>{intl.formatMessage({ id: 'settings.testConn' })}</Button>
-              {testResult && (
-                <Alert
-                  style={{ marginTop: 12 }}
-                  showIcon
-                  type={testResult.ok ? 'success' : 'error'}
-                  message={testResult.ok ? '连接测试成功' : '连接测试失败'}
-                  description={testResult.message}
-                />
-              )}
-              <div style={{ marginTop: 16 }}>
-                <Button type="link" onClick={() => setShowPaths(!showPaths)} style={{ padding: 0 }}>
-                  {showPaths ? intl.formatMessage({ id: 'settings.collapse' }) : intl.formatMessage({ id: 'settings.expand' })}{' '}
-                  {intl.formatMessage({ id: 'settings.advanced' })}
+              <Card
+                title={intl.formatMessage({ id: 'settings.gateway' })}
+                extra={<SectionScopeHint intl={intl} messageId="settings.gatewayCardScopeDesc" />}
+              >
+                <Form.Item
+                  name="openclawGatewayUrl"
+                  label={intl.formatMessage({ id: 'setup.gatewayUrl' })}
+                >
+                  <Input placeholder="http://localhost:18789" />
+                </Form.Item>
+                <Form.Item
+                  name="openclawGatewayToken"
+                  label={intl.formatMessage({ id: 'setup.gatewayToken' })}
+                >
+                  <Input.Password />
+                </Form.Item>
+                <Form.Item
+                  name="openclawGatewayPassword"
+                  label={intl.formatMessage({ id: 'setup.gatewayPassword' })}
+                >
+                  <Input.Password />
+                </Form.Item>
+                <Button onClick={onTest} loading={testing}>
+                  {intl.formatMessage({ id: 'settings.testConn' })}
                 </Button>
-                {showPaths && (
-                  <div style={{ marginTop: 12 }}>
-                    <Form.Item name="openclawStateDir" label={intl.formatMessage({ id: 'settings.stateDir' })}>
-                      <Input placeholder="~/.openclaw" />
-                    </Form.Item>
-                    <Form.Item name="openclawWorkspaceDir" label={intl.formatMessage({ id: 'settings.workspaceDir' })}>
-                      <Input placeholder="~/.openclaw/workspace" />
-                    </Form.Item>
-                    <Form.Item name="openclawConfigPath" label={intl.formatMessage({ id: 'settings.configPath' })}>
-                      <Input placeholder="$OPENCLAW_STATE_DIR/openclaw.json" />
-                    </Form.Item>
-                    <Form.Item
-                      name="bootstrapOverridesJson"
-                      label={intl.formatMessage({ id: 'settings.bootstrapOverrides' })}
-                      extra={intl.formatMessage({ id: 'settings.bootstrapOverridesHelp' })}
-                    >
-                      <Input.TextArea rows={5} style={{ fontFamily: 'monospace', fontSize: 12 }} placeholder="{}" />
-                    </Form.Item>
-                  </div>
+                {testResult && (
+                  <Alert
+                    style={{ marginTop: 12 }}
+                    showIcon
+                    type={testResult.ok ? 'success' : 'error'}
+                    message={testResult.ok ? '连接测试成功' : '连接测试失败'}
+                    description={testResult.message}
+                  />
                 )}
-              </div>
-            </Card>
+                <div style={{ marginTop: 16 }}>
+                  <Button
+                    type="link"
+                    onClick={() => setShowPaths(!showPaths)}
+                    style={{ padding: 0 }}
+                  >
+                    {showPaths
+                      ? intl.formatMessage({ id: 'settings.collapse' })
+                      : intl.formatMessage({ id: 'settings.expand' })}{' '}
+                    {intl.formatMessage({ id: 'settings.advanced' })}
+                  </Button>
+                  {showPaths && (
+                    <div style={{ marginTop: 12 }}>
+                      <Form.Item
+                        name="openclawStateDir"
+                        label={intl.formatMessage({ id: 'settings.stateDir' })}
+                      >
+                        <Input placeholder="~/.openclaw" />
+                      </Form.Item>
+                      <Form.Item
+                        name="openclawWorkspaceDir"
+                        label={intl.formatMessage({ id: 'settings.workspaceDir' })}
+                      >
+                        <Input placeholder="~/.openclaw/workspace" />
+                      </Form.Item>
+                      <Form.Item
+                        name="openclawConfigPath"
+                        label={intl.formatMessage({ id: 'settings.configPath' })}
+                      >
+                        <Input placeholder="$OPENCLAW_STATE_DIR/openclaw.json" />
+                      </Form.Item>
+                      <Form.Item
+                        name="bootstrapOverridesJson"
+                        label={intl.formatMessage({ id: 'settings.bootstrapOverrides' })}
+                        extra={intl.formatMessage({ id: 'settings.bootstrapOverridesHelp' })}
+                      >
+                        <Input.TextArea
+                          rows={5}
+                          style={{ fontFamily: 'monospace', fontSize: 12 }}
+                          placeholder="{}"
+                        />
+                      </Form.Item>
+                    </div>
+                  )}
+                </div>
+              </Card>
             </div>
           </Col>
           <Col xs={24} lg={12}>
@@ -428,10 +490,19 @@ export default function Settings() {
                         size="small"
                         hoverable
                         onClick={() => form.setFieldsValue({ accessMode: m.value })}
-                        style={{ borderColor: accessMode === m.value ? 'var(--ant-color-primary)' : undefined, cursor: 'pointer' }}
+                        style={{
+                          borderColor:
+                            accessMode === m.value ? 'var(--ant-color-primary)' : undefined,
+                          cursor: 'pointer',
+                        }}
                       >
                         <Typography.Text strong>{m.label}</Typography.Text>
-                        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0 }}>{m.desc}</Typography.Paragraph>
+                        <Typography.Paragraph
+                          type="secondary"
+                          style={{ fontSize: 12, marginBottom: 0 }}
+                        >
+                          {m.desc}
+                        </Typography.Paragraph>
                       </Card>
                     </Col>
                   ))}
@@ -439,8 +510,13 @@ export default function Settings() {
               </Form.Item>
               {accessMode === 'token' && (
                 <>
-                  <Form.Item name="accessToken" label={intl.formatMessage({ id: 'setup.accessToken' })}>
-                    <Input placeholder={intl.formatMessage({ id: 'setup.accessToken.placeholder' })} />
+                  <Form.Item
+                    name="accessToken"
+                    label={intl.formatMessage({ id: 'setup.accessToken' })}
+                  >
+                    <Input
+                      placeholder={intl.formatMessage({ id: 'setup.accessToken.placeholder' })}
+                    />
                   </Form.Item>
                   <Alert
                     type="warning"
@@ -458,7 +534,9 @@ export default function Settings() {
                   />
                 </>
               )}
-              <Button type="primary" onClick={onSave} loading={saving}>{intl.formatMessage({ id: 'settings.saveCfg' })}</Button>
+              <Button type="primary" onClick={onSave} loading={saving}>
+                {intl.formatMessage({ id: 'settings.saveCfg' })}
+              </Button>
             </Card>
           </Col>
         </Row>
@@ -480,7 +558,9 @@ export default function Settings() {
             message={intl.formatMessage({ id: 'settings.evaluationPrompt.hint' })}
           />
           <Space wrap style={{ marginBottom: 8 }}>
-            <Tag>{intl.formatMessage({ id: 'settings.evaluationPrompt.version' })}: {evalPromptVersion}</Tag>
+            <Tag>
+              {intl.formatMessage({ id: 'settings.evaluationPrompt.version' })}: {evalPromptVersion}
+            </Tag>
             <Tag color={evalPromptSource === 'override' ? 'processing' : 'default'}>
               {evalPromptSource === 'override'
                 ? intl.formatMessage({ id: 'settings.evaluationPrompt.sourceOverride' })
@@ -525,7 +605,10 @@ export default function Settings() {
         <Card
           title={intl.formatMessage({ id: 'settings.workspaceEvaluationPrompt.title' })}
           extra={
-            <SectionScopeHint intl={intl} messageId="settings.workspaceEvaluationPrompt.cardScopeDesc" />
+            <SectionScopeHint
+              intl={intl}
+              messageId="settings.workspaceEvaluationPrompt.cardScopeDesc"
+            />
           }
           style={{ marginTop: 16 }}
           loading={wsEvalPromptLoading}
@@ -567,7 +650,9 @@ export default function Settings() {
             />
           ) : (
             <div className="markdown-preview" style={{ minHeight: 160 }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{wsEvalPromptTemplate || ''}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {wsEvalPromptTemplate || ''}
+              </ReactMarkdown>
             </div>
           )}
           <Space style={{ marginTop: 12 }}>
@@ -623,13 +708,22 @@ export default function Settings() {
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
           Author:{' '}
-          <a href="https://github.com/slashhuang" target="_blank" rel="noreferrer" style={{ marginLeft: 6, fontWeight: 600 }}>
+          <a
+            href="https://github.com/slashhuang"
+            target="_blank"
+            rel="noreferrer"
+            style={{ marginLeft: 6, fontWeight: 600 }}
+          >
             slashhuang
           </a>
         </Typography.Paragraph>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          GitHub:{" "}
-          <a href="https://github.com/slashhuang/openclaw-traceflow" target="_blank" rel="noreferrer">
+          GitHub:{' '}
+          <a
+            href="https://github.com/slashhuang/openclaw-traceflow"
+            target="_blank"
+            rel="noreferrer"
+          >
             https://github.com/slashhuang/openclaw-traceflow
           </a>
         </Typography.Paragraph>
