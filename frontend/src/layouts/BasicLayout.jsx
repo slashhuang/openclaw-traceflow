@@ -83,12 +83,7 @@ export default function BasicLayout() {
       name: intl.formatMessage({ id: 'menu.traceflowSkills' }),
       icon: <CodeOutlined />,
     },
-    {
-      path: '/audit',
-      key: '/audit',
-      name: intl.formatMessage({ id: 'menu.audit' }),
-      icon: <CodeOutlined />,
-    },
+    // 贡献审计：路由保留，侧栏隐藏（直达 URL 仍可用）
   ];
 
   return (
