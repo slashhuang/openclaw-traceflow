@@ -18,6 +18,7 @@ import { useIntl } from 'react-intl';
 import { useLocaleTheme } from '../providers/LocaleThemeProvider';
 import { healthApi } from '../api';
 import { SETTINGS_GATEWAY_PATH } from '../constants/settingsPaths';
+import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
 
 const HEADER_HEALTH_POLL_INTERVAL_MS = 10000;
 
@@ -218,6 +219,11 @@ export default function BasicLayout() {
               <DownOutlined />
             </Button>
           </Dropdown>,
+          <Tooltip key="build-info" title={APP_GIT_SHA ? `Git SHA: ${APP_GIT_SHA}` : undefined}>
+            <Tag style={{ fontSize: 11, cursor: 'default' }}>
+              Build: {APP_BUILD_TIME_ISO || 'dev'}
+            </Tag>
+          </Tooltip>,
         ].filter(Boolean)
       }
       onMenuHeaderClick={() => navigate('/sessions')}
