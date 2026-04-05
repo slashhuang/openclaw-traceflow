@@ -528,11 +528,7 @@ export default {
   'logs.scrollBottom': '滚到底部',
   'logs.filterLevel': '级别',
   'logs.pageScopeDesc':
-    '初始列表来自 GET /api/logs；之后通过 Socket.IO `logs:new` 增量追加。清空仅影响浏览器内存中的展示。',
-  'logs.gatewayOfflineTitle': 'Gateway 未连接',
-  'logs.gatewayOfflineDesc':
-    'Gateway 日志需连接 OpenClaw Gateway。请在「设置」中配置并测试连接；具体报错见顶栏 Gateway 提示。',
-  'logs.cardScopeDesc': '展示为服务端推送与最近拉取的日志行；级别筛选为前端过滤。',
+    '日志来自 GET /api/logs/traceflow；定时轮询刷新。清空仅影响浏览器内存中的展示。',
   'markdownPreview.inputTitle': '输入',
   'markdownPreview.previewTitle': '预览',
   'markdownPreview.modePaste': '粘贴 Markdown',
@@ -707,6 +703,8 @@ export default {
   'systemPrompt.bootstrap.save': '保存',
   'systemPrompt.bootstrap.saveOk': '已保存到工作区',
   'systemPrompt.bootstrap.saveFail': '保存失败',
+  'systemPrompt.bootstrap.noChanges': '文件内容没有变化',
+  'systemPrompt.bootstrap.conflict': '文件已被其他人修改，请刷新后重试',
   'systemPrompt.bootstrap.noWorkspaceHint':
     '当前嗅探结果未包含 workspace 路径；若 TraceFlow 无法解析工作区目录，保存可能失败。请配置 OPENCLAW_WORKSPACE_DIR 或确保 Gateway 能解析到工作区。',
   'systemPrompt.bootstrap.lengthWarning':

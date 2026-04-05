@@ -537,11 +537,7 @@ export default {
   'logs.scrollBottom': 'Scroll to bottom',
   'logs.filterLevel': 'Level',
   'logs.pageScopeDesc':
-    'Initial lines from GET /api/logs; then Socket.IO `logs:new` appends. Clear only clears the in-browser buffer.',
-  'logs.gatewayOfflineTitle': 'Gateway not connected',
-  'logs.gatewayOfflineDesc':
-    'Gateway logs need a working OpenClaw Gateway connection. Configure it in Settings; see the header Gateway tooltip for error details.',
-  'logs.cardScopeDesc': 'Shows streamed and recently fetched log lines; level filter is client-side.',
+    'Logs from GET /api/logs/traceflow; refreshed by polling. Clear only clears the in-browser buffer.',
   'markdownPreview.inputTitle': 'Input',
   'markdownPreview.previewTitle': 'Preview',
   'markdownPreview.modePaste': 'Paste Markdown',
@@ -717,6 +713,8 @@ export default {
   'systemPrompt.bootstrap.save': 'Save',
   'systemPrompt.bootstrap.saveOk': 'Saved to workspace',
   'systemPrompt.bootstrap.saveFail': 'Save failed',
+  'systemPrompt.bootstrap.noChanges': 'No changes made',
+  'systemPrompt.bootstrap.conflict': 'File has been modified by others, please refresh and try again',
   'systemPrompt.bootstrap.noWorkspaceHint':
     'Probe did not report a workspace path; saving may fail until OPENCLAW_WORKSPACE_DIR (or Gateway workspace) is available to TraceFlow.',
   'systemPrompt.bootstrap.lengthWarning':

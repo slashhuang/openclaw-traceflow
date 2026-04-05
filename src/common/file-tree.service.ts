@@ -2,6 +2,7 @@ import { Injectable, HttpStatus } from '@nestjs/common';
 import type { Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import type { Stats } from 'fs';
 
 /**
  * 文件树节点接口
@@ -46,8 +47,28 @@ export interface FileResponse {
 }
 
 /**
+ * 文件写入请求体
+ */
+export interface FileWriteRequest {
+  content: string;
+  /** 可选：用于乐观并发控制，与当前文件的 mtimeMs 一致 */
+  expectedMtimeMs?: number;
+}
+
+/**
+ * 文件写入响应
+ */
+export interface FileWriteResponse {
+  path: string;
+  name: string;
+  size: number;
+  modifiedAt: string;
+  mtimeMs: number;
+}
+
+/**
  * 通用文件树服务
- * 提供目录树浏览和文件内容读取功能
+ * 提供目录树浏览和文件内容读取/写入功能
  */
 @Injectable()
 export class FileTreeService {
@@ -218,5 +239,81 @@ export class FileTreeService {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
+
+  /**
+   * 写入文件内容
+   */
+  async writeFile(
+    root: string,
+    filePath: string | string[],
+    body: FileWriteRequest,
+  ): Promise<FileWriteResponse> {
+    const pathStr = Array.isArray(filePath) ? filePath.join('/') : filePath;
+    const fullPath = this.validatePath(root, pathStr);
+
+    // 验证文件存在并获取当前 mtime
+    let stat: Stats;
+    try {
+      stat = await fs.stat(fullPath);
+      if (!stat.isFile()) {
+        throw new Error('Not a file');
+      }
+
+      // 乐观并发控制：如果提供了 expectedMtimeMs，验证是否匹配
+      if (body.expectedMtimeMs !== undefined) {
+        if (stat.mtimeMs !== body.expectedMtimeMs) {
+          throw new Error(
+            `文件已被修改（期望 mtimeMs: ${body.expectedMtimeMs}, 实际：${stat.mtimeMs}）`,
+          );
+        }
+      }
+    } catch (error) {
+      if ((error as any).code === 'ENOENT') {
+        throw new Error('文件不存在');
+      }
+      throw error;
+    }
+
+    // 写入文件
+    await fs.writeFile(fullPath, body.content, 'utf-8');
+
+    // 重新获取统计信息
+    const newStat = await fs.stat(fullPath);
+
+    return {
+      path: pathStr,
+      name: path.basename(fullPath),
+      size: newStat.size,
+      modifiedAt: newStat.mtime.toISOString(),
+      mtimeMs: newStat.mtimeMs,
+    };
+  }
+
+  /**
+   * 删除文件
+   */
+  async deleteFile(
+    root: string,
+    filePath: string | string[],
+  ): Promise<{ success: boolean; path: string }> {
+    const pathStr = Array.isArray(filePath) ? filePath.join('/') : filePath;
+    const fullPath = this.validatePath(root, pathStr);
+
+    try {
+      const stat = await fs.stat(fullPath);
+      if (!stat.isFile()) {
+        throw new Error('只能删除文件，不能删除目录');
+      }
+
+      await fs.unlink(fullPath);
+
+      return { success: true, path: pathStr };
+    } catch (error) {
+      if ((error as any).code === 'ENOENT') {
+        throw new Error('文件不存在');
+      }
+      throw error;
+    }
   }
 }
