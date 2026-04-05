@@ -46,6 +46,41 @@ export interface Config {
    * 环境变量 OPENCLAW_WORKSPACE_WRITE=1 / true 开启。
    */
   workspaceWriteWhenAccessNoneEnabled: boolean;
+
+  // ========== IM 推送配置（新增）==========
+  /**
+   * 数据源配置
+   */
+  sources?: Array<{
+    type: 'openclaw' | 'dify' | 'langchain';
+    enabled: boolean;
+    config: Record<string, any>;
+  }>;
+
+  /**
+   * IM 推送配置
+   */
+  im?: {
+    enabled: boolean;
+    channels?: {
+      feishu?: {
+        enabled: boolean;
+        appId: string;
+        appSecret: string;
+        targetUserId: string;
+        rateLimit?: number;
+        pushStrategy?: {
+          sessionStart?: boolean;
+          sessionMessages?: boolean;
+          sessionEnd?: boolean;
+          errorLogs?: boolean;
+          warnLogs?: boolean;
+        };
+      };
+      dingtalk?: any; // 未来扩展
+      wecom?: any; // 未来扩展
+    };
+  };
 }
 
 /**
@@ -62,7 +97,8 @@ export class ConfigService implements ConfigReader, OnModuleInit {
   private configPath: string;
 
   constructor(
-    @Optional() @Inject(OnboardingStorageService)
+    @Optional()
+    @Inject(OnboardingStorageService)
     private readonly onboardingStorage?: OnboardingStorageService,
   ) {
     // 使用 realpathSync 解析符号链接，确保路径正确
@@ -84,21 +120,33 @@ export class ConfigService implements ConfigReader, OnModuleInit {
     }
 
     try {
-      const onboardingConfig = await this.onboardingStorage.loadOnboardingConfig();
+      const onboardingConfig =
+        await this.onboardingStorage.loadOnboardingConfig();
       if (onboardingConfig) {
         // 合并 onboarding 配置到当前配置（onboarding 配置优先级最高）
         this.config = {
           ...this.config,
-          openclawStateDir: onboardingConfig.openclaw.stateDir || this.config.openclawStateDir,
-          openclawWorkspaceDir: onboardingConfig.openclaw.workspaceDir || this.config.openclawWorkspaceDir,
-          openclawConfigPath: onboardingConfig.openclaw.configPath || this.config.openclawConfigPath,
-          openclawGatewayUrl: onboardingConfig.gateway.url || this.config.openclawGatewayUrl,
-          openclawGatewayToken: onboardingConfig.gateway.token || this.config.openclawGatewayToken,
-          openclawGatewayPassword: onboardingConfig.gateway.password || this.config.openclawGatewayPassword,
+          openclawStateDir:
+            onboardingConfig.openclaw.stateDir || this.config.openclawStateDir,
+          openclawWorkspaceDir:
+            onboardingConfig.openclaw.workspaceDir ||
+            this.config.openclawWorkspaceDir,
+          openclawConfigPath:
+            onboardingConfig.openclaw.configPath ||
+            this.config.openclawConfigPath,
+          openclawGatewayUrl:
+            onboardingConfig.gateway.url || this.config.openclawGatewayUrl,
+          openclawGatewayToken:
+            onboardingConfig.gateway.token || this.config.openclawGatewayToken,
+          openclawGatewayPassword:
+            onboardingConfig.gateway.password ||
+            this.config.openclawGatewayPassword,
           host: onboardingConfig.traceflow.host || this.config.host,
           port: onboardingConfig.traceflow.port || this.config.port,
-          accessMode: onboardingConfig.traceflow.accessMode || this.config.accessMode,
-          accessToken: onboardingConfig.traceflow.accessToken || this.config.accessToken,
+          accessMode:
+            onboardingConfig.traceflow.accessMode || this.config.accessMode,
+          accessToken:
+            onboardingConfig.traceflow.accessToken || this.config.accessToken,
         };
         console.log('Loaded configuration from ~/.openclawTraceFlow');
       }
@@ -148,7 +196,9 @@ export class ConfigService implements ConfigReader, OnModuleInit {
       openclawStateDir: process.env.OPENCLAW_STATE_DIR || undefined,
       openclawWorkspaceDir: process.env.OPENCLAW_WORKSPACE_DIR || undefined,
       openclawConfigPath:
-        process.env.OPENCLAW_CONFIG_PATH || process.env.CLAWDBOT_CONFIG_PATH || undefined,
+        process.env.OPENCLAW_CONFIG_PATH ||
+        process.env.CLAWDBOT_CONFIG_PATH ||
+        undefined,
       accessToken: process.env.OPENCLAW_RUNTIME_ACCESS_TOKEN || undefined,
       accessMode:
         (process.env.OPENCLAW_ACCESS_MODE as Config['accessMode']) || undefined,

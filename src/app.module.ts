@@ -24,6 +24,9 @@ import { FileTreeService } from './common/file-tree.service';
 import { WorkspaceController } from './workspace/workspace.controller';
 import { AuditController } from './audit/audit.controller';
 import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.controller';
+// IM Push 模块
+import { ImPushModule } from './im/im-push.module';
+import { OpenClawAdapterModule } from './adapters/openclaw/openclaw.adapter.module';
 
 @Module({
   imports: [
@@ -39,6 +42,9 @@ import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.c
     PricingConfigModule,
     StorageModule,
     DashboardModule,
+    // IM Push 相关
+    OpenClawAdapterModule,
+    ImPushModule,
   ],
   controllers: [
     AppController,
