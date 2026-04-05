@@ -1,5 +1,4 @@
-import { Module, Global } from '@nestjs/common';
-import { EventEmitterModule } from '@nestjs/event-emitter';
+import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SessionManager } from './session-manager';
 import { ImPushService } from './im-push.service';
@@ -8,16 +7,16 @@ import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
 
 /**
  * IM 推送模块
+ * 注意：不再使用 @Global()，在 AppModule 中显式导入
  */
-@Global()
 @Module({
-  imports: [EventEmitterModule.forRoot(), SessionsModule],
+  imports: [SessionsModule],
   providers: [
     SessionManager,
     ImPushService,
     FeishuChannel,
     FeishuMessageFormatter,
   ],
-  exports: [SessionManager, ImPushService],
+  exports: [ImPushService], // 只导出 ImPushService，不导出 SessionManager
 })
 export class ImPushModule {}

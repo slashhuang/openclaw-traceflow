@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LogsController } from './logs.controller';
 import { LogsService } from './logs.service';
 import { ConfigModule } from '../config/config.module';
@@ -8,6 +7,6 @@ import { ConfigModule } from '../config/config.module';
   controllers: [LogsController],
   providers: [LogsService],
   exports: [LogsService],
-  imports: [ConfigModule, EventEmitterModule.forRoot()],
+  imports: [ConfigModule], // 移除 EventEmitterModule，AppModule 已统一配置
 })
 export class LogsModule {}

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from './config/config.module';
@@ -30,6 +31,17 @@ import { OpenClawAdapterModule } from './adapters/openclaw/openclaw.adapter.modu
 
 @Module({
   imports: [
+    // ========== 核心模块（按依赖顺序）==========
+    EventEmitterModule.forRoot({
+      // 配置事件通配符支持
+      wildcard: true,
+      // 事件名称分隔符
+      delimiter: '.',
+      // 最大监听器数量
+      maxListeners: 20,
+      // 是否显示事件追踪日志
+      verboseMemoryLeak: true,
+    }),
     OnboardingModule,
     ConfigModule,
     OpenClawModule,
@@ -42,7 +54,7 @@ import { OpenClawAdapterModule } from './adapters/openclaw/openclaw.adapter.modu
     PricingConfigModule,
     StorageModule,
     DashboardModule,
-    // IM Push 相关
+    // IM Push 相关（依赖核心模块）
     OpenClawAdapterModule,
     ImPushModule,
   ],
