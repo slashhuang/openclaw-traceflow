@@ -28,7 +28,12 @@ export class StatusController {
 
   @Get('status')
   async getStatus() {
-    const overview = await this.openclawService.getStatusOverview();
-    return overview ?? { error: 'Gateway 未连接或不可用' };
+    const paths = await this.openclawService.getResolvedPaths();
+    return {
+      stateDir: paths.stateDir,
+      configPath: paths.configPath,
+      workspaceDir: paths.workspaceDir,
+      source: paths.source,
+    };
   }
 }

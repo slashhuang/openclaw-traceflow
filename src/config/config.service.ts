@@ -8,25 +8,16 @@ export interface Config {
   host: string;
   port: number;
 
-  // OpenClaw Gateway 配置
-  openclawGatewayUrl: string;
-  /** Gateway WS 鉴权（与 gateway.auth 一致，用于拉取运行时路径） */
-  openclawGatewayToken?: string;
-  openclawGatewayPassword?: string;
-  /**
-   * 手动指定 OpenClaw state 目录（可选，留空则从 Gateway/CLI 解析）
-   * 优先级：1. 此配置 2. OPENCLAW_STATE_DIR 环境变量 3. Gateway 解析 4. 默认 ~/.openclaw/state
-   */
+  // OpenClaw 本地数据目录配置
+  /** OpenClaw state 目录（存放 agents/*/ sessions; /*.jsonl） */
   openclawStateDir?: string;
-  /** 手动指定工作目录（可选，留空则从 Gateway/CLI 解析） */
+  /** OpenClaw 工作目录 */
   openclawWorkspaceDir?: string;
-  /**
-   * 主配置文件路径（对齐 OPENCLAW_CONFIG_PATH），默认 $OPENCLAW_STATE_DIR/openclaw.json
-   */
+  /** OpenClaw 配置文件路径 */
   openclawConfigPath?: string;
-  /**
-   * bootstrap 逻辑文件名 → 绝对路径，用于与 OpenClaw hook/自定义布局对齐时的编辑目标
-   */
+  /** OpenClaw 日志路径（可选） */
+  openclawLogPath?: string;
+  /** Bootstrap 文件覆盖配置（可选） */
   bootstrapFileOverrides?: Record<string, string>;
 
   // 访问保护配置
@@ -35,9 +26,6 @@ export interface Config {
 
   // 数据目录
   dataDir: string;
-
-  /** OpenClaw 日志文件路径（用户配置，OpenClaw 输出到该文件） */
-  openclawLogPath?: string;
 
   /**
    * 由 transcript .jsonl 字节数估算 token 时的除数（启发式，非 tokenizer）。
@@ -131,13 +119,6 @@ export class ConfigService implements ConfigReader, OnModuleInit {
           openclawConfigPath:
             onboardingConfig.openclaw.configPath ||
             this.config.openclawConfigPath,
-          openclawGatewayUrl:
-            onboardingConfig.gateway.url || this.config.openclawGatewayUrl,
-          openclawGatewayToken:
-            onboardingConfig.gateway.token || this.config.openclawGatewayToken,
-          openclawGatewayPassword:
-            onboardingConfig.gateway.password ||
-            this.config.openclawGatewayPassword,
           host: onboardingConfig.traceflow.host || this.config.host,
           port: onboardingConfig.traceflow.port || this.config.port,
           accessMode:
@@ -160,13 +141,10 @@ export class ConfigService implements ConfigReader, OnModuleInit {
     const defaultConfig: Partial<Config> = {
       host: '0.0.0.0',
       port: 3001,
-      openclawGatewayUrl: 'http://localhost:18789',
-      /** 留空则由 OpenClawService 通过 CLI / 环境变量自动解析 */
+      /** 留空则从环境变量或默认路径解析 */
       openclawStateDir: undefined,
       accessMode: 'none',
       dataDir: path.join(realCwd, 'data'),
-      /** OpenClaw 日志路径，需用户配置（OpenClaw 输出到该文件） */
-      openclawLogPath: undefined,
       tokenEstimateBytesDivisor: 4,
       workspaceWriteWhenAccessNoneEnabled: false,
     };
@@ -186,10 +164,6 @@ export class ConfigService implements ConfigReader, OnModuleInit {
     const envConfig: Partial<Config> = {
       host: process.env.HOST || undefined,
       port: process.env.PORT ? parseInt(process.env.PORT) : undefined,
-      openclawGatewayUrl: process.env.OPENCLAW_GATEWAY_URL || undefined,
-      openclawGatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN || undefined,
-      openclawGatewayPassword:
-        process.env.OPENCLAW_GATEWAY_PASSWORD || undefined,
       openclawStateDir: process.env.OPENCLAW_STATE_DIR || undefined,
       openclawWorkspaceDir: process.env.OPENCLAW_WORKSPACE_DIR || undefined,
       openclawConfigPath:
@@ -201,7 +175,6 @@ export class ConfigService implements ConfigReader, OnModuleInit {
         (process.env.OPENCLAW_ACCESS_MODE as Config['accessMode']) || undefined,
       dataDir:
         process.env.TRACEFLOW_DATA_DIR || process.env.DATA_DIR || undefined,
-      openclawLogPath: process.env.OPENCLAW_LOG_PATH || undefined,
       tokenEstimateBytesDivisor: process.env.TOKEN_ESTIMATE_BYTES_DIVISOR
         ? parseFloat(process.env.TOKEN_ESTIMATE_BYTES_DIVISOR)
         : undefined,
@@ -254,12 +227,6 @@ export class ConfigService implements ConfigReader, OnModuleInit {
     const safeConfig = {
       ...config,
       accessToken: config.accessToken ? '[REDACTED]' : undefined,
-      openclawGatewayToken: config.openclawGatewayToken
-        ? '[REDACTED]'
-        : undefined,
-      openclawGatewayPassword: config.openclawGatewayPassword
-        ? '[REDACTED]'
-        : undefined,
     };
 
     fs.writeFileSync(snapshotPath, JSON.stringify(safeConfig, null, 2));

@@ -39,8 +39,8 @@ export interface FileResponse {
   createdAt?: string;
   modifiedAt?: string;
   preview?: {
-    head: string;  // 前 10 行
-    tail: string;  // 后 10 行
+    head: string; // 前 10 行
+    tail: string; // 后 10 行
     totalLines: number;
     message: string;
   };
@@ -76,12 +76,11 @@ export class FileTreeService {
    * 验证路径是否在根目录内（防止路径遍历攻击）
    */
   validatePath(root: string, requestedPath: string | string[]): string {
-    const pathStr = Array.isArray(requestedPath) ? requestedPath[0] : requestedPath;
+    const pathStr = Array.isArray(requestedPath)
+      ? requestedPath[0]
+      : requestedPath;
     const resolved = path.resolve(root, pathStr);
-    if (
-      resolved !== root &&
-      !resolved.startsWith(root + path.sep)
-    ) {
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
       throw new Error('Access denied: Path traversal detected');
     }
     return resolved;
@@ -90,10 +89,11 @@ export class FileTreeService {
   /**
    * 获取目录树结构
    */
-  async getTree(root: string, queryPath?: string): Promise<TreeResponse | { error: string }> {
-    const targetPath = queryPath
-      ? this.validatePath(root, queryPath)
-      : root;
+  async getTree(
+    root: string,
+    queryPath?: string,
+  ): Promise<TreeResponse | { error: string }> {
+    const targetPath = queryPath ? this.validatePath(root, queryPath) : root;
 
     try {
       const stat = await fs.stat(targetPath);
@@ -182,12 +182,12 @@ export class FileTreeService {
         const content = await fs.readFile(fullPath, 'utf-8');
         const lines = content.split('\n');
         const totalLines = lines.length;
-        
+
         // 性能可控：只读取前 10 行和后 10 行
         const PREVIEW_LINES = 10;
         const head = lines.slice(0, PREVIEW_LINES).join('\n');
         const tail = lines.slice(-PREVIEW_LINES).join('\n');
-        
+
         res.json({
           path: pathStr,
           name: path.basename(fullPath),
@@ -219,15 +219,11 @@ export class FileTreeService {
     } catch (error) {
       console.error('[FileTreeService] Error:', error);
       if (error instanceof Error && (error as any).code === 'ENOENT') {
-        res
-          .status(HttpStatus.NOT_FOUND)
-          .json({ error: 'File not found' });
+        res.status(HttpStatus.NOT_FOUND).json({ error: 'File not found' });
         return;
       }
       const message = error instanceof Error ? error.message : 'Unknown error';
-      res
-        .status(HttpStatus.INTERNAL_SERVER_ERROR)
-        .json({ error: message });
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: message });
     }
   }
 
@@ -237,7 +233,8 @@ export class FileTreeService {
   private formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024 * 1024)
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
 
@@ -269,7 +266,7 @@ export class FileTreeService {
         }
       }
     } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      if (error.code === 'ENOENT') {
         throw new Error('文件不存在');
       }
       throw error;
@@ -310,7 +307,7 @@ export class FileTreeService {
 
       return { success: true, path: pathStr };
     } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      if (error.code === 'ENOENT') {
         throw new Error('文件不存在');
       }
       throw error;

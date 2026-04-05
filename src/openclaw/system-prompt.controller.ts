@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Logger,
-  Put,
-} from '@nestjs/common';
+import { Body, Controller, Get, Logger, Put } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { OpenClawService } from './openclaw.service';
 

@@ -3,7 +3,6 @@ import { HealthService } from '../health/health.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { MetricsService } from '../metrics/metrics.service';
-import type { StatusOverviewResult } from '../openclaw/gateway-rpc';
 
 @Controller('api/dashboard')
 export class DashboardController {
@@ -18,7 +17,7 @@ export class DashboardController {
   async getOverview() {
     const [
       health,
-      statusResult,
+      paths,
       sessions,
       latency,
       tokenSummary,
@@ -26,7 +25,7 @@ export class DashboardController {
       agentSessionOverview,
     ] = await Promise.all([
       this.healthService.getHealthStatus().catch(() => null),
-      this.openclawService.getStatusOverview().catch(() => null),
+      this.openclawService.getResolvedPaths().catch(() => null),
       this.sessionsService.listSessions().catch(() => []),
       this.metricsService
         .getLatencyMetrics()
@@ -59,7 +58,7 @@ export class DashboardController {
 
     return {
       health,
-      statusOverview: (statusResult as StatusOverviewResult) ?? { error: 'Gateway 未连接或不可用' },
+      openclawPaths: paths,
       sessions,
       /** PRD：按 agent 分区的会话概览（总/活跃/空闲/归档，磁盘） */
       agentSessionOverview,

@@ -24,15 +24,6 @@ const Settings: React.FC = () => {
       label: intl.formatMessage({ id: 'settings.im', defaultMessage: 'IM 推送配置' }),
       children: <ImConfigSettings />,
     },
-    {
-      key: 'general',
-      label: intl.formatMessage({ id: 'settings.general', defaultMessage: '通用设置' }),
-      children: (
-        <div style={{ padding: 24 }}>
-          <p>{intl.formatMessage({ id: 'settings.general.coming', defaultMessage: '更多设置即将推出...' })}</p>
-        </div>
-      ),
-    },
   ];
 
   return (

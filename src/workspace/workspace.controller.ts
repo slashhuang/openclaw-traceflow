@@ -1,10 +1,23 @@
-import { Controller, Get, Param, Query, Res, HttpStatus, Put, Delete, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  Res,
+  HttpStatus,
+  Put,
+  Delete,
+  Body,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import * as path from 'path';
 import * as os from 'os';
 import { OpenClawService } from '../openclaw/openclaw.service';
 import { FileTreeService } from '../common/file-tree.service';
-import type { FileWriteRequest, FileWriteResponse } from '../common/file-tree.service';
+import type {
+  FileWriteRequest,
+  FileWriteResponse,
+} from '../common/file-tree.service';
 
 @Controller('api/workspace')
 export class WorkspaceController {
@@ -45,7 +58,10 @@ export class WorkspaceController {
    * 获取文件内容
    */
   @Get('file/*path')
-  async getFile(@Param('path') filePath: string | string[], @Res() res: Response) {
+  async getFile(
+    @Param('path') filePath: string | string[],
+    @Res() res: Response,
+  ) {
     const workspaceRoot = await this.getWorkspaceRoot();
     return this.fileTreeService.getFile(workspaceRoot, filePath, res);
   }

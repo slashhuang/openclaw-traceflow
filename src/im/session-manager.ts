@@ -81,7 +81,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
     // 优先使用 openclawStateDir，自动发现所有 agent
     const stateDir = config.openclawStateDir;
-    let agentsSessionsDirs: { agentId: string; sessionsDir: string }[] = [];
+    const agentsSessionsDirs: { agentId: string; sessionsDir: string }[] = [];
 
     if (stateDir && fs.existsSync(stateDir)) {
       // 遍历 agents 目录，发现所有 agent 的 sessions
@@ -128,10 +128,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 为单个 agent 启动文件监听器
    */
-  private startAgentFileWatcher(
-    agentId: string,
-    sessionsDir: string,
-  ): void {
+  private startAgentFileWatcher(agentId: string, sessionsDir: string): void {
     this.logger.log(`Starting watcher for agent ${agentId}: ${sessionsDir}`);
 
     // 监听 sessions.json 文件
@@ -146,10 +143,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       // 只监听 .jsonl 和 sessions.json 文件 (chokidar v4 风格：返回 true 表示忽略)
       ignored: (filePath, stats) => {
         if (!stats?.isFile()) return false; // 不忽略目录
-        return !(filePath.endsWith('.jsonl') || filePath.endsWith('sessions.json'));
+        return !(
+          filePath.endsWith('.jsonl') || filePath.endsWith('sessions.json')
+        );
       },
       persistent: true,
-      ignoreInitial: false,  // 需要触发 add 事件来初始化文件位置
+      ignoreInitial: false, // 需要触发 add 事件来初始化文件位置
       // 使用原生 watching (默认)，只在网络文件系统时开启 polling
       usePolling: false,
       // awaitWriteFinish 配置，避免写入中途触发事件
@@ -158,7 +157,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         pollInterval: 50,
       },
       depth: 1,
-      alwaysStat: true,  // 始终提供 stats 对象
+      alwaysStat: true, // 始终提供 stats 对象
     });
 
     this.watchers.push(watcher);
@@ -211,7 +210,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
       if (!hasSessionState) {
         // 新会话（或启动时已存在的会话），触发会话开始事件
-        this.logger.log(`Detected ${hasFilePosition ? 'existing' : 'new'} session, parsing file: ${sessionId}`);
+        this.logger.log(
+          `Detected ${hasFilePosition ? 'existing' : 'new'} session, parsing file: ${sessionId}`,
+        );
         void this.parseNewSessionFile(filePath, sessionId, agentId);
 
         // 如果是启动时已存在的会话，需要同时处理现有消息
@@ -236,10 +237,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 解析会话文件更新（增量推送：只处理新增的行）
    */
-  private parseSessionFileUpdate(
-    filePath: string,
-    sessionId: string,
-  ): void {
+  private parseSessionFileUpdate(filePath: string, sessionId: string): void {
     try {
       // 读取完整文件内容
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -311,15 +309,21 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
                   },
                   session,
                 });
-                this.logger.log(`Tool call detected: ${item.name} in session ${sessionId}`);
+                this.logger.log(
+                  `Tool call detected: ${item.name} in session ${sessionId}`,
+                );
               }
             }
           }
 
           // 处理 toolResult（审计关键：工具执行结果）
           // 注意：toolResult 可能没有 message.role，而是直接在顶层有 toolName
-          if (role === 'toolResult' || (entry.type === 'message' && entry.toolName && !entry.message?.role)) {
-            const toolName = entry.toolName || entry.message?.toolCallId || 'unknown';
+          if (
+            role === 'toolResult' ||
+            (entry.type === 'message' && entry.toolName && !entry.message?.role)
+          ) {
+            const toolName =
+              entry.toolName || entry.message?.toolCallId || 'unknown';
             const toolContent = entry.content || entry.message?.content;
             const isError = entry.isError ?? false;
             const durationMs = entry.details?.durationMs || 0;
@@ -339,7 +343,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
               },
               session,
             });
-            this.logger.log(`Tool result detected: ${toolName} (${isError ? 'error' : 'success'}) in session ${sessionId}`);
+            this.logger.log(
+              `Tool result detected: ${toolName} (${isError ? 'error' : 'success'}) in session ${sessionId}`,
+            );
             continue;
           }
 
@@ -391,7 +397,10 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 扫描现有会话文件
    */
-  private scanExistingSessions(sessionsDir: string, agentId: string = 'default'): void {
+  private scanExistingSessions(
+    sessionsDir: string,
+    agentId: string = 'default',
+  ): void {
     try {
       const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
       if (fs.existsSync(sessionsJsonPath)) {
@@ -452,7 +461,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
       if (!this.knownSessionFiles.has(sessionId)) {
         this.knownSessionFiles.add(sessionId);
-        this.logger.log(`New session file detected: ${sessionId} (agent: ${agentId})`);
+        this.logger.log(
+          `New session file detected: ${sessionId} (agent: ${agentId})`,
+        );
 
         // 记录初始文件位置，不推送历史消息
         const stats = fs.statSync(filePath);

@@ -6,23 +6,16 @@ import {
   Button,
   Space,
   Alert,
-  Divider,
-  Typography,
   Switch,
   message,
   Tag,
   Spin,
-  Row,
-  Col,
+  Divider,
 } from 'antd';
 import {
   SaveOutlined,
   MessageOutlined,
-  PlayCircleOutlined,
 } from '@ant-design/icons';
-
-const { Title, Paragraph } = Typography;
-const { TextArea } = Input;
 
 interface ImConfig {
   enabled: boolean;
@@ -50,10 +43,7 @@ const ImConfigSettings: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [imStatus, setImStatus] = useState<ImStatus | null>(null);
-  const [testMessage, setTestMessage] = useState('');
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // 加载配置
   useEffect(() => {
@@ -105,9 +95,9 @@ const ImConfigSettings: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         message.success(result.message);
         loadConfig();
@@ -121,47 +111,12 @@ const ImConfigSettings: React.FC = () => {
     }
   };
 
-  // 测试推送
-  const handleTest = async () => {
-    if (!testMessage.trim()) {
-      message.warning('请输入测试消息');
-      return;
-    }
-
-    try {
-      setTesting(true);
-      setTestResult(null);
-      
-      const response = await fetch('/api/settings/im/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel: 'feishu',
-          message: testMessage,
-        }),
-      });
-      
-      const result = await response.json();
-      setTestResult(result);
-      
-      if (result.success) {
-        message.success('推送成功');
-      } else {
-        message.error(result.message);
-      }
-    } catch (error) {
-      message.error('测试失败');
-      setTestResult({
-        success: false,
-        message: (error as Error).message,
-      });
-    } finally {
-      setTesting(false);
-    }
-  };
-
   if (loading) {
-    return <Spin tip="加载配置中..." />;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+        <Spin size="large" tip="加载配置中..." />
+      </div>
+    );
   }
 
   return (
@@ -263,66 +218,6 @@ const ImConfigSettings: React.FC = () => {
             </Space>
           </Form.Item>
         </Form>
-
-        <Divider />
-
-        {/* 测试推送 */}
-        <Card
-          size="small"
-          title={<><PlayCircleOutlined /> 测试推送</>}
-          type="inner"
-        >
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <TextArea
-              rows={2}
-              placeholder="输入测试消息..."
-              value={testMessage}
-              onChange={(e) => setTestMessage(e.target.value)}
-            />
-            <Space>
-              <Button
-                onClick={handleTest}
-                loading={testing}
-                type="primary"
-                icon={<MessageOutlined />}
-              >
-                发送测试消息
-              </Button>
-            </Space>
-            {testResult && (
-              <Alert
-                message={testResult.message}
-                type={testResult.success ? 'success' : 'error'}
-                showIcon
-              />
-            )}
-          </Space>
-        </Card>
-      </Card>
-
-      <Card
-        title="帮助"
-        size="small"
-        style={{ marginTop: 16 }}
-      >
-        <Paragraph>
-          <Title level={5}>如何配置飞书推送？</Title>
-          <ol>
-            <li>在飞书开放平台创建企业自建应用</li>
-            <li>获取 App ID 和 App Secret</li>
-            <li>添加机器人功能并配置权限</li>
-            <li>获取目标用户的 open_id 或 user_id</li>
-            <li>在上方填写配置并保存</li>
-            <li>发送测试消息验证配置</li>
-          </ol>
-        </Paragraph>
-
-        <Alert
-          message="注意"
-          description="配置保存后需要重启 TraceFlow 服务才能生效"
-          type="info"
-          showIcon
-        />
       </Card>
     </div>
   );

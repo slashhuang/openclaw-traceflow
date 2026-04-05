@@ -28,13 +28,6 @@ describe.skip('AuditController', () => {
             getResolvedPaths: jest
               .fn()
               .mockResolvedValue({ workspaceDir: '/tmp', stateDir: '/tmp' }),
-            getDashboardGatewayBundle: jest
-              .fn()
-              .mockRejectedValue(new Error('not implemented')),
-            getStatusOverview: jest.fn().mockResolvedValue(null),
-            checkConnection: jest
-              .fn()
-              .mockResolvedValue({ connected: false, error: undefined }),
           },
         },
         {

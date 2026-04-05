@@ -51,10 +51,16 @@ export class OnboardingStorageService {
     this.CACHE_DIR = path.join(this.TRACEFLOW_HOME, 'cache');
     this.LOGS_DIR = path.join(this.TRACEFLOW_HOME, 'logs');
     this.BACKUPS_DIR = path.join(this.TRACEFLOW_HOME, 'backups');
-    this.ENCRYPTION_KEY_PATH = path.join(this.TRACEFLOW_HOME, '.encryption.key');
+    this.ENCRYPTION_KEY_PATH = path.join(
+      this.TRACEFLOW_HOME,
+      '.encryption.key',
+    );
 
     this.ONBOARDING_CONFIG_PATH = path.join(this.CONFIG_DIR, 'onboarding.json');
-    this.BOOTSTRAP_OVERRIDES_PATH = path.join(this.CONFIG_DIR, 'bootstrap-overrides.json');
+    this.BOOTSTRAP_OVERRIDES_PATH = path.join(
+      this.CONFIG_DIR,
+      'bootstrap-overrides.json',
+    );
     this.PREFERENCES_PATH = path.join(this.CONFIG_DIR, 'preferences.json');
 
     this.ensureDirectories();
@@ -94,7 +100,9 @@ export class OnboardingStorageService {
         return fsSync.readFileSync(this.ENCRYPTION_KEY_PATH);
       } catch (error) {
         this.logger.error(`Failed to read encryption key: ${error}`);
-        throw new Error('Encryption key corrupted. Please restore from backup or re-run onboarding.');
+        throw new Error(
+          'Encryption key corrupted. Please restore from backup or re-run onboarding.',
+        );
       }
     }
 
@@ -157,7 +165,9 @@ export class OnboardingStorageService {
       return decrypted;
     } catch (error) {
       this.logger.error(`Decryption failed: ${error}`);
-      throw new Error('Failed to decrypt data. The encryption key may be corrupted.');
+      throw new Error(
+        'Failed to decrypt data. The encryption key may be corrupted.',
+      );
     }
   }
 
@@ -166,14 +176,6 @@ export class OnboardingStorageService {
    */
   private encryptSensitiveFields(config: OnboardingConfig): OnboardingConfig {
     const result = { ...config };
-
-    // 加密 gateway token 和 password
-    if (result.gateway?.token) {
-      result.gateway.token = this.encrypt(result.gateway.token);
-    }
-    if (result.gateway?.password) {
-      result.gateway.password = this.encrypt(result.gateway.password);
-    }
 
     // 加密 traceflow accessToken
     if (result.traceflow?.accessToken) {
@@ -189,28 +191,24 @@ export class OnboardingStorageService {
   private decryptSensitiveFields(config: OnboardingConfig): OnboardingConfig {
     const result = { ...config };
 
-    // 解密 gateway token 和 password
-    if (result.gateway?.token) {
+    // 解密 traceflow accessToken
+    if (result.traceflow?.accessToken) {
       try {
-        result.gateway.token = this.decrypt(result.gateway.token);
+        result.traceflow.accessToken = this.decrypt(
+          result.traceflow.accessToken,
+        );
       } catch (error) {
-        this.logger.warn('Failed to decrypt gateway token');
-        result.gateway.token = undefined;
-      }
-    }
-    if (result.gateway?.password) {
-      try {
-        result.gateway.password = this.decrypt(result.gateway.password);
-      } catch (error) {
-        this.logger.warn('Failed to decrypt gateway password');
-        result.gateway.password = undefined;
+        this.logger.warn('Failed to decrypt access token');
+        result.traceflow.accessToken = undefined;
       }
     }
 
     // 解密 traceflow accessToken
     if (result.traceflow?.accessToken) {
       try {
-        result.traceflow.accessToken = this.decrypt(result.traceflow.accessToken);
+        result.traceflow.accessToken = this.decrypt(
+          result.traceflow.accessToken,
+        );
       } catch (error) {
         this.logger.warn('Failed to decrypt traceflow accessToken');
         result.traceflow.accessToken = undefined;
@@ -240,7 +238,9 @@ export class OnboardingStorageService {
         { mode: 0o600 },
       );
 
-      this.logger.log(`Saved onboarding config to ${this.ONBOARDING_CONFIG_PATH}`);
+      this.logger.log(
+        `Saved onboarding config to ${this.ONBOARDING_CONFIG_PATH}`,
+      );
     } catch (error) {
       this.logger.error(`Failed to save onboarding config: ${error}`);
       throw new Error('Failed to save configuration');
@@ -379,7 +379,11 @@ export class OnboardingStorageService {
         .reverse();
 
       // 删除超过限制的备份
-      for (let i = OnboardingStorageService.MAX_BACKUPS; i < backups.length; i++) {
+      for (
+        let i = OnboardingStorageService.MAX_BACKUPS;
+        i < backups.length;
+        i++
+      ) {
         const backupPath = path.join(this.BACKUPS_DIR, backups[i]);
         await fs.unlink(backupPath);
         this.logger.log(`Deleted old backup: ${backups[i]}`);
@@ -392,7 +396,9 @@ export class OnboardingStorageService {
   /**
    * 列出可用的配置备份
    */
-  async listBackups(filename: string = 'onboarding.json'): Promise<ConfigBackup[]> {
+  async listBackups(
+    filename: string = 'onboarding.json',
+  ): Promise<ConfigBackup[]> {
     try {
       const files = await fs.readdir(this.BACKUPS_DIR);
       const backups = files

@@ -73,7 +73,10 @@ export class SessionStateService {
   /**
    * 更新会话状态（部分字段）
    */
-  update(sessionId: string, updates: Partial<SessionState>): SessionState | undefined {
+  update(
+    sessionId: string,
+    updates: Partial<SessionState>,
+  ): SessionState | undefined {
     const existing = this.states.get(sessionId);
     if (!existing) {
       return undefined;
@@ -123,7 +126,9 @@ export class SessionStateService {
    * 获取所有活跃会话
    */
   getActiveSessions(): SessionState[] {
-    return Array.from(this.states.values()).filter(s => s.status === 'active');
+    return Array.from(this.states.values()).filter(
+      (s) => s.status === 'active',
+    );
   }
 
   /**

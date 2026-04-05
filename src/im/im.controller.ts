@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { ChannelManager } from './channel-manager';
+import { SessionManager } from './session-manager';
 import { FormattedMessage } from './channel.interface';
 
 /**
@@ -7,7 +8,10 @@ import { FormattedMessage } from './channel.interface';
  */
 @Controller('api/im')
 export class ImController {
-  constructor(private channelManager: ChannelManager) {}
+  constructor(
+    private channelManager: ChannelManager,
+    private sessionManager: SessionManager,
+  ) {}
 
   /**
    * 获取已启用的 Channel 列表
@@ -26,11 +30,11 @@ export class ImController {
   async getChannelHealth(): Promise<{ channels: Record<string, any> }> {
     const healthStatus = await this.channelManager.getHealthStatus();
     const channels: Record<string, any> = {};
-    
+
     for (const [channelType, health] of healthStatus.entries()) {
       channels[channelType] = health;
     }
-    
+
     return { channels };
   }
 
@@ -38,9 +42,42 @@ export class ImController {
    * 检查 Channel 是否启用
    */
   @Get('channels/:channelType/enabled')
-  isChannelEnabled(@Param('channelType') channelType: string): { enabled: boolean } {
+  isChannelEnabled(@Param('channelType') channelType: string): {
+    enabled: boolean;
+  } {
     return {
       enabled: this.channelManager.isChannelEnabled(channelType),
+    };
+  }
+
+  /**
+   * 获取会话监听状态
+   */
+  @Get('watch/status')
+  getWatchStatus(): {
+    watching: boolean;
+    activeSessions: number;
+    sessions: Array<{
+      sessionId: string;
+      sessionKey: string;
+      user: string;
+      messageCount: number;
+      status: 'active' | 'completed';
+      lastActivity: number;
+    }>;
+  } {
+    const sessions = this.sessionManager.getActiveSessions();
+    return {
+      watching: sessions.length > 0,
+      activeSessions: sessions.length,
+      sessions: sessions.map((s) => ({
+        sessionId: s.sessionId,
+        sessionKey: s.sessionKey,
+        user: s.user.name,
+        messageCount: s.messageCount,
+        status: s.status,
+        lastActivity: s.lastActivity,
+      })),
     };
   }
 
@@ -58,10 +95,16 @@ export class ImController {
         content: { text: body.message || 'TraceFlow IM 推送测试' },
       };
 
-      const options = body.receive_id ? { receive_id: body.receive_id } : undefined;
+      const options = body.receive_id
+        ? { receive_id: body.receive_id }
+        : undefined;
 
-      const result = await this.channelManager.sendToChannel(channelType, content, options);
-      
+      const result = await this.channelManager.sendToChannel(
+        channelType,
+        content,
+        options,
+      );
+
       return {
         success: true,
         message_id: result?.message_id,
@@ -78,16 +121,22 @@ export class ImController {
    * 广播测试消息到所有 Channel
    */
   @Post('broadcast/test')
-  async broadcastTestMessage(
-    @Body() body: { message: string },
-  ): Promise<{ results: Record<string, { success: boolean; message_id?: string; error?: string }> }> {
+  async broadcastTestMessage(@Body() body: { message: string }): Promise<{
+    results: Record<
+      string,
+      { success: boolean; message_id?: string; error?: string }
+    >;
+  }> {
     const content: FormattedMessage = {
       msg_type: 'text',
       content: { text: body.message || 'TraceFlow 广播测试' },
     };
 
     const resultsMap = await this.channelManager.broadcast(content);
-    const results: Record<string, { success: boolean; message_id?: string; error?: string }> = {};
+    const results: Record<
+      string,
+      { success: boolean; message_id?: string; error?: string }
+    > = {};
 
     for (const [channelType, result] of resultsMap.entries()) {
       if (result instanceof Error) {

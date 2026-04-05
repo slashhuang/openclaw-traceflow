@@ -9,14 +9,14 @@ import {
 
 /**
  * 钉钉 Channel 实现
- * 
+ *
  * API 文档：https://open.dingtalk.com/document/orgapp
  */
 @Injectable()
 export class DingTalkChannel implements ImChannel {
   readonly type = 'dingtalk';
   private readonly logger = new Logger(DingTalkChannel.name);
-  
+
   private config?: DingTalkConfig;
   private accessToken?: string;
   private tokenExpiresAt = 0;
@@ -37,10 +37,11 @@ export class DingTalkChannel implements ImChannel {
 
     const accessToken = await this.getAccessToken();
     const receiveId = options?.receive_id || this.config.targetUserId;
-    
+
     // 钉钉消息 API
-    const url = 'https://oapi.dingtalk.com/topapi/message/corpconversation/asyncsend_v2';
-    
+    const url =
+      'https://oapi.dingtalk.com/topapi/message/corpconversation/asyncsend_v2';
+
     const body: any = {
       agent_id: this.config.agentId,
       userid_list: receiveId === '@all' ? '@all' : receiveId,
@@ -65,7 +66,9 @@ export class DingTalkChannel implements ImChannel {
 
     const data = await response.json();
     if (data.errcode !== 0) {
-      throw new Error(`DingTalk API error: ${data.errmsg} (code: ${data.errcode})`);
+      throw new Error(
+        `DingTalk API error: ${data.errmsg} (code: ${data.errcode})`,
+      );
     }
 
     return {
@@ -96,7 +99,7 @@ export class DingTalkChannel implements ImChannel {
 
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiresAt) {
-      return this.accessToken!;
+      return this.accessToken;
     }
     return this.refreshAccessToken();
   }
@@ -121,7 +124,7 @@ export class DingTalkChannel implements ImChannel {
     this.accessToken = data.access_token;
     // 钉钉 token 有效期 7200 秒
     this.tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
-    
+
     this.logger.debug('DingTalk access token refreshed');
     return this.accessToken!;
   }

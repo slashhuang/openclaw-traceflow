@@ -20,9 +20,7 @@ import type { OnboardingConfig } from './types';
 export class ConfigMigrationService {
   private readonly logger = new Logger(ConfigMigrationService.name);
 
-  constructor(
-    private readonly onboardingStorage: OnboardingStorageService,
-  ) {}
+  constructor(private readonly onboardingStorage: OnboardingStorageService) {}
 
   /**
    * 从旧的 config/openclaw.runtime.json 迁移到 ~/.openclawTraceFlow
@@ -81,13 +79,6 @@ export class ConfigMigrationService {
           configPath: legacyConfig.openclawConfigPath ? 'explicit' : 'none',
         },
       },
-      gateway: {
-        enabled: !!legacyConfig.openclawGatewayUrl,
-        url: legacyConfig.openclawGatewayUrl,
-        token: legacyConfig.openclawGatewayToken,
-        password: legacyConfig.openclawGatewayPassword,
-        connectionStatus: 'disconnected',
-      },
       traceflow: {
         host: legacyConfig.host,
         port: legacyConfig.port,
@@ -96,8 +87,9 @@ export class ConfigMigrationService {
         dataDir: legacyConfig.dataDir,
       },
       onboardingSteps: {
-        pathConfiguration: !!(legacyConfig.openclawStateDir || legacyConfig.openclawWorkspaceDir),
-        gatewaySetup: !!legacyConfig.openclawGatewayUrl,
+        pathConfiguration: !!(
+          legacyConfig.openclawStateDir || legacyConfig.openclawWorkspaceDir
+        ),
         accessConfiguration: !!legacyConfig.accessMode,
       },
     };
@@ -120,10 +112,7 @@ export class ConfigMigrationService {
   /**
    * 升级配置版本
    */
-  async upgradeConfigVersion(
-    from: string,
-    to: string,
-  ): Promise<boolean> {
+  async upgradeConfigVersion(from: string, to: string): Promise<boolean> {
     try {
       const config = await this.onboardingStorage.loadOnboardingConfig();
       if (!config) {
@@ -215,8 +204,13 @@ export class ConfigMigrationService {
       }
 
       // 验证路径存在性（可选，仅警告）
-      if (config.openclaw.stateDir && !fsSync.existsSync(this.expandPath(config.openclaw.stateDir))) {
-        this.logger.warn(`State directory does not exist: ${config.openclaw.stateDir}`);
+      if (
+        config.openclaw.stateDir &&
+        !fsSync.existsSync(this.expandPath(config.openclaw.stateDir))
+      ) {
+        this.logger.warn(
+          `State directory does not exist: ${config.openclaw.stateDir}`,
+        );
       }
 
       return {
@@ -261,17 +255,16 @@ export class ConfigMigrationService {
         completedAt: new Date().toISOString(),
         openclaw: {
           stateDir: path.join(require('os').homedir(), '.openclaw'),
-          workspaceDir: path.join(require('os').homedir(), '.openclaw', 'workspace'),
+          workspaceDir: path.join(
+            require('os').homedir(),
+            '.openclaw',
+            'workspace',
+          ),
           pathSources: {
             stateDir: 'fallback',
             workspaceDir: 'fallback',
             configPath: 'none',
           },
-        },
-        gateway: {
-          enabled: false,
-          url: 'http://localhost:18789',
-          connectionStatus: 'disconnected',
         },
         traceflow: {
           host: '0.0.0.0',
@@ -281,7 +274,6 @@ export class ConfigMigrationService {
         },
         onboardingSteps: {
           pathConfiguration: false,
-          gatewaySetup: false,
           accessConfiguration: false,
         },
       };

@@ -6,12 +6,10 @@ import {
   Button,
   Space,
   Alert,
-  Typography,
-  Spin,
+  Tag,
   message,
   List,
-  Tag,
-  Divider,
+  Spin,
 } from 'antd';
 import {
   SaveOutlined,
@@ -19,9 +17,6 @@ import {
   ExclamationCircleOutlined,
   SyncOutlined,
 } from '@ant-design/icons';
-
-const { Title } = Typography;
-const { TextArea } = Input;
 
 interface PathConfig {
   openclawStateDir?: string;
@@ -127,7 +122,11 @@ const PathConfigSettings: React.FC = () => {
   };
 
   if (loading) {
-    return <Spin tip="加载配置中..." />;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+        <Spin size="large" tip="加载配置中..." />
+      </div>
+    );
   }
 
   return (
@@ -245,7 +244,6 @@ const PathConfigSettings: React.FC = () => {
           <Form.Item
             label="OpenClaw State 目录"
             name="openclawStateDir"
-            extra="OpenClaw 状态文件存储目录，包含 sessions、agents 等数据"
             rules={[
               {
                 required: true,
@@ -259,7 +257,6 @@ const PathConfigSettings: React.FC = () => {
           <Form.Item
             label="OpenClaw Workspace 目录"
             name="openclawWorkspaceDir"
-            extra="OpenClaw 工作区目录，包含 AGENTS.md、SOUL.md 等引导文件"
             rules={[
               {
                 required: true,
@@ -269,8 +266,6 @@ const PathConfigSettings: React.FC = () => {
           >
             <Input placeholder="~/.openclaw/workspace" />
           </Form.Item>
-
-          <Divider />
 
           <Form.Item>
             <Space>
@@ -288,39 +283,6 @@ const PathConfigSettings: React.FC = () => {
             </Space>
           </Form.Item>
         </Form>
-      </Card>
-
-      <Card
-        title="帮助"
-        size="small"
-        style={{ marginTop: 16 }}
-      >
-        <Typography.Paragraph>
-          <Title level={5}>如何配置路径？</Title>
-          <ol>
-            <li>
-              找到你的 OpenClaw 安装目录（通常在 <code>~/.openclaw</code>）
-            </li>
-            <li>确认 <code>state</code> 和 <code>workspace</code> 目录存在</li>
-            <li>在上方表单中填写对应路径</li>
-            <li>点击"保存配置"</li>
-            <li>点击"验证路径"确认配置正确</li>
-          </ol>
-        </Typography.Paragraph>
-
-        <Typography.Paragraph>
-          <Title level={5}>找不到 OpenClaw 目录？</Title>
-          <Alert
-            message="运行以下命令创建默认目录"
-            type="info"
-            showIcon
-          />
-          <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4 }}>
-            mkdir -p ~/.openclaw/state{'\n'}
-            mkdir -p ~/.openclaw/workspace{'\n'}
-            openclaw agent run
-          </pre>
-        </Typography.Paragraph>
       </Card>
     </div>
   );

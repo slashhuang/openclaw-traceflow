@@ -167,7 +167,6 @@ async function bootstrap() {
 ║           OpenClaw TraceFlow UI                             ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  Running on: http://${host}:${port}
-║  Gateway URL: ${config.openclawGatewayUrl}
 ║  Access Mode: ${config.accessMode}${config.accessMode === 'token' ? ' (token required)' : ''}
 ║                                                           ║
 ║  Open http://localhost:${port} in your browser           ║

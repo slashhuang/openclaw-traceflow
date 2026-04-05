@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query, Res, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  Res,
+  BadRequestException,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import * as path from 'path';
 import * as os from 'os';
@@ -40,19 +47,19 @@ export class StatesController {
   @Get('tree')
   async getTree(@Query('path') queryPath?: string) {
     const stateRoot = await this.getStateRoot();
-    
+
     // 检查目录是否存在
     if (!fs.existsSync(stateRoot)) {
       throw new BadRequestException(
         `OpenClaw state 目录不存在：${stateRoot}\n\n` +
-        `请配置正确的路径：\n` +
-        `1. 编辑 config/openclaw.runtime.json\n` +
-        `2. 设置 "openclawStateDir": "/your/path/to/.openclaw/state"\n` +
-        `3. 或设置环境变量 OPENCLAW_STATE_DIR=/your/path/to/.openclaw/state\n` +
-        `4. 重启 TraceFlow 服务`
+          `请配置正确的路径：\n` +
+          `1. 编辑 config/openclaw.runtime.json\n` +
+          `2. 设置 "openclawStateDir": "/your/path/to/.openclaw/state"\n` +
+          `3. 或设置环境变量 OPENCLAW_STATE_DIR=/your/path/to/.openclaw/state\n` +
+          `4. 重启 TraceFlow 服务`,
       );
     }
-    
+
     return this.fileTreeService.getTree(stateRoot, queryPath);
   }
 
@@ -60,7 +67,10 @@ export class StatesController {
    * 获取文件内容
    */
   @Get('file/*path')
-  async getFile(@Param('path') filePath: string | string[], @Res() res: Response) {
+  async getFile(
+    @Param('path') filePath: string | string[],
+    @Res() res: Response,
+  ) {
     const stateRoot = await this.getStateRoot();
     return this.fileTreeService.getFile(stateRoot, filePath, res);
   }

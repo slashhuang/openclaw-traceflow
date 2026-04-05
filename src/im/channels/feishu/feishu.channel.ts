@@ -127,7 +127,9 @@ export class FeishuChannel implements ImChannel {
       reply_in_thread: true,
     };
 
-    this.logger.warn(`Sending reply to message: ${messageId}, reply_in_thread: true`);
+    this.logger.warn(
+      `Sending reply to message: ${messageId}, reply_in_thread: true`,
+    );
 
     const response = await fetch(url, {
       method: 'POST',
@@ -143,7 +145,9 @@ export class FeishuChannel implements ImChannel {
       throw new Error(`Feishu API error: ${data.msg} (code: ${data.code})`);
     }
 
-    this.logger.warn(`Reply sent: ${data.data.message_id}, thread_id: ${data.data.thread_id}`);
+    this.logger.warn(
+      `Reply sent: ${data.data.message_id}, thread_id: ${data.data.thread_id}`,
+    );
     return {
       message_id: data.data.message_id,
       thread_id: data.data.thread_id,

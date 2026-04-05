@@ -43,8 +43,7 @@ export class SessionsController {
     const page = this.parsePage(pageQuery, 1);
     const pageSize = Math.min(200, this.parsePage(pageSizeQuery, 20));
     const filter = typeof filterQuery === 'string' ? filterQuery : 'all';
-    const agentId =
-      typeof agentIdQuery === 'string' ? agentIdQuery : undefined;
+    const agentId = typeof agentIdQuery === 'string' ? agentIdQuery : undefined;
     if (
       pageQuery == null &&
       pageSizeQuery == null &&

@@ -1,13 +1,10 @@
 /**
  * OpenClaw 路径解析（开源 / 无机器硬编码）
  *
- * 优先级（参考 control-ui 的 WebSocket 方案）：
+ * 优先级：
  * 1. 显式 openclawStateDir
- * 2. 向正在运行的 Gateway 拉取 WebSocket：connect → 成功响应中的 snapshot（stateDir/configPath）；
- *    不在此调用 skills.status（backend 无设备身份时 Gateway 会清空 scopes，会报 missing scope: operator.read）。
- *    workspaceDir 由后续 CLI/配置推断；可为空。
- * 3. OPENCLAW_STATE_DIR / OPENCLAW_CONFIG_PATH
- * 4. openclaw config file + 目录启发式
+ * 2. OPENCLAW_STATE_DIR / OPENCLAW_CONFIG_PATH 环境变量
+ * 3. openclaw config file + 目录启发式
  *
  * 补充：openclaw config get agents.defaults.workspace（CLI）
  */
@@ -16,14 +13,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { fetchRuntimePathsFromGateway } from './gateway-ws-paths';
 
 const execFileAsync = promisify(execFile);
 
 export type OpenClawPathsSource = {
-  configPath: 'gateway' | 'env' | 'cli' | 'explicit' | 'none';
-  stateDir: 'gateway' | 'env' | 'explicit' | 'inferred' | 'fallback';
-  workspaceDir: 'gateway' | 'config-file' | 'cli' | 'explicit' | 'sessions-json' | 'none';
+  configPath: 'env' | 'cli' | 'explicit' | 'none';
+  stateDir: 'env' | 'explicit' | 'inferred' | 'fallback';
+  workspaceDir: 'config-file' | 'cli' | 'explicit' | 'sessions-json' | 'none';
 };
 
 export interface OpenClawResolvedPaths {
@@ -32,8 +28,6 @@ export interface OpenClawResolvedPaths {
   workspaceDir: string | null;
   source: OpenClawPathsSource;
   cliHint?: string;
-  /** Gateway WS 不可达或返回远端路径时的说明 */
-  gatewayHint?: string;
 }
 
 function expandHome(input: string): string {
@@ -135,9 +129,10 @@ function inferWorkspaceDirFromStateDir(stateDir: string): string | null {
       );
       if (!fs.existsSync(storePath)) continue;
       try {
-        const store = JSON.parse(
-          fs.readFileSync(storePath, 'utf8'),
-        ) as Record<string, unknown>;
+        const store = JSON.parse(fs.readFileSync(storePath, 'utf8')) as Record<
+          string,
+          unknown
+        >;
         for (const [key, entry] of Object.entries(store)) {
           if (!entry || typeof entry !== 'object') continue;
           const report = (entry as Record<string, unknown>).systemPromptReport;
@@ -207,9 +202,6 @@ export async function resolveOpenClawPaths(options: {
   explicitWorkspaceDir?: string;
   /** 对齐 OPENCLAW_CONFIG_PATH，优先于环境变量 */
   explicitConfigPath?: string;
-  gatewayHttpUrl?: string;
-  gatewayToken?: string;
-  gatewayPassword?: string;
   cliBinary?: string;
   env?: NodeJS.ProcessEnv;
 }): Promise<OpenClawResolvedPaths> {
@@ -225,46 +217,10 @@ export async function resolveOpenClawPaths(options: {
   let configPath: string | null = null;
   let stateDir: string | null = null;
   let cliHint: string | undefined;
-  let gatewayHint: string | undefined;
 
   if (options.explicitStateDir?.trim()) {
     stateDir = expandHome(options.explicitStateDir.trim());
     source.stateDir = 'explicit';
-  }
-
-  let workspaceDirFromGateway: string | null = null;
-  if (!stateDir && options.gatewayHttpUrl?.trim()) {
-    const tok =
-      options.gatewayToken?.trim() || env.OPENCLAW_GATEWAY_TOKEN?.trim();
-    const pwd =
-      options.gatewayPassword?.trim() || env.OPENCLAW_GATEWAY_PASSWORD?.trim();
-    const gw = await fetchRuntimePathsFromGateway({
-      gatewayHttpUrl: options.gatewayHttpUrl.trim(),
-      token: tok,
-      password: pwd,
-    });
-    if (gw.ok) {
-      try {
-        if (fs.existsSync(path.join(gw.stateDir, 'agents'))) {
-          stateDir = gw.stateDir;
-          source.stateDir = 'gateway';
-          if (gw.configPath && fs.existsSync(gw.configPath)) {
-            configPath = path.resolve(gw.configPath);
-            source.configPath = 'gateway';
-          }
-          if (gw.workspaceDir && fs.existsSync(gw.workspaceDir)) {
-            workspaceDirFromGateway = gw.workspaceDir;
-          }
-        } else {
-          gatewayHint =
-            'Gateway 报告的 stateDir 在本机无 agents/（常见于远程 Gateway）；已改用本地解析';
-        }
-      } catch {
-        gatewayHint = '无法校验 Gateway stateDir';
-      }
-    } else {
-      gatewayHint = gw.error;
-    }
   }
 
   const explicitCfg = options.explicitConfigPath?.trim();
@@ -329,10 +285,6 @@ export async function resolveOpenClawPaths(options: {
     workspaceDir = expandHome(options.explicitWorkspaceDir.trim());
     source.workspaceDir = 'explicit';
   }
-  if (!workspaceDir && workspaceDirFromGateway) {
-    workspaceDir = workspaceDirFromGateway;
-    source.workspaceDir = 'gateway';
-  }
   if (!workspaceDir && stateDir) {
     const w = inferWorkspaceDirFromStateDir(stateDir);
     if (w) {
@@ -360,6 +312,5 @@ export async function resolveOpenClawPaths(options: {
     workspaceDir,
     source,
     cliHint,
-    gatewayHint,
   };
 }
