@@ -4,7 +4,8 @@ import {
   FormattedMessage,
   SendMessageOptions,
   SendResult,
-} from '../base.channel';
+  HealthStatus,
+} from '../../channel.interface';
 
 export interface FeishuConfig {
   appId: string;
@@ -23,20 +24,32 @@ export class FeishuChannel implements ImChannel {
 
   private accessToken?: string;
   private tokenExpiresAt = 0;
+  private config?: FeishuConfig;
 
   // 令牌桶限流
   private tokenBucket: number;
-  private readonly maxTokens: number;
-  private readonly refillRate: number;
+  private maxTokens: number;
+  private refillRate: number;
   private lastRefill = Date.now();
 
-  constructor(private config: FeishuConfig) {
-    this.maxTokens = config.rateLimit || 10;
-    this.refillRate = config.rateLimit || 10;
-    this.tokenBucket = this.maxTokens * 2; // 突发容量
+  constructor() {
+    // 默认配置，实际配置在 initialize 时传入
+    this.maxTokens = 20;
+    this.refillRate = 10;
+    this.tokenBucket = this.maxTokens;
   }
 
-  async initialize(): Promise<void> {
+  async initialize(config: Record<string, any>): Promise<void> {
+    const feishuConfig = config as FeishuConfig;
+    
+    if (feishuConfig) {
+      // 更新配置
+      this.config = feishuConfig;
+      this.maxTokens = (feishuConfig.rateLimit || 10) * 2;
+      this.refillRate = feishuConfig.rateLimit || 10;
+      this.tokenBucket = this.maxTokens;
+    }
+
     this.logger.log('Feishu channel initialized');
     // 预取 access_token
     await this.getAccessToken();
@@ -51,6 +64,10 @@ export class FeishuChannel implements ImChannel {
     try {
       const accessToken = await this.getAccessToken();
 
+      if (!this.config) {
+        throw new Error('Feishu config not initialized');
+      }
+
       const body: any = {
         receive_id: this.config.targetUserId,
         msg_type: content.msg_type,
@@ -62,8 +79,10 @@ export class FeishuChannel implements ImChannel {
         body.reply_id = options.reply_id;
       }
 
-      const response = await fetch(
-        'https://open.feishu.cn/open-apis/im/v1/messages',
+      // receive_id_type 作为 URL 查询参数 - 使用 open_id
+      const url = 'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id';
+      
+      const response = await fetch(url,
         {
           method: 'POST',
           headers: {
@@ -122,12 +141,32 @@ export class FeishuChannel implements ImChannel {
     this.logger.log('Feishu channel destroyed');
   }
 
+  async healthCheck(): Promise<HealthStatus> {
+    try {
+      await this.getAccessToken();
+      return {
+        healthy: true,
+        last_check: Date.now(),
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        error: (error as Error).message,
+        last_check: Date.now(),
+      };
+    }
+  }
+
   /**
    * 获取 Access Token（带缓存）
    */
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiresAt) {
       return this.accessToken;
+    }
+
+    if (!this.config) {
+      throw new Error('Feishu config not initialized');
     }
 
     const response = await fetch(
@@ -152,7 +191,7 @@ export class FeishuChannel implements ImChannel {
     this.tokenExpiresAt = Date.now() + (data.expire - 300) * 1000;
 
     this.logger.debug('Access token refreshed');
-    return this.accessToken;
+    return this.accessToken!;
   }
 
   /**

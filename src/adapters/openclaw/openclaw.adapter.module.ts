@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '../config/config.module';
+import { ConfigModule } from '../../config/config.module';
 import { OpenClawFileWatcher } from './file-watcher.adapter';
-import { OpenClawEventBridge } from './event-bridge.service';
 
 /**
  * OpenClaw 数据源适配器模块
@@ -9,7 +8,7 @@ import { OpenClawEventBridge } from './event-bridge.service';
  */
 @Module({
   imports: [ConfigModule],
-  providers: [OpenClawFileWatcher, OpenClawEventBridge],
-  exports: [OpenClawFileWatcher, OpenClawEventBridge],
+  providers: [OpenClawFileWatcher],
+  exports: [OpenClawFileWatcher],
 })
 export class OpenClawAdapterModule {}

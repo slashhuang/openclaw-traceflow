@@ -1,6 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { SessionsService } from '../../sessions/sessions.service';
 
 export interface SessionEvent {
   sessionId: string;
@@ -37,7 +36,6 @@ export class SessionManager implements OnModuleDestroy {
 
   constructor(
     private eventEmitter: EventEmitter2,
-    private sessionsService: SessionsService,
   ) {
     this.startCleanupTimer();
   }
@@ -166,29 +164,11 @@ export class SessionManager implements OnModuleDestroy {
 
   /**
    * 恢复会话（从 sessions.json 读取）
+   * 注：当前版本暂不实现，待后续从 sessions.json 直接读取
    */
   private async recoverSession(sessionId: string): Promise<void> {
-    try {
-      const sessionInfo = await this.sessionsService.getSession(sessionId);
-      if (sessionInfo) {
-        await this.onSessionStart({
-          sessionId,
-          sessionKey: sessionInfo.sessionKey,
-          user: {
-            id: sessionInfo.user?.id || 'unknown',
-            name: sessionInfo.user?.name || 'Unknown',
-          },
-          account: this.extractAccount(sessionInfo.sessionKey),
-          messageCount: sessionInfo.messageCount || 0,
-          firstMessage: sessionInfo.firstMessage,
-        });
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to recover session ${sessionId}:`,
-        error as Error,
-      );
-    }
+    this.logger.warn(`Session recovery not implemented for: ${sessionId}`);
+    return;
   }
 
   /**

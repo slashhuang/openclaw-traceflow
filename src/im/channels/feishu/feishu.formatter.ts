@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { FormattedMessage } from '../../base.channel';
+import { FormattedMessage } from '../../channel.interface';
 
 export interface SessionData {
   sessionId: string;

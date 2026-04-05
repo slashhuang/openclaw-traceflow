@@ -13,6 +13,10 @@ export interface Config {
   /** Gateway WS 鉴权（与 gateway.auth 一致，用于拉取运行时路径） */
   openclawGatewayToken?: string;
   openclawGatewayPassword?: string;
+  /**
+   * 手动指定 OpenClaw state 目录（可选，留空则从 Gateway/CLI 解析）
+   * 优先级：1. 此配置 2. OPENCLAW_STATE_DIR 环境变量 3. Gateway 解析 4. 默认 ~/.openclaw/state
+   */
   openclawStateDir?: string;
   /** 手动指定工作目录（可选，留空则从 Gateway/CLI 解析） */
   openclawWorkspaceDir?: string;

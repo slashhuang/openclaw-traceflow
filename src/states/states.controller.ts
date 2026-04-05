@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Query, Res, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, BadRequestException } from '@nestjs/common';
 import type { Response } from 'express';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import { OpenClawService } from '../openclaw/openclaw.service';
 import { FileTreeService } from '../common/file-tree.service';
 
@@ -28,7 +29,9 @@ export class StatesController {
         err instanceof Error ? err.message : err,
       );
     }
-    return path.join(os.homedir(), '.openclaw');
+    // 回退到默认路径
+    const defaultStateDir = path.join(os.homedir(), '.openclaw', 'state');
+    return defaultStateDir;
   }
 
   /**
@@ -37,6 +40,19 @@ export class StatesController {
   @Get('tree')
   async getTree(@Query('path') queryPath?: string) {
     const stateRoot = await this.getStateRoot();
+    
+    // 检查目录是否存在
+    if (!fs.existsSync(stateRoot)) {
+      throw new BadRequestException(
+        `OpenClaw state 目录不存在：${stateRoot}\n\n` +
+        `请配置正确的路径：\n` +
+        `1. 编辑 config/openclaw.runtime.json\n` +
+        `2. 设置 "openclawStateDir": "/your/path/to/.openclaw/state"\n` +
+        `3. 或设置环境变量 OPENCLAW_STATE_DIR=/your/path/to/.openclaw/state\n` +
+        `4. 重启 TraceFlow 服务`
+      );
+    }
+    
     return this.fileTreeService.getTree(stateRoot, queryPath);
   }
 

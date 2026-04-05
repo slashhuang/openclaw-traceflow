@@ -26,8 +26,10 @@ import { WorkspaceController } from './workspace/workspace.controller';
 import { AuditController } from './audit/audit.controller';
 import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.controller';
 // IM Push 模块
-import { ImPushModule } from './im/im-push.module';
+import { ImModule } from './im/im.module';
 import { OpenClawAdapterModule } from './adapters/openclaw/openclaw.adapter.module';
+// 设置模块
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -54,9 +56,11 @@ import { OpenClawAdapterModule } from './adapters/openclaw/openclaw.adapter.modu
     PricingConfigModule,
     StorageModule,
     DashboardModule,
-    // IM Push 相关（依赖核心模块）
+    // IM Push 相关（使用 Channel 插件架构）
     OpenClawAdapterModule,
-    ImPushModule,
+    ImModule,
+    // 设置模块
+    SettingsModule,
   ],
   controllers: [
     AppController,

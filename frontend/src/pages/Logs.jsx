@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col } from 'antd';
+import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col, Tabs } from 'antd';
 import { useIntl } from 'react-intl';
 import { logsApi } from '../api';
 
@@ -97,10 +97,14 @@ export default function Logs() {
   const intl = useIntl();
   const navigate = useNavigate();
   const { token } = theme.useToken();
-
+  
   // TraceFlow 日志状态
   const [traceflowLogs, setTraceflowLogs] = useState([]);
   const [traceflowLoading, setTraceflowLoading] = useState(true);
+  
+  // IM 推送日志状态
+  const [imLogs, setImLogs] = useState([]);
+  const [imLoading, setImLoading] = useState(false);
 
   // 共享状态
   const [filterLevel, setFilterLevel] = useState('all');
@@ -123,12 +127,28 @@ export default function Logs() {
     }
   };
 
+  // 加载 IM 推送日志
+  const loadImLogs = async (showLoading = false) => {
+    try {
+      if (showLoading) setImLoading(true);
+      const response = await fetch('/api/settings/im/logs');
+      const data = await response.json();
+      setImLogs(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to load IM logs:', e);
+    } finally {
+      if (showLoading) setImLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadTraceflowLogs(true);
+    loadImLogs(true);
 
     refreshTimerRef.current = setInterval(() => {
       if (autoRefresh) {
         loadTraceflowLogs(false);
+        loadImLogs(false);
       }
     }, 10000);
 
@@ -199,6 +219,7 @@ export default function Logs() {
             danger
             onClick={() => {
               setTraceflowLogs([]);
+              setImLogs([]);
               message.success('日志已清空');
             }}
           >
@@ -207,24 +228,56 @@ export default function Logs() {
         </Space>
       </div>
 
-      <Row gutter={16}>
-        {/* TraceFlow 日志 */}
-        <Col span={24}>
-          <LogPanel
-            title={<span style={{ color: token.colorSuccess }}>🟢 TraceFlow 日志</span>}
-            logs={traceflowLogs}
-            loading={traceflowLoading}
-            filterLevel={filterLevel}
-            searchKeyword={searchKeyword}
-            onFilterChange={setFilterLevel}
-            onSearch={handleSearch}
-            onRefresh={() => loadTraceflowLogs(true)}
-            autoRefresh={autoRefresh}
-            lastRefreshTime={lastRefreshTime}
-            color={token.colorSuccess}
-          />
-        </Col>
-      </Row>
+      <Tabs
+        items={[
+          {
+            key: 'traceflow',
+            label: <span style={{ color: token.colorSuccess }}>🟢 TraceFlow 日志</span>,
+            children: (
+              <Row gutter={16}>
+                <Col span={24}>
+                  <LogPanel
+                    title={<span style={{ color: token.colorSuccess }}>TraceFlow 系统日志</span>}
+                    logs={traceflowLogs}
+                    loading={traceflowLoading}
+                    filterLevel={filterLevel}
+                    searchKeyword={searchKeyword}
+                    onFilterChange={setFilterLevel}
+                    onSearch={handleSearch}
+                    onRefresh={() => loadTraceflowLogs(true)}
+                    autoRefresh={autoRefresh}
+                    lastRefreshTime={lastRefreshTime}
+                    color={token.colorSuccess}
+                  />
+                </Col>
+              </Row>
+            ),
+          },
+          {
+            key: 'im',
+            label: <span style={{ color: token.colorPrimary }}>🔵 IM 推送日志</span>,
+            children: (
+              <Row gutter={16}>
+                <Col span={24}>
+                  <LogPanel
+                    title={<span style={{ color: token.colorPrimary }}>IM 推送日志（飞书/钉钉/企业微信）</span>}
+                    logs={imLogs}
+                    loading={imLoading}
+                    filterLevel={filterLevel}
+                    searchKeyword={searchKeyword}
+                    onFilterChange={setFilterLevel}
+                    onSearch={handleSearch}
+                    onRefresh={() => loadImLogs(true)}
+                    autoRefresh={autoRefresh}
+                    lastRefreshTime={lastRefreshTime}
+                    color={token.colorPrimary}
+                  />
+                </Col>
+              </Row>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

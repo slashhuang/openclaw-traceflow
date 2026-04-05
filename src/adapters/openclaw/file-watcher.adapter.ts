@@ -5,7 +5,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ConfigService } from '../config/config.service';
+import { ConfigService } from '../../config/config.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -20,7 +20,6 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
   private sessionsDir: string;
   private watchers: Map<string, fs.FSWatcher> = new Map();
   private knownSessions: Set<string> = new Set();
-  private sessionData: Map<string, any> = new Map();
 
   constructor(
     private eventEmitter: EventEmitter2,
@@ -87,13 +86,13 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
       for (const [sessionKey, entry] of Object.entries(indexData)) {
         if (!this.knownSessions.has(sessionKey)) {
           this.knownSessions.add(sessionKey);
-          this.watchSessionFile(entry.sessionFile as string, sessionKey);
+          this.watchSessionFile((entry as any).sessionFile as string, sessionKey);
 
           // 触发新会话事件
           this.eventEmitter.emit('session:start', {
             sessionKey,
             sessionId: sessionKey,
-            sessionFile: entry.sessionFile,
+            sessionFile: (entry as any).sessionFile,
           });
         }
       }
@@ -113,12 +112,12 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
       for (const [sessionKey, entry] of Object.entries(indexData)) {
         if (!this.knownSessions.has(sessionKey)) {
           this.knownSessions.add(sessionKey);
-          this.watchSessionFile(entry.sessionFile as string, sessionKey);
+          this.watchSessionFile((entry as any).sessionFile as string, sessionKey);
 
           this.eventEmitter.emit('session:start', {
             sessionKey,
             sessionId: sessionKey,
-            sessionFile: entry.sessionFile,
+            sessionFile: (entry as any).sessionFile,
           });
 
           this.logger.debug(`New session detected: ${sessionKey}`);

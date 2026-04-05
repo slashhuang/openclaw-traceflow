@@ -42,15 +42,24 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{ts,tsx}": ["eslint --fix", "prettier --write"],
-    "*.{js,jsx}": ["eslint --fix", "prettier --write"],
-    "*.{json,md}": ["prettier --write"]
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
     "@ant-design/pro-layout": "^7.22.7",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/event-emitter": "^3.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.1.17",
     "@nestjs/serve-static": "^5.0.4",
@@ -67,8 +76,8 @@
     "react-router-dom": "^7.13.1",
     "recharts": "^3.8.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1",
     "remark-gfm": "^4.0.1",
+    "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "sql.js": "^1.14.1",
