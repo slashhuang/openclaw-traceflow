@@ -37,30 +37,32 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // 检查是否有启用的 Channel
-    const enabledChannels = this.channelManager.getEnabledChannels();
-    if (enabledChannels.length === 0) {
-      this.logger.log('No IM channels enabled');
-      return;
-    }
+    // 延迟检查通道，确保 ChannelManager 已完成初始化
+    setTimeout(() => {
+      // 检查是否有启用的 Channel
+      const enabledChannels = this.channelManager.getEnabledChannels();
+      if (enabledChannels.length === 0) {
+        this.logger.log('No IM channels enabled');
+        return;
+      }
 
-    this.logger.log(`IM Push Service initialized with channels: ${enabledChannels.join(', ')}`);
+      this.logger.log(
+        `IM Push Service initialized with channels: ${enabledChannels.join(', ')}`,
+      );
 
-    // 订阅会话事件
-    this.eventEmitter.on('audit.session.start', (session) => {
-      void this.handleSessionStart(session);
-    });
-    this.eventEmitter.on('audit.session.message', (data) => {
-      void this.handleSessionMessage(data);
-    });
-    this.eventEmitter.on('audit.session.end', (session) => {
-      void this.handleSessionEnd(session);
-    });
-    this.eventEmitter.on('audit.log.error', (log) => {
-      void this.handleErrorLog(log);
-    });
+      // 订阅会话事件
+      this.eventEmitter.on('audit.session.start', (session) => {
+        void this.handleSessionStart(session);
+      });
+      this.eventEmitter.on('audit.session.message', (data) => {
+        void this.handleSessionMessage(data);
+      });
+      this.eventEmitter.on('audit.session.end', (session) => {
+        void this.handleSessionEnd(session);
+      });
 
-    this.logger.log('IM Push Service event listeners registered');
+      this.logger.log('IM Push Service event listeners registered');
+    }, 1000);
   }
 
   /**
@@ -70,9 +72,13 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const config = this.configService.getConfig();
     const pushStrategy = config?.im?.channels?.feishu?.pushStrategy || {};
 
-    // 检查推送策略
+    // 检查推送策略 - 即使不推送通知，也要创建父消息用于后续回复
     if (pushStrategy.sessionStart === false) {
-      this.logger.debug('Session start push disabled');
+      this.logger.debug(
+        'Session start push disabled, creating placeholder parent message',
+      );
+      // 设置一个特殊的 parentId 标记，表示会话已开始但不推送通知
+      (session as any).parentId = `placeholder_${session.sessionId}`;
       return;
     }
 
@@ -82,7 +88,10 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         session,
         'active',
       );
-      const result = await this.channelManager.sendToChannel('feishu', parentMessage);
+      const result = await this.channelManager.sendToChannel(
+        'feishu',
+        parentMessage,
+      );
 
       if (result) {
         // 记录父消息 ID 到会话（用于后续 Thread 回复）
@@ -113,6 +122,14 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // 如果是 placeholder ID，说明会话开始推送被禁用了，需要先创建父消息
+    if (parentId.startsWith('placeholder_')) {
+      this.logger.debug(
+        `Creating parent message for session with placeholder: ${data.sessionId}`,
+      );
+      await this.createParentMessage(data.session);
+    }
+
     try {
       let message;
 
@@ -135,10 +152,40 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
           return;
       }
 
-      await this.channelManager.sendToChannel('feishu', message, { reply_id: parentId });
+      await this.channelManager.sendToChannel('feishu', message, {
+        reply_id: parentId,
+      });
     } catch (error) {
       this.logger.error(
         `Failed to send message: ${data.sessionId}`,
+        error as Error,
+      );
+    }
+  }
+
+  /**
+   * 创建父消息（用于会话开始推送被禁用时的延迟创建）
+   */
+  private async createParentMessage(session: SessionEvent): Promise<void> {
+    try {
+      const parentMessage = this.formatter.formatSessionParent(
+        session,
+        'active',
+      );
+      const result = await this.channelManager.sendToChannel(
+        'feishu',
+        parentMessage,
+      );
+
+      if (result) {
+        (session as any).parentId = result.message_id;
+        this.logger.log(
+          `Session parent message created: ${session.sessionId} -> ${result.message_id}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to create parent message: ${session.sessionId}`,
         error as Error,
       );
     }
@@ -157,7 +204,9 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     try {
       // 发送会话结束消息到 Thread
       const endMessage = this.formatter.formatSessionEnd(session);
-      await this.channelManager.sendToChannel('feishu', endMessage, { reply_id: parentId });
+      await this.channelManager.sendToChannel('feishu', endMessage, {
+        reply_id: parentId,
+      });
 
       // 更新父消息为完成状态
       const updatedParent = this.formatter.formatSessionParent(
@@ -172,28 +221,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         `Failed to end session: ${session.sessionId}`,
         error as Error,
       );
-    }
-  }
-
-  /**
-   * 处理 ERROR 日志
-   */
-  private async handleErrorLog(log: any): Promise<void> {
-    const config = this.configService.getConfig();
-    const pushStrategy = config?.im?.channels?.feishu?.pushStrategy || {};
-
-    // 检查推送策略
-    if (pushStrategy.errorLogs === false) {
-      return;
-    }
-
-    try {
-      const message = this.formatter.formatErrorLog(log);
-      await this.channelManager.sendToChannel('feishu', message);
-
-      this.logger.log(`Error log pushed: ${log.component} - ${log.message}`);
-    } catch (error) {
-      this.logger.error('Failed to send error log:', error as Error);
     }
   }
 

@@ -57,8 +57,8 @@ import { SettingsModule } from './settings/settings.module';
     StorageModule,
     DashboardModule,
     // IM Push 相关（使用 Channel 插件架构）
-    OpenClawAdapterModule,
     ImModule,
+    OpenClawAdapterModule,
     // 设置模块
     SettingsModule,
   ],

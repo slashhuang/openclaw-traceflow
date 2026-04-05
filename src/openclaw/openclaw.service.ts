@@ -504,6 +504,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         if (this.sessionStorage instanceof FileSystemSessionStorage) {
           const sessions = await this.sessionStorage.loadFromFileSystem();
           await this.sessionStorage.upsertBatch(sessions);
+
           this.logger.debug(
             `OpenClawService: cache refreshed (${sessions.size} sessions)`,
           );

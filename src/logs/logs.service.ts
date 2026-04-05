@@ -108,15 +108,9 @@ export class LogsService {
       }
     }
 
-    // 触发 IM 推送事件（ERROR 日志）
-    if (entry.level === 'error') {
-      this.eventEmitter.emit('audit.log.error', {
-        level: 'error',
-        component: 'traceflow',
-        message: entry.content,
-        timestamp: Date.now(),
-      });
-    }
+    // 注意：不再触发 audit.log.error 事件
+    // TraceFlow 自身的错误日志不应该推送到飞书
+    // OpenClaw 的错误日志应该由 OpenClaw 自己推送
   }
 
   /**

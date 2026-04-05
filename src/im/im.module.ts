@@ -3,6 +3,7 @@ import { ConfigModule } from '../config/config.module';
 import { ChannelManager } from './channel-manager';
 import { ImPushService } from './im-push.service';
 import { ImController } from './im.controller';
+import { SessionManager } from './session-manager';
 import { FeishuChannel } from './channels/feishu/feishu.channel';
 import { DingTalkChannel } from './channels/dingtalk/dingtalk.channel';
 import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
@@ -15,6 +16,7 @@ import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
   imports: [ConfigModule],
   controllers: [ImController],
   providers: [
+    SessionManager,
     ChannelManager,
     ImPushService,
     FeishuMessageFormatter,
@@ -24,15 +26,17 @@ import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
       useFactory: (
         feishuChannel: FeishuChannel,
         dingtalkChannel: DingTalkChannel,
-      ) => [
-        feishuChannel,
-        dingtalkChannel,
-      ],
+      ) => [feishuChannel, dingtalkChannel],
       inject: [FeishuChannel, DingTalkChannel],
+    },
+    // 为 SessionManager 提供字符串别名，方便 OpenClawService 注入
+    {
+      provide: 'SessionManager',
+      useExisting: SessionManager,
     },
     FeishuChannel,
     DingTalkChannel,
   ],
-  exports: [ChannelManager, ImPushService],
+  exports: [ChannelManager, ImPushService, SessionManager],
 })
 export class ImModule {}
