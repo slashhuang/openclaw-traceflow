@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col, Tabs } from 'antd';
+import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col, Tabs, Tooltip, Tag } from 'antd';
 import { useIntl } from 'react-intl';
+import { FileTextOutlined, MessageOutlined } from '@ant-design/icons';
 import { logsApi } from '../api';
 
 const { Search } = Input;
 
 // 日志面板组件
-function LogPanel({ title, logs, loading, filterLevel, searchKeyword, onFilterChange, onSearch, onRefresh, autoRefresh, lastRefreshTime, color }) {
+function LogPanel({ title, logs, loading, filterLevel, searchKeyword, onFilterChange, onSearch, onRefresh, autoRefresh, lastRefreshTime, color, dataSource }) {
   const intl = useIntl();
   const { token } = theme.useToken();
   const logsEndRef = useRef(null);
@@ -71,14 +72,25 @@ function LogPanel({ title, logs, loading, filterLevel, searchKeyword, onFilterCh
           <Typography.Text type="secondary">暂无日志</Typography.Text>
         ) : (
           filtered.map((log, i) => (
-            <div key={i} style={{ marginBottom: 4, wordBreak: 'break-all', borderBottom: '1px solid ' + token.colorSplit, paddingBottom: 2 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 10 }}>
-                {new Date(log.timestamp).toLocaleTimeString(intl.locale, { hour12: false })}
-              </Typography.Text>{' '}
-              <span style={{ color: levelColor(log.level), fontWeight: 600, fontSize: 10 }}>
-                [{String(log.level).toUpperCase()}]
-              </span>{' '}
-              <span style={{ color: token.colorText }}>{fmt(log.content)}</span>
+            <div key={i} style={{ marginBottom: 4, wordBreak: 'break-all', borderBottom: '1px solid ' + token.colorSplit, paddingBottom: 2, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+              <Tooltip title={`数据源：${dataSource.path}`} placement="topLeft">
+                <Tag
+                  icon={dataSource.icon}
+                  color={dataSource.color}
+                  style={{ fontSize: 10, flexShrink: 0, cursor: 'help' }}
+                >
+                  {dataSource.label}
+                </Tag>
+              </Tooltip>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 10 }}>
+                  {new Date(log.timestamp).toLocaleTimeString(intl.locale, { hour12: false })}
+                </Typography.Text>{' '}
+                <span style={{ color: levelColor(log.level), fontWeight: 600, fontSize: 10 }}>
+                  [{String(log.level).toUpperCase()}]
+                </span>{' '}
+                <span style={{ color: token.colorText }}>{fmt(log.content)}</span>
+              </div>
             </div>
           ))
         )}
@@ -131,8 +143,7 @@ export default function Logs() {
   const loadImLogs = async (showLoading = false) => {
     try {
       if (showLoading) setImLoading(true);
-      const response = await fetch('/api/settings/im/logs');
-      const data = await response.json();
+      const data = await logsApi.getImPushLogs(200);
       setImLogs(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Failed to load IM logs:', e);
@@ -248,6 +259,12 @@ export default function Logs() {
                     autoRefresh={autoRefresh}
                     lastRefreshTime={lastRefreshTime}
                     color={token.colorSuccess}
+                    dataSource={{
+                      label: 'TraceFlow',
+                      color: 'green',
+                      icon: <FileTextOutlined />,
+                      path: 'data/traceflow.log',
+                    }}
                   />
                 </Col>
               </Row>
@@ -271,6 +288,12 @@ export default function Logs() {
                     autoRefresh={autoRefresh}
                     lastRefreshTime={lastRefreshTime}
                     color={token.colorPrimary}
+                    dataSource={{
+                      label: 'IM Push',
+                      color: 'blue',
+                      icon: <MessageOutlined />,
+                      path: '内存存储 (LogsService.imPushLogs)',
+                    }}
                   />
                 </Col>
               </Row>

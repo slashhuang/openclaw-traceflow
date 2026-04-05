@@ -54,6 +54,11 @@ export const healthApi = {
   getHealth: () => api.get('/health').then(res => res.data),
 };
 
+/** IM Session Watch 状态 */
+export const watchSessionApi = {
+  getStatus: () => api.get('/im/watch/status').then(res => res.data),
+};
+
 export const statusApi = {
   getOverview: () => api.get('/status').then(res => res.data),
 };
@@ -90,6 +95,7 @@ export const workspaceFileApi = {
 export const logsApi = {
   getRecent: (limit = 100) => api.get(`/logs?limit=${limit}`).then(res => res.data),
   getTraceflowLogs: (limit = 100) => api.get(`/logs/traceflow?limit=${limit}`).then(res => res.data),
+  getImPushLogs: (limit = 100) => api.get(`/logs/im?limit=${limit}`).then(res => res.data),
 };
 
 /** 合并并发 GET /setup/status（开发态 StrictMode 会双跑 useEffect，避免重复打 Gateway） */

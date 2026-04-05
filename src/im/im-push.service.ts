@@ -112,12 +112,23 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(
           `Session parent message created: ${session.sessionId} -> ${result.message_id}`,
         );
+        // 发送事件到 LogsService
+        this.eventEmitter.emit('im.push.session.parent.created', {
+          sessionId: session.sessionId,
+          messageId: result.message_id,
+        });
       }
     } catch (error) {
       this.logger.error(
         `Failed to send session start: ${session.sessionId}`,
         error as Error,
       );
+      // 发送错误事件到 LogsService
+      this.eventEmitter.emit('im.push.error', {
+        sessionId: session.sessionId,
+        error: (error as Error).message,
+        phase: 'session_start',
+      });
     }
   }
 
@@ -151,7 +162,9 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       await this.createParentMessage(sessionState);
       parentId = this.sessionState.getParentId(data.sessionId);
       if (!parentId) {
-        this.logger.error(`Failed to create parent message for session: ${data.sessionId}`);
+        this.logger.error(
+          `Failed to create parent message for session: ${data.sessionId}`,
+        );
         return;
       }
     }
@@ -184,12 +197,26 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         reply_id: parentId,
       });
 
-      this.logger.log(`Message sent to thread: ${data.sessionId} -> ${parentId}`);
+      this.logger.log(
+        `Message sent to thread: ${data.sessionId} -> ${parentId}`,
+      );
+      // 发送事件到 LogsService
+      this.eventEmitter.emit('im.push.message.sent', {
+        sessionId: data.sessionId,
+        messageId: parentId,
+        type: data.message.type,
+      });
     } catch (error) {
       this.logger.error(
         `Failed to send message: ${data.sessionId}`,
         error as Error,
       );
+      // 发送错误事件到 LogsService
+      this.eventEmitter.emit('im.push.error', {
+        sessionId: data.sessionId,
+        error: (error as Error).message,
+        phase: 'message_send',
+      });
     }
   }
 
@@ -212,12 +239,23 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(
           `Session parent message created: ${session.sessionId} -> ${result.message_id}`,
         );
+        // 发送事件到 LogsService
+        this.eventEmitter.emit('im.push.session.parent.created', {
+          sessionId: session.sessionId,
+          messageId: result.message_id,
+        });
       }
     } catch (error) {
       this.logger.error(
         `Failed to create parent message: ${session.sessionId}`,
         error as Error,
       );
+      // 发送错误事件到 LogsService
+      this.eventEmitter.emit('im.push.error', {
+        sessionId: session.sessionId,
+        error: (error as Error).message,
+        phase: 'create_parent',
+      });
     }
   }
 
@@ -246,11 +284,21 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       await this.channelManager.sendToChannel('feishu', updatedParent);
 
       this.logger.log(`Session completed: ${session.sessionId}`);
+      // 发送事件到 LogsService
+      this.eventEmitter.emit('im.push.session.completed', {
+        sessionId: session.sessionId,
+      });
     } catch (error) {
       this.logger.error(
         `Failed to end session: ${session.sessionId}`,
         error as Error,
       );
+      // 发送错误事件到 LogsService
+      this.eventEmitter.emit('im.push.error', {
+        sessionId: session.sessionId,
+        error: (error as Error).message,
+        phase: 'session_end',
+      });
     }
   }
 

@@ -38,16 +38,26 @@ export class LogsService implements OnModuleInit {
    * 订阅 IM 推送相关事件
    */
   private subscribeToImPushEvents(): void {
+    // 会话生命周期事件
     this.eventEmitter.on('audit.session.start', (session) => {
-      this.addImPushLog('info', `[Session Start] ${session.user?.name || session.sessionId}`);
+      this.addImPushLog(
+        'info',
+        `[Session Start] ${session.user?.name || session.sessionId}`,
+      );
     });
 
     this.eventEmitter.on('audit.session.message', (data) => {
       const msgType = data.message?.type || 'unknown';
       if (msgType === 'skill:start') {
-        this.addImPushLog('info', `[Skill Start] ${data.message?.skillName || 'unknown'}`);
+        this.addImPushLog(
+          'info',
+          `[Skill Start] ${data.message?.skillName || 'unknown'}`,
+        );
       } else if (msgType === 'skill:end') {
-        this.addImPushLog('info', `[Skill End] ${data.message?.skillName || 'unknown'} - ${data.message?.status || 'unknown'}`);
+        this.addImPushLog(
+          'info',
+          `[Skill End] ${data.message?.skillName || 'unknown'} - ${data.message?.status || 'unknown'}`,
+        );
       } else if (msgType === 'user' || msgType === 'assistant') {
         this.addImPushLog('debug', `[Message] ${msgType}`);
       }
@@ -59,6 +69,29 @@ export class LogsService implements OnModuleInit {
 
     this.eventEmitter.on('audit.log.error', (log) => {
       this.addImPushLog('error', `[Error] ${log.component}: ${log.message}`);
+    });
+
+    // IM Push Service 详细事件（新增）
+    this.eventEmitter.on('im.push.session.parent.created', (data) => {
+      this.addImPushLog(
+        'info',
+        `[Parent Created] ${data.sessionId} -> ${data.messageId}`,
+      );
+    });
+
+    this.eventEmitter.on('im.push.message.sent', (data) => {
+      this.addImPushLog(
+        'info',
+        `[Message Sent] ${data.sessionId} -> ${data.messageId}`,
+      );
+    });
+
+    this.eventEmitter.on('im.push.error', (data) => {
+      this.addImPushLog('error', `[Error] ${data.sessionId}: ${data.error}`);
+    });
+
+    this.eventEmitter.on('im.push.session.completed', (data) => {
+      this.addImPushLog('info', `[Session Completed] ${data.sessionId}`);
     });
 
     this.logger.log('IM push event listeners registered');
@@ -212,7 +245,10 @@ export class LogsService implements OnModuleInit {
 
     // 合并并排序
     const allLogs = [...traceflowLogs, ...imPushLogs];
-    allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    allLogs.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
 
     return allLogs.slice(0, limit);
   }
