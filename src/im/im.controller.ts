@@ -66,10 +66,11 @@ export class ImController {
       lastActivity: number;
     }>;
   } {
+    const watcherStatus = this.sessionManager.getWatcherStatus();
     const sessions = this.sessionManager.getActiveSessions();
     return {
-      watching: sessions.length > 0,
-      activeSessions: sessions.length,
+      watching: watcherStatus.ready,
+      activeSessions: watcherStatus.activeSessions,
       sessions: sessions.map((s) => ({
         sessionId: s.sessionId,
         sessionKey: s.sessionKey,

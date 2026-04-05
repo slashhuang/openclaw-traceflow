@@ -50,6 +50,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   // 文件监听器列表（每个 agent 一个）
   private watchers: chokidar.FSWatcher[] = [];
 
+  // Watcher 是否已启动
+  private watcherReady = false;
+
   // 记录每个会话文件最后处理的位置（用于增量推送）
   private sessionFilePositions: Map<
     string,
@@ -185,6 +188,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       })
       .on('ready', () => {
         this.logger.log(`Watcher ready for agent ${agentId}`);
+        this.watcherReady = true;
       });
 
     this.logger.log(`Watcher started for agent ${agentId}`);
@@ -664,6 +668,19 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
    */
   getActiveSessions(): any[] {
     return this.sessionState.getActiveSessions();
+  }
+
+  /**
+   * 获取 Watcher 状态
+   */
+  getWatcherStatus(): {
+    ready: boolean;
+    activeSessions: number;
+  } {
+    return {
+      ready: this.watcherReady,
+      activeSessions: this.sessionState.getActiveSessions().length,
+    };
   }
 
   /**
