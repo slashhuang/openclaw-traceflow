@@ -24,8 +24,6 @@ export interface ImConfig {
         sessionStart?: boolean;
         sessionMessages?: boolean;
         sessionEnd?: boolean;
-        errorLogs?: boolean;
-        warnLogs?: boolean;
       };
     };
   };

@@ -77,8 +77,6 @@ export interface Config {
           sessionStart?: boolean;
           sessionMessages?: boolean;
           sessionEnd?: boolean;
-          errorLogs?: boolean;
-          warnLogs?: boolean;
         };
       };
       dingtalk?: any; // 未来扩展

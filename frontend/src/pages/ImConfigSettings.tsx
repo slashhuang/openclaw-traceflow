@@ -36,8 +36,6 @@ interface ImConfig {
         sessionStart?: boolean;
         sessionMessages?: boolean;
         sessionEnd?: boolean;
-        errorLogs?: boolean;
-        warnLogs?: boolean;
       };
     };
   };
@@ -86,8 +84,6 @@ const ImConfigSettings: React.FC = () => {
         feishu_sessionStart: config.channels?.feishu?.pushStrategy?.sessionStart,
         feishu_sessionMessages: config.channels?.feishu?.pushStrategy?.sessionMessages,
         feishu_sessionEnd: config.channels?.feishu?.pushStrategy?.sessionEnd,
-        feishu_errorLogs: config.channels?.feishu?.pushStrategy?.errorLogs,
-        feishu_warnLogs: config.channels?.feishu?.pushStrategy?.warnLogs,
       });
     } catch (error) {
       message.error('加载配置失败');
@@ -112,8 +108,6 @@ const ImConfigSettings: React.FC = () => {
               sessionStart: values.feishu_sessionStart,
               sessionMessages: values.feishu_sessionMessages,
               sessionEnd: values.feishu_sessionEnd,
-              errorLogs: values.feishu_errorLogs,
-              warnLogs: values.feishu_warnLogs,
             },
           } : undefined,
         },
@@ -292,29 +286,6 @@ const ImConfigSettings: React.FC = () => {
                 label="会话结束"
                 name="feishu_sessionEnd"
                 valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                label="ERROR 日志"
-                name="feishu_errorLogs"
-                valuePropName="checked"
-                extra="预留：用于推送 session jsonl 中的 ERROR 级别日志"
-              >
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                label="WARN 日志"
-                name="feishu_warnLogs"
-                valuePropName="checked"
-                extra="预留：用于推送 session jsonl 中的 WARN 级别日志"
               >
                 <Switch />
               </Form.Item>
