@@ -155,18 +155,12 @@ pnpm test
 ### 架构概览
 
 ```
-OpenClaw Gateway (sessions/*.jsonl)
+OpenClaw Gateway (agents/*/sessions/*.jsonl)
          │
          ▼
-OpenClawFileWatcher (fs.watch 监听)
+SessionManager (直接监听文件系统)
          │
-         ▼
-OpenClawEventBridge (事件转换)
-         │
-         ▼
-SessionManager (会话生命周期管理)
-         │
-         ▼
+         ▼ (emit audit.session.* events)
 ImPushService (推送协调)
          │
          ▼
@@ -180,31 +174,30 @@ FeishuChannel (飞书 API + 限流)
 
 | 组件 | 职责 | 文件 |
 |------|------|------|
-| **OpenClawFileWatcher** | 监听 JSONL 文件变化 | `src/adapters/openclaw/file-watcher.adapter.ts` |
-| **OpenClawEventBridge** | 转换 FileWatcher 事件为 SessionManager 事件 | `src/adapters/openclaw/event-bridge.service.ts` |
-| **SessionManager** | 管理会话生命周期（开始/进行中/结束） | `src/im/session-manager.ts` |
-| **ImPushService** | 协调推送逻辑 | `src/im/im-push.service.ts` |
+| **SessionManager** | 监听 `agents/*/sessions/*.jsonl` 文件变化，管理会话生命周期 | `src/im/session-manager.ts` |
+| **ImPushService** | 订阅 `audit.session.*` 事件，协调推送逻辑 | `src/im/im-push.service.ts` |
 | **FeishuChannel** | 飞书 API 封装（限流 + 重试） | `src/im/channels/feishu/feishu.channel.ts` |
 | **FeishuMessageFormatter** | 消息格式化（富文本） | `src/im/channels/feishu/feishu.formatter.ts` |
+
+**架构说明**（v1.1.1+）：
+- 已移除冗余的 `OpenClawFileWatcher` 和 `OpenClawEventBridge`
+- `SessionManager` 直接监听 OpenClaw 的 `agents/*/sessions/*.jsonl` 文件
+- 事件流简化为：`SessionManager` → `ImPushService`（通过 `audit.session.*` 事件）
 
 ### 事件流
 
 ```typescript
-// 1. FileWatcher 触发
-eventEmitter.emit('session:start', { sessionKey, sessionId, sessionFile });
-eventEmitter.emit('session:message', { sessionKey, record });
-
-// 2. EventBridge 转换
-await sessionManager.onSessionStart({...});
-await sessionManager.onSessionMessage(sessionId, message);
-
-// 3. SessionManager 触发推送事件
+// 1. SessionManager 直接监听 agents/*/sessions/*.jsonl 文件变化
+//    检测到新会话时触发：
 eventEmitter.emit('audit.session.start', session);
-eventEmitter.emit('audit.session.message', { sessionId, message, session });
-eventEmitter.emit('audit.session.end', session);
-eventEmitter.emit('audit.log.error', log); // 来自 LogsService
 
-// 4. ImPushService 处理
+//    检测到新消息时触发：
+eventEmitter.emit('audit.session.message', { sessionId, message, session });
+
+//    会话结束（5 分钟无活动）时触发：
+eventEmitter.emit('audit.session.end', session);
+
+// 2. ImPushService 处理
 handleSessionStart() → FeishuChannel.send(parentMessage)
 handleSessionMessage() → FeishuChannel.send(message, { reply_id: parentId })
 handleSessionEnd() → FeishuChannel.update(parentId, updatedMessage)
