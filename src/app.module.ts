@@ -27,7 +27,6 @@ import { AuditController } from './audit/audit.controller';
 import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.controller';
 // IM Push 模块
 import { ImModule } from './im/im.module';
-import { OpenClawAdapterModule } from './adapters/openclaw/openclaw.adapter.module';
 // 设置模块
 import { SettingsModule } from './settings/settings.module';
 
@@ -58,7 +57,6 @@ import { SettingsModule } from './settings/settings.module';
     DashboardModule,
     // IM Push 相关（使用 Channel 插件架构）
     ImModule,
-    OpenClawAdapterModule,
     // 设置模块
     SettingsModule,
   ],

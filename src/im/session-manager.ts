@@ -65,160 +65,11 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     this.startCleanupTimer();
   }
 
-  async onModuleInit(): Promise<void> {
-    // 1. 先订阅 OpenClawFileWatcher 的事件（如果存在），将其转换为 audit.session 事件
-    this.subscribeToOpenClawFileWatcherEvents();
-
-    // 2. 延迟启动自己的文件监听器，等待配置加载完成
+  onModuleInit(): void {
+    // 启动文件监听器，直接监听 agents/*/sessions/*.jsonl 文件变化
     setTimeout(() => {
       this.startFileWatcher();
-    }, 3000);
-  }
-
-  /**
-   * 订阅 OpenClawFileWatcher 的事件，转换为 audit.session 事件
-   * 这样两个监听器可以共存，事件都会被正确处理
-   */
-  private subscribeToOpenClawFileWatcherEvents(): void {
-    // 订阅 session:start 事件
-    this.eventEmitter.on('session:start', (data) => {
-      this.logger.debug(`Received session:start event: ${data.sessionId}`);
-      // 从 sessions.json 中查找 sessionKey
-      const sessionsDir = this.configService
-        .getConfig()
-        .sources?.find((s) => s.type === 'openclaw')?.config?.sessionsDir;
-
-      if (sessionsDir) {
-        const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
-        let sessionKey = `unknown:${data.sessionId}`;
-
-        if (fs.existsSync(sessionsJsonPath)) {
-          try {
-            const sessionsData = JSON.parse(
-              fs.readFileSync(sessionsJsonPath, 'utf-8'),
-            );
-            for (const [key, value] of Object.entries(sessionsData)) {
-              if ((value as any).sessionId === data.sessionId) {
-                sessionKey = key;
-                break;
-              }
-            }
-          } catch {
-            // 忽略解析错误
-          }
-        }
-
-        // 存储会话状态到 SessionStateService
-        const sessionState = this.sessionState.upsert(data.sessionId, {
-          sessionId: data.sessionId,
-          sessionKey,
-          user: { id: 'unknown', name: 'Unknown User' },
-          account: this.extractAccount(sessionKey),
-          status: 'active',
-        });
-
-        void this.onSessionStart(sessionState);
-      }
-    });
-
-    // 订阅 session:message 事件
-    this.eventEmitter.on('session:message', (data) => {
-      this.logger.debug(
-        `Received session:message event: ${data.sessionId}, type: ${data.record?.type}`,
-      );
-
-      const sessionId = data.sessionId || data.sessionKey;
-      if (!sessionId) return;
-
-      const record = data.record;
-      if (!record || record.type !== 'message') return;
-
-      const role = record.message?.role;
-      if (role !== 'user' && role !== 'assistant' && role !== 'toolResult') return;
-
-      const messageContent = record.message?.content;
-
-      // 处理 toolCall（审计关键：工具调用）
-      if (Array.isArray(messageContent)) {
-        for (const item of messageContent) {
-          if (item?.type === 'toolCall') {
-            // 触发技能开始事件
-            this.eventEmitter.emit('audit.session.message', {
-              sessionId,
-              message: {
-                type: 'skill:start',
-                skillName: item.name || 'unknown',
-                action: item.name || 'unknown',
-                input: item.arguments || {},
-                timestamp: Date.now(),
-              },
-              session: this.sessionState.getSession(sessionId) || { sessionId },
-            });
-            this.logger.log(`Tool call detected: ${item.name} in session ${sessionId}`);
-          }
-        }
-      }
-
-      // 处理 toolResult（审计关键：工具执行结果）
-      if (role === 'toolResult') {
-        const toolName = record.toolName || record.message?.toolCallId || 'unknown';
-        const toolContent = record.content || record.message?.content;
-
-        this.eventEmitter.emit('audit.session.message', {
-          sessionId,
-          message: {
-            type: 'skill:end',
-            skillName: toolName,
-            status: record.isError ? 'error' : 'success',
-            output: toolContent,
-            durationMs: record.details?.durationMs || 0,
-            timestamp: Date.now(),
-          },
-          session: this.sessionState.getSession(sessionId) || { sessionId },
-        });
-        this.logger.log(`Tool result detected: ${toolName} (${record.isError ? 'error' : 'success'}) in session ${sessionId}`);
-        return;
-      }
-
-      // 处理 user/assistant 文本消息
-      if (role !== 'user' && role !== 'assistant') return;
-
-      // 提取消息内容
-      let textContent = '';
-
-      if (typeof messageContent === 'string') {
-        textContent = messageContent;
-      } else if (Array.isArray(messageContent)) {
-        for (const item of messageContent) {
-          if (item?.type === 'text' && typeof item.text === 'string') {
-            textContent += item.text;
-          }
-        }
-      }
-
-      // 从 SessionStateService 获取或创建会话状态
-      let sessionState = this.sessionState.getSession(sessionId);
-      if (!sessionState) {
-        sessionState = this.sessionState.upsert(sessionId, {
-          sessionId,
-          sessionKey: sessionId,
-          user: { id: 'unknown', name: 'Unknown User' },
-          account: 'unknown',
-          status: 'active',
-        });
-      }
-
-      // 触发 audit.session.message 事件
-      this.eventEmitter.emit('audit.session.message', {
-        sessionId,
-        message: {
-          type: role,
-          content: { text: textContent },
-          timestamp: Date.now(),
-        },
-        session: sessionState,
-      });
-    });
+    }, 1000);
   }
 
   /**
@@ -361,12 +212,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       // 如果是新会话（之前没见过），先触发会话开始事件
       if (!this.sessionState.getSession(sessionId)) {
         this.logger.log(`Detected unknown session, parsing file: ${sessionId}`);
-        this.parseNewSessionFile(filePath, sessionId, agentId);
+        void this.parseNewSessionFile(filePath, sessionId, agentId);
         return;
       }
 
       // 触发会话消息事件（解析文件内容并推送）
-      this.parseSessionFileUpdate(filePath, sessionId);
+      void this.parseSessionFileUpdate(filePath, sessionId);
     } catch (error) {
       this.logger.error('Error handling session file change:', error as Error);
     }
@@ -375,10 +226,10 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 解析会话文件更新（增量推送：只处理新增的行）
    */
-  private async parseSessionFileUpdate(
+  private parseSessionFileUpdate(
     filePath: string,
     sessionId: string,
-  ): Promise<void> {
+  ): void {
     try {
       // 读取完整文件内容
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -707,7 +558,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 会话开始
    */
-  async onSessionStart(sessionData: Partial<SessionEvent>): Promise<void> {
+  onSessionStart(sessionData: Partial<SessionEvent>): void {
     const sessionId = sessionData.sessionId!;
 
     // 使用 SessionStateService 存储会话状态
