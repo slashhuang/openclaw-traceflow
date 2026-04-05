@@ -15,20 +15,31 @@ export class LogsController {
   }
 
   /**
+   * 获取 IM 推送日志
+   */
+  @Get('im')
+  async getImPushLogs(@Query('limit') limit?: number): Promise<LogEntry[]> {
+    const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
+    return this.logsService.getImPushLogs(limitNum);
+  }
+
+  /**
    * 获取日志（兼容旧版）
    */
   @Get()
   async getAllLogs(
     @Query('limit') limit?: number,
-    @Query('source') source?: 'traceflow' | 'all',
+    @Query('source') source?: 'traceflow' | 'im' | 'all',
   ): Promise<LogEntry[]> {
-    const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
+    const limitNum = limit ? parseInt(limit.toString(), 10) : 200;
 
     if (source === 'traceflow') {
       return this.logsService.getTraceflowRecentLogs(limitNum);
+    } else if (source === 'im') {
+      return this.logsService.getImPushLogs(limitNum);
     } else {
-      // 默认返回 TraceFlow 日志
-      return this.logsService.getTraceflowRecentLogs(limitNum);
+      // 默认返回所有日志
+      return this.logsService.getAllLogs(limitNum);
     }
   }
 }

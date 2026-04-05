@@ -141,31 +141,24 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     this.scanExistingSessions(sessionsDir, agentId);
 
     // 监听文件变化
+    // 使用原生 fs.watch (跨平台：macOS fsevents / Linux inotify / Windows ReadDirectoryChangesW)
     const watcher = chokidar.watch(sessionsDir, {
-      ignored: (filePath) => {
-        // 只监听 .jsonl 和 sessions.json 文件
-        const basename = path.basename(filePath);
-        const shouldIgnore = !(
-          basename.endsWith('.jsonl') || basename === 'sessions.json'
-        );
-        if (!shouldIgnore) {
-          this.logger.debug(`Watching file: ${basename}`);
-        }
-        return shouldIgnore;
+      // 只监听 .jsonl 和 sessions.json 文件 (chokidar v4 风格：返回 true 表示忽略)
+      ignored: (filePath, stats) => {
+        if (!stats?.isFile()) return false; // 不忽略目录
+        return !(filePath.endsWith('.jsonl') || filePath.endsWith('sessions.json'));
       },
       persistent: true,
-      ignoreInitial: true,
-      // macOS 使用 polling 模式，确保能检测到文件变化
-      usePolling: true,
-      interval: 1000, // 1 秒轮询一次
-      // awaitWriteFinish 配置
+      ignoreInitial: false,  // 需要触发 add 事件来初始化文件位置
+      // 使用原生 watching (默认)，只在网络文件系统时开启 polling
+      usePolling: false,
+      // awaitWriteFinish 配置，避免写入中途触发事件
       awaitWriteFinish: {
-        // 等待写入完成，避免在文件还在写入时触发事件
-        stabilityThreshold: 500,
-        pollInterval: 100,
+        stabilityThreshold: 200,
+        pollInterval: 50,
       },
-      // atomic 处理原子写入
-      atomic: true,
+      depth: 1,
+      alwaysStat: true,  // 始终提供 stats 对象
     });
 
     this.watchers.push(watcher);
@@ -190,6 +183,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       })
       .on('error', (error) => {
         this.logger.error('Watcher error:', error as Error);
+      })
+      .on('ready', () => {
+        this.logger.log(`Watcher ready for agent ${agentId}`);
       });
 
     this.logger.log(`Watcher started for agent ${agentId}`);
@@ -209,10 +205,24 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
       this.logger.log(`Session file updated: ${sessionId} (agent: ${agentId})`);
 
-      // 如果是新会话（之前没见过），先触发会话开始事件
-      if (!this.sessionState.getSession(sessionId)) {
-        this.logger.log(`Detected unknown session, parsing file: ${sessionId}`);
+      // 检查是否是启动时已存在的会话（有文件位置记录但无 session state）
+      const hasFilePosition = this.sessionFilePositions.has(sessionId);
+      const hasSessionState = this.sessionState.getSession(sessionId);
+
+      if (!hasSessionState) {
+        // 新会话（或启动时已存在的会话），触发会话开始事件
+        this.logger.log(`Detected ${hasFilePosition ? 'existing' : 'new'} session, parsing file: ${sessionId}`);
         void this.parseNewSessionFile(filePath, sessionId, agentId);
+
+        // 如果是启动时已存在的会话，需要同时处理现有消息
+        if (hasFilePosition) {
+          // 清除文件位置记录，让 parseSessionFileUpdate 处理所有消息
+          this.sessionFilePositions.delete(sessionId);
+          // 立即处理现有消息
+          setImmediate(() => {
+            void this.parseSessionFileUpdate(filePath, sessionId);
+          });
+        }
         return;
       }
 
@@ -307,9 +317,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           }
 
           // 处理 toolResult（审计关键：工具执行结果）
-          if (role === 'toolResult') {
+          // 注意：toolResult 可能没有 message.role，而是直接在顶层有 toolName
+          if (role === 'toolResult' || (entry.type === 'message' && entry.toolName && !entry.message?.role)) {
             const toolName = entry.toolName || entry.message?.toolCallId || 'unknown';
             const toolContent = entry.content || entry.message?.content;
+            const isError = entry.isError ?? false;
+            const durationMs = entry.details?.durationMs || 0;
             const session = this.sessionState.getSession(sessionId) || {
               sessionId,
               messageCount: lines.length,
@@ -319,14 +332,14 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
               message: {
                 type: 'skill:end',
                 skillName: toolName,
-                status: entry.isError ? 'error' : 'success',
+                status: isError ? 'error' : 'success',
                 output: toolContent,
-                durationMs: entry.details?.durationMs || 0,
+                durationMs,
                 timestamp: Date.now(),
               },
               session,
             });
-            this.logger.log(`Tool result detected: ${toolName} (${entry.isError ? 'error' : 'success'}) in session ${sessionId}`);
+            this.logger.log(`Tool result detected: ${toolName} (${isError ? 'error' : 'success'}) in session ${sessionId}`);
             continue;
           }
 

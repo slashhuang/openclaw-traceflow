@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '../config/config.service';
 import * as fs from 'fs';
@@ -8,11 +8,11 @@ export interface LogEntry {
   timestamp: string;
   level: 'info' | 'warn' | 'error' | 'debug';
   content: string;
-  source?: 'traceflow';
+  source?: 'traceflow' | 'im-push';
 }
 
 @Injectable()
-export class LogsService {
+export class LogsService implements OnModuleInit {
   private readonly logger = new Logger(LogsService.name);
   private traceflowLogTailer: import('chokidar').FSWatcher | null = null;
   private logSubscribers: Set<(entry: LogEntry) => void> = new Set();
@@ -20,10 +20,67 @@ export class LogsService {
   // TraceFlow 自身日志
   private traceflowLogPath: string | null = null;
 
+  // IM 推送日志（内存存储）
+  private imPushLogs: LogEntry[] = [];
+  private readonly maxImLogs = 500;
+
   constructor(
     private configService: ConfigService,
     private eventEmitter: EventEmitter2,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    // 订阅 IM 推送事件
+    this.subscribeToImPushEvents();
+  }
+
+  /**
+   * 订阅 IM 推送相关事件
+   */
+  private subscribeToImPushEvents(): void {
+    this.eventEmitter.on('audit.session.start', (session) => {
+      this.addImPushLog('info', `[Session Start] ${session.user?.name || session.sessionId}`);
+    });
+
+    this.eventEmitter.on('audit.session.message', (data) => {
+      const msgType = data.message?.type || 'unknown';
+      if (msgType === 'skill:start') {
+        this.addImPushLog('info', `[Skill Start] ${data.message?.skillName || 'unknown'}`);
+      } else if (msgType === 'skill:end') {
+        this.addImPushLog('info', `[Skill End] ${data.message?.skillName || 'unknown'} - ${data.message?.status || 'unknown'}`);
+      } else if (msgType === 'user' || msgType === 'assistant') {
+        this.addImPushLog('debug', `[Message] ${msgType}`);
+      }
+    });
+
+    this.eventEmitter.on('audit.session.end', (session) => {
+      this.addImPushLog('info', `[Session End] ${session.sessionId}`);
+    });
+
+    this.eventEmitter.on('audit.log.error', (log) => {
+      this.addImPushLog('error', `[Error] ${log.component}: ${log.message}`);
+    });
+
+    this.logger.log('IM push event listeners registered');
+  }
+
+  /**
+   * 添加 IM 推送日志
+   */
+  private addImPushLog(level: LogEntry['level'], content: string): void {
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      content,
+      source: 'im-push',
+    };
+    this.imPushLogs.push(entry);
+    if (this.imPushLogs.length > this.maxImLogs) {
+      this.imPushLogs.shift();
+    }
+    // 通知订阅者
+    this.notifySubscribers(entry);
+  }
 
   /**
    * 启动日志追踪 - TraceFlow 日志
@@ -137,6 +194,27 @@ export class LogsService {
       this.logger.error(`Failed to get traceflow recent logs: ${msg}`);
       return [];
     }
+  }
+
+  /**
+   * 获取 IM 推送日志
+   */
+  getImPushLogs(limit: number = 100): LogEntry[] {
+    return this.imPushLogs.slice(-limit);
+  }
+
+  /**
+   * 获取所有日志（TraceFlow + IM 推送）
+   */
+  async getAllLogs(limit: number = 200): Promise<LogEntry[]> {
+    const traceflowLogs = await this.getTraceflowRecentLogs(limit);
+    const imPushLogs = this.getImPushLogs(limit);
+
+    // 合并并排序
+    const allLogs = [...traceflowLogs, ...imPushLogs];
+    allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return allLogs.slice(0, limit);
   }
 
   /**
