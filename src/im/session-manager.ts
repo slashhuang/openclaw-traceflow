@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '../config/config.service';
+import { SessionStateService } from './session-state.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as chokidar from 'chokidar';
@@ -23,19 +24,19 @@ export interface SessionEvent {
   tokenOutput?: number;
   firstMessage?: string;
   lastActivity?: number;
-  parentId?: string; // 飞书父消息 ID
 }
 
 /**
  * 会话管理器
  * 管理会话生命周期，通过文件系统监听检测会话开始/结束
+ * 使用 SessionStateService 存储会话状态，解耦事件时序
  */
 @Injectable()
 export class SessionManager implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SessionManager.name);
 
-  // 活跃会话映射：sessionId → SessionEvent
-  private activeSessions = new Map<string, SessionEvent>();
+  // 使用 SessionStateService 存储会话状态
+  private sessionState: SessionStateService;
 
   // 已知的会话文件（用于检测新会话）
   private knownSessionFiles = new Set<string>();
@@ -58,15 +59,120 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   constructor(
     private eventEmitter: EventEmitter2,
     private configService: ConfigService,
+    sessionState: SessionStateService,
   ) {
+    this.sessionState = sessionState;
     this.startCleanupTimer();
   }
 
   async onModuleInit(): Promise<void> {
-    // 延迟启动监听，等待配置加载完成
+    // 1. 先订阅 OpenClawFileWatcher 的事件（如果存在），将其转换为 audit.session 事件
+    this.subscribeToOpenClawFileWatcherEvents();
+
+    // 2. 延迟启动自己的文件监听器，等待配置加载完成
     setTimeout(() => {
       this.startFileWatcher();
     }, 3000);
+  }
+
+  /**
+   * 订阅 OpenClawFileWatcher 的事件，转换为 audit.session 事件
+   * 这样两个监听器可以共存，事件都会被正确处理
+   */
+  private subscribeToOpenClawFileWatcherEvents(): void {
+    // 订阅 session:start 事件
+    this.eventEmitter.on('session:start', (data) => {
+      this.logger.debug(`Received session:start event: ${data.sessionId}`);
+      // 从 sessions.json 中查找 sessionKey
+      const sessionsDir = this.configService
+        .getConfig()
+        .sources?.find((s) => s.type === 'openclaw')?.config?.sessionsDir;
+
+      if (sessionsDir) {
+        const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
+        let sessionKey = `unknown:${data.sessionId}`;
+
+        if (fs.existsSync(sessionsJsonPath)) {
+          try {
+            const sessionsData = JSON.parse(
+              fs.readFileSync(sessionsJsonPath, 'utf-8'),
+            );
+            for (const [key, value] of Object.entries(sessionsData)) {
+              if ((value as any).sessionId === data.sessionId) {
+                sessionKey = key;
+                break;
+              }
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+
+        // 存储会话状态到 SessionStateService
+        const sessionState = this.sessionState.upsert(data.sessionId, {
+          sessionId: data.sessionId,
+          sessionKey,
+          user: { id: 'unknown', name: 'Unknown User' },
+          account: this.extractAccount(sessionKey),
+          status: 'active',
+        });
+
+        void this.onSessionStart(sessionState);
+      }
+    });
+
+    // 订阅 session:message 事件
+    this.eventEmitter.on('session:message', (data) => {
+      this.logger.debug(
+        `Received session:message event: ${data.sessionId}, type: ${data.record?.type}`,
+      );
+
+      const sessionId = data.sessionId || data.sessionKey;
+      if (!sessionId) return;
+
+      const record = data.record;
+      if (!record || record.type !== 'message') return;
+
+      const role = record.message?.role;
+      if (role !== 'user' && role !== 'assistant') return;
+
+      // 提取消息内容
+      let textContent = '';
+      const messageContent = record.message?.content;
+
+      if (typeof messageContent === 'string') {
+        textContent = messageContent;
+      } else if (Array.isArray(messageContent)) {
+        for (const item of messageContent) {
+          if (item?.type === 'text' && typeof item.text === 'string') {
+            textContent += item.text;
+          }
+        }
+      }
+
+      // 从 SessionStateService 获取或创建会话状态
+      let sessionState = this.sessionState.getSession(sessionId);
+      if (!sessionState) {
+        sessionState = this.sessionState.upsert(sessionId, {
+          sessionId,
+          sessionKey: sessionId,
+          user: { id: 'unknown', name: 'Unknown User' },
+          account: 'unknown',
+          status: 'active',
+        });
+      }
+
+      // 触发 audit.session.message 事件
+      this.eventEmitter.emit('audit.session.message', {
+        sessionId,
+        message: {
+          type: role,
+          content: { text: textContent },
+          timestamp: Date.now(),
+        },
+        session: sessionState,
+      });
+    });
   }
 
   /**
@@ -165,7 +271,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Session file updated: ${sessionId}`);
 
       // 如果是新会话（之前没见过），先触发会话开始事件
-      if (!this.activeSessions.has(sessionId)) {
+      if (!this.sessionState.getSession(sessionId)) {
         this.logger.log(`Detected unknown session, parsing file: ${sessionId}`);
         this.parseNewSessionFile(filePath, sessionId);
         return;
@@ -255,7 +361,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           }
 
           // 触发会话消息事件
-          const session = this.activeSessions.get(sessionId) || {
+          const session = this.sessionState.getSession(sessionId) || {
             sessionId,
             messageCount: lines.length,
           };
@@ -264,7 +370,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
             sessionId,
             message: {
               type: role,
-              content: { text: textContent.substring(0, 200) }, // 限制长度
+              content: { text: textContent },
               timestamp: Date.now(),
             },
             session,
@@ -467,7 +573,8 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   async onSessionStart(sessionData: Partial<SessionEvent>): Promise<void> {
     const sessionId = sessionData.sessionId!;
 
-    const session: SessionEvent = {
+    // 使用 SessionStateService 存储会话状态
+    const sessionState = this.sessionState.upsert(sessionId, {
       sessionId,
       sessionKey: sessionData.sessionKey!,
       user: sessionData.user!,
@@ -476,14 +583,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       messageCount: 0,
       status: 'active',
       lastActivity: Date.now(),
-      ...sessionData,
-    };
+    });
 
-    this.activeSessions.set(sessionId, session);
     this.logger.debug(`Session started: ${sessionId}`);
 
     // 触发推送事件
-    this.eventEmitter.emit('audit.session.start', session);
+    this.eventEmitter.emit('audit.session.start', sessionState);
   }
 
   /**
@@ -497,51 +602,56 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       timestamp: number;
     },
   ): Promise<void> {
-    let session = this.activeSessions.get(sessionId);
+    // 从 SessionStateService 获取或创建会话状态
+    let sessionState = this.sessionState.getSession(sessionId);
 
-    if (!session) {
+    if (!sessionState) {
       // 会话不存在，尝试恢复
       this.logger.warn(
         `Session not found: ${sessionId}, attempting to recover`,
       );
       await this.recoverSession(sessionId);
-      session = this.activeSessions.get(sessionId);
+      sessionState = this.sessionState.getSession(sessionId);
 
-      if (!session) {
+      if (!sessionState) {
         this.logger.error(`Failed to recover session: ${sessionId}`);
         return;
       }
     }
 
-    session.messageCount++;
-    session.lastActivity = Date.now();
+    // 更新会话状态
+    sessionState = this.sessionState.update(sessionId, {
+      messageCount: sessionState.messageCount + 1,
+    });
 
     // 更新 Token 信息（如果是 AI 回复）
     if (message.type === 'assistant') {
-      session.tokenInput = message.content.tokens?.input;
-      session.tokenOutput = message.content.tokens?.output;
+      this.sessionState.update(sessionId, {
+        tokenInput: message.content.tokens?.input,
+        tokenOutput: message.content.tokens?.output,
+      });
     }
 
     // 触发推送事件
     this.eventEmitter.emit('audit.session.message', {
       sessionId,
       message,
-      session,
+      session: sessionState,
     });
   }
 
   /**
    * 获取会话
    */
-  getSession(sessionId: string): SessionEvent | undefined {
-    return this.activeSessions.get(sessionId);
+  getSession(sessionId: string): any | undefined {
+    return this.sessionState.getSession(sessionId);
   }
 
   /**
    * 获取所有活跃会话
    */
-  getActiveSessions(): SessionEvent[] {
-    return Array.from(this.activeSessions.values());
+  getActiveSessions(): any[] {
+    return this.sessionState.getActiveSessions();
   }
 
   /**
@@ -549,15 +659,15 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
    */
   private startCleanupTimer(): void {
     this.cleanupInterval = setInterval(() => {
-      const now = Date.now();
+      // 使用 SessionStateService 清理超时会话
+      const completedSessions = this.sessionState.cleanupTimeout(
+        this.SESSION_END_TIMEOUT_MS,
+      );
 
-      for (const [sessionId, session] of this.activeSessions.entries()) {
-        if (session.status === 'completed') continue;
-
-        const inactiveTime = now - (session.lastActivity || session.startTime);
-        if (inactiveTime > this.SESSION_END_TIMEOUT_MS) {
-          this.completeSession(sessionId);
-        }
+      for (const session of completedSessions) {
+        this.logger.log(`Session completed (timeout): ${session.sessionId}`);
+        // 触发推送事件
+        this.eventEmitter.emit('audit.session.end', session);
       }
     }, 60000); // 每分钟检查一次
 
@@ -568,19 +678,20 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
    * 完成会话
    */
   private async completeSession(sessionId: string): Promise<void> {
-    const session = this.activeSessions.get(sessionId);
-    if (!session || session.status === 'completed') return;
+    const sessionState = this.sessionState.getSession(sessionId);
+    if (!sessionState || sessionState.status === 'completed') return;
 
-    session.status = 'completed';
-    session.endTime = Date.now();
+    // 更新会话状态为完成
+    const completedSession = this.sessionState.complete(sessionId);
 
-    this.logger.log(`Session completed: ${sessionId}`);
+    if (completedSession) {
+      this.logger.log(`Session completed: ${sessionId}`);
 
-    // 触发推送事件
-    this.eventEmitter.emit('audit.session.end', session);
+      // 触发推送事件
+      this.eventEmitter.emit('audit.session.end', completedSession);
 
-    // 从活跃会话移除
-    this.activeSessions.delete(sessionId);
+      // 从活跃会话移除（SessionStateService 内部处理）
+    }
   }
 
   /**

@@ -74,33 +74,7 @@ export class FeishuMessageFormatter {
     session: SessionData,
     status: 'active' | 'completed',
   ): FormattedMessage {
-    const statusIcon = status === 'completed' ? '✅' : '🟢';
-    const statusText = status === 'completed' ? '已完成' : '进行中';
-
-    const text = `【审计·会话】${session.user.name} @ ${this.formatTime(session.startTime)} ${statusIcon}
-━━━━━━━━━━━━━━━━━━━━━━
-👤 用户：${session.user.name} (${session.user.id})
-🤖 账号：${session.account}
-💬 会话：${session.sessionId}
-📊 状态：${statusText}
-
-${
-  status === 'completed'
-    ? `
-【会话摘要】
-• 消息数：${session.messageCount} 条
-• 总耗时：${this.formatDuration(session.endTime! - session.startTime)}
-• Token：输入 ${session.tokenInput || 0}，输出 ${session.tokenOutput || 0}
-`
-    : ''
-}
-【首条消息】
-"${session.firstMessage || '...'}"
-
-━━━━━━━━━━━━━━━━━━━━━━
-📎 点击展开查看完整对话
-🔗 在 TraceFlow 中查看：${this.getTraceflowUrl(session.sessionId)}
-`;
+    const text = `💬 会话开始：${session.user.name}`;
 
     return {
       msg_type: 'text',
@@ -111,15 +85,21 @@ ${
   /**
    * 格式化用户消息
    */
-  formatUserMessage(message: UserMessage): FormattedMessage {
-    const text = `💬 【用户消息】
-📅 ${this.formatTime(message.timestamp, true)}
+  formatUserMessage(message: {
+    type: 'user';
+    content: { text: string } | string;
+    timestamp: number;
+    messageId?: string;
+    senderId?: string;
+    senderName?: string;
+  }): FormattedMessage {
+    // 兼容两种格式：{ text: string } 或直接是 string
+    const textContent =
+      typeof message.content === 'string'
+        ? message.content
+        : message.content?.text || '[无内容]';
 
-${message.content}
-
----
-📎 消息 ID: ${message.messageId}
-`;
+    const text = `👤 ${textContent}`;
 
     return {
       msg_type: 'text',
@@ -130,18 +110,22 @@ ${message.content}
   /**
    * 格式化 AI 回复
    */
-  formatAssistantMessage(message: AssistantMessage): FormattedMessage {
-    const text = `🤖 【AI 回复】
-📅 ${this.formatTime(message.timestamp, true)}
-🧠 模型：${message.model}
-🪙 Token: ${message.tokens.input} → ${message.tokens.output}
-⏱️ 耗时：${this.formatDuration(message.durationMs)}
+  formatAssistantMessage(message: {
+    type: 'assistant';
+    content: { text: string } | string;
+    timestamp: number;
+    model?: string;
+    tokens?: { input: number; output: number };
+    durationMs?: number;
+    skillsUsed?: string[];
+  }): FormattedMessage {
+    // 兼容两种格式：{ text: string } 或直接是 string
+    const textContent =
+      typeof message.content === 'string'
+        ? message.content
+        : message.content?.text || '[无内容]';
 
-${message.content}
-
----
-🔧 技能：${message.skillsUsed?.join(', ') || '无'}
-`;
+    const text = `🤖 ${textContent}`;
 
     return {
       msg_type: 'text',
@@ -153,16 +137,7 @@ ${message.content}
    * 格式化技能开始
    */
   formatSkillStart(message: SkillStartMessage): FormattedMessage {
-    const text = `🔧 【技能开始】
-📅 ${this.formatTime(message.timestamp, true)}
-📦 技能：${message.skillName}
-📝 动作：${message.action}
-
-【输入】
-\`\`\`json
-${this.truncateJson(message.input)}
-\`\`\`
-`;
+    const text = `🔧 ${message.skillName}: ${message.action}`;
 
     return {
       msg_type: 'text',
@@ -175,17 +150,7 @@ ${this.truncateJson(message.input)}
    */
   formatSkillEnd(message: SkillEndMessage): FormattedMessage {
     const statusIcon = message.status === 'success' ? '✅' : '❌';
-    const text = `✅ 【技能结束】
-📅 ${this.formatTime(message.timestamp, true)}
-📦 技能：${message.skillName}
-${statusIcon} 状态：${message.status}
-⏱️ 耗时：${this.formatDuration(message.durationMs)}
-
-【输出】
-\`\`\`json
-${this.truncateJson(message.output)}
-\`\`\`
-`;
+    const text = `${statusIcon} ${message.skillName}: ${message.status}`;
 
     return {
       msg_type: 'text',
@@ -197,13 +162,7 @@ ${this.truncateJson(message.output)}
    * 格式化会话结束
    */
   formatSessionEnd(session: SessionData): FormattedMessage {
-    const text = `✅ 【会话结束】
-📅 ${this.formatTime(session.endTime!, true)}
-📊 统计：
-  • 总消息：${session.messageCount} 条
-  • 总耗时：${this.formatDuration(session.endTime! - session.startTime)}
-  • Token：输入 ${session.tokenInput || 0}，输出 ${session.tokenOutput || 0}
-`;
+    const text = `✅ 会话结束：${session.messageCount} 条消息，${this.formatDuration(session.endTime! - session.startTime)}`;
 
     return {
       msg_type: 'text',
@@ -215,23 +174,7 @@ ${this.truncateJson(message.output)}
    * 格式化 ERROR 日志告警
    */
   formatErrorLog(log: LogEntry): FormattedMessage {
-    const text = `❌【审计·错误告警】
-━━━━━━━━━━━━━━━━━━━━━━
-📅 ${this.formatTime(log.timestamp)}
-📦 组件：${log.component}
-💬 会话：${log.sessionId || 'N/A'}
-
-【错误内容】
-${log.message}
-
-【堆栈跟踪】
-\`\`\`
-${log.stack || '无堆栈信息'}
-\`\`\`
-
-━━━━━━━━━━━━━━━━━━━━━━
-🔗 在 TraceFlow 中查看：${this.getTraceflowLogsUrl()}
-`;
+    const text = `❌ ${log.component}: ${log.message}`;
 
     return {
       msg_type: 'text',

@@ -70,20 +70,20 @@ export class FeishuChannel implements ImChannel {
         throw new Error('Feishu config not initialized');
       }
 
-      const body: any = {
+      // 如果有 reply_id，使用飞书官方的 /reply 端点（参考 demos/feishu.ts）
+      if (options?.reply_id) {
+        return await this.sendReply(accessToken, options.reply_id, content);
+      }
+
+      // 普通消息发送
+      const receiveIdType = this.config.receiveIdType || 'open_id';
+      const url = `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`;
+
+      const body = {
         receive_id: this.config.targetUserId,
         msg_type: content.msg_type,
         content: JSON.stringify(content.content),
       };
-
-      // 如果是 Thread 回复，添加 reply_id
-      if (options?.reply_id) {
-        body.reply_id = options.reply_id;
-      }
-
-      // receive_id_type 作为 URL 查询参数，默认为 open_id
-      const receiveIdType = this.config.receiveIdType || 'open_id';
-      const url = `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`;
 
       const response = await fetch(url, {
         method: 'POST',
@@ -108,6 +108,46 @@ export class FeishuChannel implements ImChannel {
       this.logger.error('Failed to send message:', error);
       throw error;
     }
+  }
+
+  /**
+   * 回复消息（使用飞书官方 /reply 端点）
+   * 参考：demos/feishu.ts 第 47-79 行
+   */
+  private async sendReply(
+    accessToken: string,
+    messageId: string,
+    content: FormattedMessage,
+  ): Promise<SendResult> {
+    const url = `https://open.feishu.cn/open-apis/im/v1/messages/${encodeURIComponent(messageId)}/reply`;
+
+    const body = {
+      content: JSON.stringify(content.content),
+      msg_type: content.msg_type,
+      reply_in_thread: true,
+    };
+
+    this.logger.warn(`Sending reply to message: ${messageId}, reply_in_thread: true`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    if (data.code !== 0) {
+      throw new Error(`Feishu API error: ${data.msg} (code: ${data.code})`);
+    }
+
+    this.logger.warn(`Reply sent: ${data.data.message_id}, thread_id: ${data.data.thread_id}`);
+    return {
+      message_id: data.data.message_id,
+      thread_id: data.data.thread_id,
+    };
   }
 
   async update(messageId: string, content: FormattedMessage): Promise<void> {

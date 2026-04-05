@@ -4,6 +4,7 @@ import { ChannelManager } from './channel-manager';
 import { ImPushService } from './im-push.service';
 import { ImController } from './im.controller';
 import { SessionManager } from './session-manager';
+import { SessionStateService } from './session-state.service';
 import { FeishuChannel } from './channels/feishu/feishu.channel';
 import { DingTalkChannel } from './channels/dingtalk/dingtalk.channel';
 import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
@@ -16,6 +17,7 @@ import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
   imports: [ConfigModule],
   controllers: [ImController],
   providers: [
+    SessionStateService,
     SessionManager,
     ChannelManager,
     ImPushService,
@@ -37,6 +39,6 @@ import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
     FeishuChannel,
     DingTalkChannel,
   ],
-  exports: [ChannelManager, ImPushService, SessionManager],
+  exports: [ChannelManager, ImPushService, SessionManager, SessionStateService],
 })
 export class ImModule {}
