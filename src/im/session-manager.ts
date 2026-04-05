@@ -223,34 +223,77 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 启动文件监听器
+   * 监听 openclawStateDir/agents/*/sessions/ 下所有 agent 的 sessions
    */
   private startFileWatcher(): void {
     const config = this.configService.getConfig();
-    const sessionsDir = config.sources?.find((s) => s.type === 'openclaw')
-      ?.config?.sessionsDir;
 
-    if (!sessionsDir) {
+    // 优先使用 openclawStateDir，自动发现所有 agent
+    const stateDir = config.openclawStateDir;
+    let agentsSessionsDirs: { agentId: string; sessionsDir: string }[] = [];
+
+    if (stateDir && fs.existsSync(stateDir)) {
+      // 遍历 agents 目录，发现所有 agent 的 sessions
+      const agentsDir = path.join(stateDir, 'agents');
+      if (fs.existsSync(agentsDir)) {
+        const agentIds = fs.readdirSync(agentsDir);
+        for (const agentId of agentIds) {
+          const sessionsDir = path.join(agentsDir, agentId, 'sessions');
+          if (fs.existsSync(sessionsDir)) {
+            agentsSessionsDirs.push({ agentId, sessionsDir });
+            this.logger.log(`Discovered agent sessions: ${agentId}`);
+          }
+        }
+      }
+    }
+
+    // 如果没有发现 agent sessions，尝试使用 sources 配置
+    if (agentsSessionsDirs.length === 0) {
+      const sessionsDir = config.sources?.find((s) => s.type === 'openclaw')
+        ?.config?.sessionsDir;
+      if (sessionsDir && fs.existsSync(sessionsDir)) {
+        agentsSessionsDirs.push({ agentId: 'default', sessionsDir });
+        this.logger.log(`Using configured sessionsDir: ${sessionsDir}`);
+      }
+    }
+
+    if (agentsSessionsDirs.length === 0) {
       this.logger.warn(
-        'OpenClaw sessions directory not configured, skipping file watcher',
+        'No OpenClaw sessions directories found, skipping file watcher',
       );
       return;
     }
 
-    if (!fs.existsSync(sessionsDir)) {
-      this.logger.warn(`Sessions directory does not exist: ${sessionsDir}`);
-      return;
-    }
+    this.logger.log(
+      `Starting file watcher for ${agentsSessionsDirs.length} agent(s)`,
+    );
 
-    this.logger.log(`Starting file watcher: ${sessionsDir}`);
+    // 为每个 agent 启动监听器
+    for (const { agentId, sessionsDir } of agentsSessionsDirs) {
+      this.startAgentFileWatcher(agentId, sessionsDir);
+    }
+  }
+
+  // 文件监听器列表（每个 agent 一个）
+  private watchers: chokidar.FSWatcher[] = [];
+
+  /**
+   * 为单个 agent 启动文件监听器
+   */
+  private startAgentFileWatcher(
+    agentId: string,
+    sessionsDir: string,
+  ): void {
+    this.logger.log(`Starting watcher for agent ${agentId}: ${sessionsDir}`);
 
     // 监听 sessions.json 文件
     const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
 
     // 先扫描现有文件
-    this.scanExistingSessions(sessionsDir);
+    this.scanExistingSessions(sessionsDir, agentId);
 
     // 监听文件变化
-    this.watcher = chokidar.watch(sessionsDir, {
+    const watcher = chokidar.watch(sessionsDir, {
       ignored: (filePath) => {
         // 只监听 .jsonl 和 sessions.json 文件
         const basename = path.basename(filePath);
@@ -277,11 +320,13 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       atomic: true,
     });
 
-    this.watcher
+    this.watchers.push(watcher);
+
+    watcher
       .on('add', (filePath) => {
         this.logger.log(`File created: ${filePath}`);
         if (filePath.endsWith('.jsonl')) {
-          this.handleNewSessionFile(filePath);
+          this.handleNewSessionFile(filePath, agentId);
         }
       })
       .on('change', (filePath, stats) => {
@@ -290,22 +335,41 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         );
         if (filePath.endsWith('.jsonl')) {
           // 检测现有会话文件的更新
-          this.handleSessionFileChange(filePath);
+          this.handleSessionFileChange(filePath, agentId);
         } else if (filePath === sessionsJsonPath) {
-          this.handleSessionsJsonChange(filePath);
+          this.handleSessionsJsonChange(filePath, agentId);
         }
       })
       .on('error', (error) => {
         this.logger.error('Watcher error:', error as Error);
       });
 
-    this.logger.log('Session file watcher started');
+    this.logger.log(`Watcher started for agent ${agentId}`);
+  }
+        }
+      })
+      .on('change', (filePath, stats) => {
+        this.logger.log(
+          `File changed: ${filePath}, size: ${stats?.size || 'unknown'}`,
+        );
+        if (filePath.endsWith('.jsonl')) {
+          // 检测现有会话文件的更新
+          this.handleSessionFileChange(filePath, agentId);
+        } else if (filePath === sessionsJsonPath) {
+          this.handleSessionsJsonChange(filePath, agentId);
+        }
+      })
+      .on('error', (error) => {
+        this.logger.error('Watcher error:', error as Error);
+      });
+
+    this.logger.log(`Watcher started for agent ${agentId}`);
   }
 
   /**
    * 处理会话文件变化（用于检测会话更新）
    */
-  private handleSessionFileChange(filePath: string): void {
+  private handleSessionFileChange(filePath: string, agentId: string): void {
     try {
       const sessionId = path.basename(filePath, '.jsonl');
 
@@ -314,12 +378,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      this.logger.log(`Session file updated: ${sessionId}`);
+      this.logger.log(`Session file updated: ${sessionId} (agent: ${agentId})`);
 
       // 如果是新会话（之前没见过），先触发会话开始事件
       if (!this.sessionState.getSession(sessionId)) {
         this.logger.log(`Detected unknown session, parsing file: ${sessionId}`);
-        this.parseNewSessionFile(filePath, sessionId);
+        this.parseNewSessionFile(filePath, sessionId, agentId);
         return;
       }
 
@@ -485,7 +549,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 扫描现有会话文件
    */
-  private scanExistingSessions(sessionsDir: string): void {
+  private scanExistingSessions(sessionsDir: string, agentId: string = 'default'): void {
     try {
       const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
       if (fs.existsSync(sessionsJsonPath)) {
@@ -524,7 +588,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         }
 
         this.logger.log(
-          `Scanned ${this.knownSessionFiles.size} existing sessions`,
+          `Scanned ${this.knownSessionFiles.size} existing sessions for agent ${agentId}`,
         );
       }
     } catch (error) {
@@ -535,7 +599,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 处理新会话文件
    */
-  private handleNewSessionFile(filePath: string): void {
+  private handleNewSessionFile(filePath: string, agentId: string): void {
     try {
       const sessionId = path.basename(filePath, '.jsonl');
 
@@ -546,7 +610,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
       if (!this.knownSessionFiles.has(sessionId)) {
         this.knownSessionFiles.add(sessionId);
-        this.logger.log(`New session file detected: ${sessionId}`);
+        this.logger.log(`New session file detected: ${sessionId} (agent: ${agentId})`);
 
         // 记录初始文件位置，不推送历史消息
         const stats = fs.statSync(filePath);
@@ -567,7 +631,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         );
 
         // 读取文件获取会话信息（但不推送历史消息）
-        this.parseNewSessionFile(filePath, sessionId);
+        this.parseNewSessionFile(filePath, sessionId, agentId);
       }
     } catch (error) {
       this.logger.error('Error handling new session file:', error as Error);
@@ -580,6 +644,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   private async parseNewSessionFile(
     filePath: string,
     sessionId: string,
+    agentId: string,
   ): Promise<void> {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -646,7 +711,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         sessionId,
         sessionKey,
         user: { id: userId, name: userName },
-        account: this.extractAccount(sessionKey),
+        account: `${agentId}:${this.extractAccount(sessionKey)}`,
       });
     } catch (error) {
       this.logger.error('Error parsing session file:', error as Error);
@@ -656,9 +721,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 处理 sessions.json 变化
    */
-  private handleSessionsJsonChange(filePath: string): void {
+  private handleSessionsJsonChange(filePath: string, agentId: string): void {
     // 简化实现：不处理增量更新，依赖文件监听捕获新 .jsonl 文件
-    this.logger.debug('sessions.json changed');
+    this.logger.debug(`sessions.json changed for agent ${agentId}`);
   }
 
   /**
@@ -840,8 +905,8 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
     }
-    if (this.watcher) {
-      this.watcher.close();
+    for (const watcher of this.watchers) {
+      watcher.close();
     }
     this.logger.log('SessionManager destroyed');
   }
