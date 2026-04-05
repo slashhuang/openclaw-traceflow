@@ -11,6 +11,8 @@ export interface FeishuConfig {
   appId: string;
   appSecret: string;
   targetUserId: string;
+  /** receive_id 类型：open_id | user_id | union_id | chat_id */
+  receiveIdType?: string;
   rateLimit?: number;
 }
 
@@ -41,7 +43,7 @@ export class FeishuChannel implements ImChannel {
 
   async initialize(config: Record<string, any>): Promise<void> {
     const feishuConfig = config as FeishuConfig;
-    
+
     if (feishuConfig) {
       // 更新配置
       this.config = feishuConfig;
@@ -79,19 +81,18 @@ export class FeishuChannel implements ImChannel {
         body.reply_id = options.reply_id;
       }
 
-      // receive_id_type 作为 URL 查询参数 - 使用 open_id
-      const url = 'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id';
-      
-      const response = await fetch(url,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(body),
+      // receive_id_type 作为 URL 查询参数，默认为 open_id
+      const receiveIdType = this.config.receiveIdType || 'open_id';
+      const url = `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
-      );
+        body: JSON.stringify(body),
+      });
 
       const data = await response.json();
       if (data.code !== 0) {

@@ -1,6 +1,19 @@
-import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Inject,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
-import { ImChannel, FormattedMessage, SendMessageOptions, SendResult, HealthStatus } from './channel.interface';
+import {
+  ImChannel,
+  FormattedMessage,
+  SendMessageOptions,
+  SendResult,
+  HealthStatus,
+} from './channel.interface';
+import { FeishuChannel } from './channels/feishu/feishu.channel';
 
 /**
  * IM Channel 管理器
@@ -9,10 +22,10 @@ import { ImChannel, FormattedMessage, SendMessageOptions, SendResult, HealthStat
 @Injectable()
 export class ChannelManager implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ChannelManager.name);
-  
+
   // 已加载的 Channel 实例
   private channels = new Map<string, ImChannel>();
-  
+
   // Channel 配置
   private channelConfigs = new Map<string, any>();
 
@@ -23,11 +36,11 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     const config = this.configService.getConfig();
-    
+
     // 注册所有 Channel 插件
     for (const plugin of this.channelPlugins) {
       const channelConfig = config.im?.channels?.[plugin.type];
-      
+
       if (channelConfig?.enabled) {
         try {
           await plugin.initialize(channelConfig);
@@ -35,12 +48,17 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
           this.channelConfigs.set(plugin.type, channelConfig);
           this.logger.log(`Channel "${plugin.type}" initialized`);
         } catch (error) {
-          this.logger.error(`Failed to initialize channel "${plugin.type}":`, error as Error);
+          this.logger.error(
+            `Failed to initialize channel "${plugin.type}":`,
+            error as Error,
+          );
         }
       }
     }
-    
-    this.logger.log(`ChannelManager initialized with ${this.channels.size} channels`);
+
+    this.logger.log(
+      `ChannelManager initialized with ${this.channels.size} channels`,
+    );
   }
 
   /**
@@ -52,7 +70,7 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
     options?: SendMessageOptions,
   ): Promise<SendResult | null> {
     const channel = this.channels.get(channelType);
-    
+
     if (!channel) {
       this.logger.warn(`Channel "${channelType}" not found or disabled`);
       return null;
@@ -76,7 +94,7 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
     options?: SendMessageOptions,
   ): Promise<Map<string, SendResult | Error>> {
     const results = new Map<string, SendResult | Error>();
-    
+
     for (const [channelType, channel] of this.channels.entries()) {
       try {
         const result = await channel.send(content, options);
@@ -85,7 +103,7 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
         results.set(channelType, error as Error);
       }
     }
-    
+
     return results;
   }
 
@@ -94,7 +112,7 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
    */
   async getHealthStatus(): Promise<Map<string, HealthStatus>> {
     const status = new Map<string, HealthStatus>();
-    
+
     for (const [channelType, channel] of this.channels.entries()) {
       try {
         const health = await channel.healthCheck();
@@ -107,7 +125,7 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
         });
       }
     }
-    
+
     return status;
   }
 
@@ -131,7 +149,10 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
         channel.destroy();
         this.logger.log(`Channel "${channelType}" destroyed`);
       } catch (error) {
-        this.logger.error(`Error destroying channel "${channelType}":`, error as Error);
+        this.logger.error(
+          `Error destroying channel "${channelType}":`,
+          error as Error,
+        );
       }
     }
   }
@@ -141,26 +162,42 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
    */
   async reloadFromConfig(imConfig: any): Promise<void> {
     this.logger.log('Reloading channels from config...');
-    
+    this.logger.log(`IM Config: ${JSON.stringify(imConfig)}`);
+
     // 销毁所有现有 Channel
     for (const [channelType, channel] of this.channels.entries()) {
       try {
         channel.destroy();
         this.logger.log(`Channel "${channelType}" destroyed`);
       } catch (error) {
-        this.logger.error(`Error destroying channel "${channelType}":`, error as Error);
+        this.logger.error(
+          `Error destroying channel "${channelType}":`,
+          error as Error,
+        );
       }
     }
     this.channels.clear();
     this.channelConfigs.clear();
-    
+
     // 重新初始化启用的 Channel
+    this.logger.log(`Checking channels: ${JSON.stringify(imConfig?.channels)}`);
     if (imConfig?.channels) {
-      for (const [channelType, channelConfig] of Object.entries(imConfig.channels)) {
+      for (const [channelType, channelConfig] of Object.entries(
+        imConfig.channels,
+      )) {
         const config = channelConfig as any;
+        this.logger.log(
+          `Processing channel: ${channelType}, enabled: ${config?.enabled}`,
+        );
         if (config?.enabled) {
           try {
-            const channel = this.getChannelByType(channelType);
+            // 根据类型创建对应的 Channel 实例
+            let channel: ImChannel | null = null;
+            if (channelType === 'feishu') {
+              channel = new FeishuChannel();
+              this.logger.log('FeishuChannel instance created');
+            }
+
             if (channel) {
               await channel.initialize(config);
               this.channels.set(channelType, channel);
@@ -168,22 +205,17 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
               this.logger.log(`Channel "${channelType}" reloaded`);
             }
           } catch (error) {
-            this.logger.error(`Failed to reload channel "${channelType}":`, error as Error);
+            this.logger.error(
+              `Failed to reload channel "${channelType}":`,
+              error as Error,
+            );
           }
         }
       }
     }
-    
-    this.logger.log(`Channels reloaded: ${Array.from(this.channels.keys()).join(', ')}`);
-  }
 
-  /**
-   * 根据类型获取 Channel 实例
-   */
-  private getChannelByType(type: string): any {
-    // 这里需要根据类型返回对应的 Channel 实例
-    // 可以通过依赖注入或者工厂模式实现
-    // 简单起见，这里返回 null，实际使用时需要从外部传入
-    return null;
+    this.logger.log(
+      `Channels reloaded: ${Array.from(this.channels.keys()).join(', ')}`,
+    );
   }
 }

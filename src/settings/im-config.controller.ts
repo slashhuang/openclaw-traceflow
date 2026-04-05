@@ -1,4 +1,11 @@
-import { Controller, Get, Put, Body, BadRequestException, Post } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Body,
+  BadRequestException,
+  Post,
+} from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { ChannelManager } from '../im/channel-manager';
 import { FeishuChannel } from '../im/channels/feishu/feishu.channel';
@@ -68,9 +75,15 @@ export class ImConfigController {
    * 更新 IM 配置（保存后立即生效）
    */
   @Put()
-  async updateImConfig(@Body() body: ImConfig): Promise<{ success: boolean; message: string }> {
-    const configPath = path.join(process.cwd(), 'config', 'openclaw.runtime.json');
-    
+  async updateImConfig(
+    @Body() body: ImConfig,
+  ): Promise<{ success: boolean; message: string }> {
+    const configPath = path.join(
+      process.cwd(),
+      'config',
+      'openclaw.runtime.json',
+    );
+
     // 读取现有配置
     let currentConfig: any = {};
     if (fs.existsSync(configPath)) {
@@ -80,7 +93,7 @@ export class ImConfigController {
         throw new BadRequestException('配置文件格式错误');
       }
     }
-    
+
     // 更新 IM 配置
     currentConfig.im = {
       enabled: body.enabled,
@@ -89,26 +102,35 @@ export class ImConfigController {
 
     // 保存配置
     try {
-      fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2), 'utf-8');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify(currentConfig, null, 2),
+        'utf-8',
+      );
       console.log('[ImConfigController] Config saved to file');
+      console.log(
+        '[ImConfigController] IM config:',
+        JSON.stringify(currentConfig.im),
+      );
 
-      // 重新初始化飞书 Channel（使配置立即生效）
-      // 注意：如果凭证无效，会在首次使用时报错，不影响配置保存
-      if (body.channels?.feishu?.enabled) {
-        try {
-          await this.feishuChannel.initialize(body.channels.feishu);
-          console.log('[ImConfigController] Feishu channel reloaded');
-        } catch (initError) {
-          console.warn('[ImConfigController] Channel init failed, but config saved:', initError);
-          // 不抛出错误，让配置保存成功
-        }
-      }
+      // 更新 ConfigService 内存配置（使 getConfig() 返回最新配置）
+      this.configService.updateConfig({ im: currentConfig.im });
+      console.log('[ImConfigController] ConfigService memory updated');
+
+      // 重新初始化 ChannelManager（使配置立即生效）
+      console.log(
+        '[ImConfigController] About to reload ChannelManager with:',
+        JSON.stringify(currentConfig.im),
+      );
+      await this.channelManager.reloadFromConfig(currentConfig.im);
+      console.log('[ImConfigController] ChannelManager reloaded');
 
       return {
         success: true,
         message: '配置已保存并生效',
       };
-    } catch {
+    } catch (error) {
+      console.error('[ImConfigController] Error:', error);
       throw new BadRequestException('保存配置失败');
     }
   }
@@ -121,7 +143,7 @@ export class ImConfigController {
     @Body() body: { channel: string; message: string },
   ): Promise<ImTestResult> {
     const config = this.configService.getConfig();
-    
+
     if (!config.im?.enabled) {
       return {
         success: false,
@@ -135,10 +157,17 @@ export class ImConfigController {
         content: { text: body.message || 'TraceFlow IM 推送测试' },
       });
 
+      if (!result) {
+        return {
+          success: false,
+          message: `推送失败：Channel "${body.channel}" 未找到或已禁用`,
+        };
+      }
+
       return {
         success: true,
         message: '推送成功',
-        channelId: result?.message_id,
+        channelId: result.message_id,
       };
     } catch (error) {
       return {
@@ -163,17 +192,19 @@ export class ImConfigController {
   }> {
     const config = this.configService.getConfig();
     const healthStatus = await this.channelManager.getHealthStatus();
-    
-    const channels = config.im?.channels 
-      ? Object.entries(config.im.channels).map(([type, channelConfig]: [string, any]) => {
-          const health = healthStatus.get(type);
-          return {
-            type,
-            enabled: channelConfig?.enabled || false,
-            healthy: health?.healthy || false,
-            error: health?.error,
-          };
-        })
+
+    const channels = config.im?.channels
+      ? Object.entries(config.im.channels).map(
+          ([type, channelConfig]: [string, any]) => {
+            const health = healthStatus.get(type);
+            return {
+              type,
+              enabled: channelConfig?.enabled || false,
+              healthy: health?.healthy || false,
+              error: health?.error,
+            };
+          },
+        )
       : [];
 
     return {
