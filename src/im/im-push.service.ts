@@ -81,9 +81,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     status?: 'active' | 'completed';
     firstMessage?: string;
   }): Promise<void> {
-    const config = this.configService.getConfig();
-    const pushStrategy = config?.im?.channels?.feishu?.pushStrategy || {};
-
     // 先将会话状态存储到 SessionStateService
     const sessionState = this.sessionState.upsert(session.sessionId, {
       sessionId: session.sessionId,
@@ -97,17 +94,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.logger.debug(`Session state stored: ${session.sessionId}`);
-
-    // 检查推送策略 - 即使不推送通知，也要创建父消息用于后续回复
-    if (pushStrategy.sessionStart === false) {
-      this.logger.debug(
-        'Session start push disabled, creating placeholder parent message',
-      );
-      // 设置一个特殊的 parentId 标记
-      const placeholderId = `placeholder_${session.sessionId}`;
-      this.sessionState.setParentId(session.sessionId, placeholderId);
-      return;
-    }
 
     try {
       // 发送父消息到默认 Channel（飞书）
@@ -144,7 +130,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     message: any;
     session: any;
   }): Promise<void> {
-    // 从 SessionStateService 获取 parentId（持久化存储，不依赖事件顺序）
+    // 从 SessionStateService 获取 parentId
     let parentId = this.sessionState.getParentId(data.sessionId);
 
     // 如果没有 parentId，说明 session start 事件还没处理完成，等待一下
@@ -168,16 +154,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         this.logger.error(`Failed to create parent message for session: ${data.sessionId}`);
         return;
       }
-    }
-
-    // 如果是 placeholder ID，说明会话开始推送被禁用了，需要先创建父消息
-    if (parentId.startsWith('placeholder_')) {
-      this.logger.debug(
-        `Creating parent message for session with placeholder: ${data.sessionId}`,
-      );
-      const sessionState = this.sessionState.getOrCreate(data.sessionId);
-      await this.createParentMessage(sessionState);
-      parentId = this.sessionState.getParentId(data.sessionId);
     }
 
     this.logger.debug(`Sending message to thread with reply_id: ${parentId}`);

@@ -20,11 +20,6 @@ export interface ImConfig {
       appId: string;
       appSecret: string;
       targetUserId: string;
-      pushStrategy?: {
-        sessionStart?: boolean;
-        sessionMessages?: boolean;
-        sessionEnd?: boolean;
-      };
     };
   };
 }

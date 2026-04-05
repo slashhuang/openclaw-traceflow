@@ -32,11 +32,6 @@ interface ImConfig {
       appId: string;
       appSecret: string;
       targetUserId: string;
-      pushStrategy?: {
-        sessionStart?: boolean;
-        sessionMessages?: boolean;
-        sessionEnd?: boolean;
-      };
     };
   };
 }
@@ -81,9 +76,6 @@ const ImConfigSettings: React.FC = () => {
         feishu_appId: config.channels?.feishu?.appId,
         feishu_appSecret: config.channels?.feishu?.appSecret,
         feishu_targetUserId: config.channels?.feishu?.targetUserId,
-        feishu_sessionStart: config.channels?.feishu?.pushStrategy?.sessionStart,
-        feishu_sessionMessages: config.channels?.feishu?.pushStrategy?.sessionMessages,
-        feishu_sessionEnd: config.channels?.feishu?.pushStrategy?.sessionEnd,
       });
     } catch (error) {
       message.error('加载配置失败');
@@ -104,11 +96,6 @@ const ImConfigSettings: React.FC = () => {
             appId: values.feishu_appId,
             appSecret: values.feishu_appSecret,
             targetUserId: values.feishu_targetUserId,
-            pushStrategy: {
-              sessionStart: values.feishu_sessionStart,
-              sessionMessages: values.feishu_sessionMessages,
-              sessionEnd: values.feishu_sessionEnd,
-            },
           } : undefined,
         },
       };
@@ -259,40 +246,6 @@ const ImConfigSettings: React.FC = () => {
           >
             <Input placeholder="ou_xxx" disabled={!form.getFieldValue('feishu_enabled')} />
           </Form.Item>
-
-          <Divider orientation="left">推送策略</Divider>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                label="会话开始"
-                name="feishu_sessionStart"
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                label="会话消息"
-                name="feishu_sessionMessages"
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                label="会话结束"
-                name="feishu_sessionEnd"
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Divider />
 
           <Form.Item>
             <Space>

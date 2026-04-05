@@ -73,11 +73,6 @@ export interface Config {
         appSecret: string;
         targetUserId: string;
         rateLimit?: number;
-        pushStrategy?: {
-          sessionStart?: boolean;
-          sessionMessages?: boolean;
-          sessionEnd?: boolean;
-        };
       };
       dingtalk?: any; // 未来扩展
       wecom?: any; // 未来扩展
