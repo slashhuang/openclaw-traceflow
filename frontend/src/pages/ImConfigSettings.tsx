@@ -304,6 +304,7 @@ const ImConfigSettings: React.FC = () => {
                 label="ERROR 日志"
                 name="feishu_errorLogs"
                 valuePropName="checked"
+                extra="预留：用于接收 OpenClaw 推送的自身错误日志（待实现）"
               >
                 <Switch />
               </Form.Item>
@@ -313,6 +314,7 @@ const ImConfigSettings: React.FC = () => {
                 label="WARN 日志"
                 name="feishu_warnLogs"
                 valuePropName="checked"
+                extra="预留：用于接收 OpenClaw 推送的自身警告日志（待实现）"
               >
                 <Switch />
               </Form.Item>
