@@ -47,8 +47,8 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   // 定时器检查会话结束
   private cleanupInterval?: NodeJS.Timeout;
 
-  // 文件监听器
-  private watcher?: chokidar.FSWatcher;
+  // 文件监听器列表（每个 agent 一个）
+  private watchers: chokidar.FSWatcher[] = [];
 
   // 记录每个会话文件最后处理的位置（用于增量推送）
   private sessionFilePositions: Map<
@@ -223,7 +223,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 启动文件监听器
-   * 监听 openclawStateDir/agents/*/sessions/ 下所有 agent 的 sessions
+   * 监听 openclawStateDir/agents 目录下所有 agent 的 sessions
    */
   private startFileWatcher(): void {
     const config = this.configService.getConfig();
@@ -273,9 +273,6 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       this.startAgentFileWatcher(agentId, sessionsDir);
     }
   }
-
-  // 文件监听器列表（每个 agent 一个）
-  private watchers: chokidar.FSWatcher[] = [];
 
   /**
    * 为单个 agent 启动文件监听器
@@ -327,25 +324,6 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`File created: ${filePath}`);
         if (filePath.endsWith('.jsonl')) {
           this.handleNewSessionFile(filePath, agentId);
-        }
-      })
-      .on('change', (filePath, stats) => {
-        this.logger.log(
-          `File changed: ${filePath}, size: ${stats?.size || 'unknown'}`,
-        );
-        if (filePath.endsWith('.jsonl')) {
-          // 检测现有会话文件的更新
-          this.handleSessionFileChange(filePath, agentId);
-        } else if (filePath === sessionsJsonPath) {
-          this.handleSessionsJsonChange(filePath, agentId);
-        }
-      })
-      .on('error', (error) => {
-        this.logger.error('Watcher error:', error as Error);
-      });
-
-    this.logger.log(`Watcher started for agent ${agentId}`);
-  }
         }
       })
       .on('change', (filePath, stats) => {
