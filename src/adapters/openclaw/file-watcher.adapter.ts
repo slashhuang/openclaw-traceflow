@@ -21,6 +21,12 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
   private watchers: Map<string, fs.FSWatcher> = new Map();
   private knownSessions: Set<string> = new Set();
 
+  // 记录每个会话文件最后处理的位置（用于增量推送）
+  private sessionFilePositions: Map<
+    string,
+    { size: number; lastLine: string }
+  > = new Map();
+
   constructor(
     private eventEmitter: EventEmitter2,
     private configService: ConfigService,
@@ -86,13 +92,37 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
       for (const [sessionKey, entry] of Object.entries(indexData)) {
         if (!this.knownSessions.has(sessionKey)) {
           this.knownSessions.add(sessionKey);
-          this.watchSessionFile((entry as any).sessionFile as string, sessionKey);
+          const sessionFile = (entry as any).sessionFile as string;
+          this.watchSessionFile(sessionFile, sessionKey);
 
-          // 触发新会话事件
+          // 记录初始文件位置，不触发推送（只记录位置）
+          const filePath = path.isAbsolute(sessionFile)
+            ? sessionFile
+            : path.join(this.sessionsDir, sessionFile);
+          if (fs.existsSync(filePath)) {
+            const stats = fs.statSync(filePath);
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const lines = content
+              .trim()
+              .split('\n')
+              .filter((line) => line.trim());
+            const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
+
+            this.sessionFilePositions.set(sessionKey, {
+              size: stats.size,
+              lastLine,
+            });
+
+            this.logger.debug(
+              `Recorded initial position for ${sessionKey}: ${stats.size} bytes`,
+            );
+          }
+
+          // 触发新会话事件（但不会推送历史消息）
           this.eventEmitter.emit('session:start', {
             sessionKey,
             sessionId: sessionKey,
-            sessionFile: (entry as any).sessionFile,
+            sessionFile,
           });
         }
       }
@@ -112,12 +142,36 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
       for (const [sessionKey, entry] of Object.entries(indexData)) {
         if (!this.knownSessions.has(sessionKey)) {
           this.knownSessions.add(sessionKey);
-          this.watchSessionFile((entry as any).sessionFile as string, sessionKey);
+          const sessionFile = (entry as any).sessionFile as string;
+          this.watchSessionFile(sessionFile, sessionKey);
+
+          // 记录初始文件位置，不触发推送
+          const filePath = path.isAbsolute(sessionFile)
+            ? sessionFile
+            : path.join(this.sessionsDir, sessionFile);
+          if (fs.existsSync(filePath)) {
+            const stats = fs.statSync(filePath);
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const lines = content
+              .trim()
+              .split('\n')
+              .filter((line) => line.trim());
+            const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
+
+            this.sessionFilePositions.set(sessionKey, {
+              size: stats.size,
+              lastLine,
+            });
+
+            this.logger.debug(
+              `Recorded initial position for new session ${sessionKey}: ${stats.size} bytes`,
+            );
+          }
 
           this.eventEmitter.emit('session:start', {
             sessionKey,
             sessionId: sessionKey,
-            sessionFile: (entry as any).sessionFile,
+            sessionFile,
           });
 
           this.logger.debug(`New session detected: ${sessionKey}`);
@@ -132,7 +186,10 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
    * 监听单个 session 文件
    */
   private watchSessionFile(filename: string, sessionKey: string): void {
-    const filePath = path.join(this.sessionsDir, filename);
+    // sessionFile 可能是绝对路径或相对路径，需要判断
+    const filePath = path.isAbsolute(filename)
+      ? filename
+      : path.join(this.sessionsDir, filename);
     let lastSize = 0;
     let lastProcessedLine = '';
 
@@ -153,6 +210,11 @@ export class OpenClawFileWatcher implements OnModuleInit, OnModuleDestroy {
         // 检测文件重置（新轮次会话）
         if (stats.size < lastSize) {
           this.logger.log(`Session reset detected: ${sessionKey}`);
+          // 重置位置记录
+          this.sessionFilePositions.set(sessionKey, {
+            size: stats.size,
+            lastLine: '',
+          });
           this.eventEmitter.emit('session:start', {
             sessionKey,
             sessionId: sessionKey,
