@@ -134,10 +134,13 @@ export class FeishuMessageFormatter {
   }
 
   /**
-   * 格式化技能开始
+   * 格式化技能开始（审计关键信息：动作 + 输入）
    */
   formatSkillStart(message: SkillStartMessage): FormattedMessage {
-    const text = `🔧 ${message.skillName}: ${message.action}`;
+    const text = `🔧 ${message.skillName}: ${message.action}
+
+【输入参数】
+${this.truncateJson(message.input, 2000)}`;
 
     return {
       msg_type: 'text',
@@ -146,11 +149,14 @@ export class FeishuMessageFormatter {
   }
 
   /**
-   * 格式化技能结束
+   * 格式化技能结束（审计关键信息：状态 + 输出 + 耗时）
    */
   formatSkillEnd(message: SkillEndMessage): FormattedMessage {
     const statusIcon = message.status === 'success' ? '✅' : '❌';
-    const text = `${statusIcon} ${message.skillName}: ${message.status}`;
+    const text = `${statusIcon} ${message.skillName}: ${message.status} (${this.formatDuration(message.durationMs)})
+
+【输出结果】
+${this.truncateJson(message.output, 2000)}`;
 
     return {
       msg_type: 'text',
@@ -217,9 +223,9 @@ export class FeishuMessageFormatter {
   }
 
   /**
-   * 截断 JSON（避免消息过长）
+   * 截断 JSON（避免消息过长，审计场景下尽量保留完整信息）
    */
-  private truncateJson(obj: any, maxLength = 500): string {
+  private truncateJson(obj: any, maxLength = 4000): string {
     const json = JSON.stringify(obj, null, 2);
     if (json.length <= maxLength) return json;
     return json.substring(0, maxLength) + '\n... (truncated)';

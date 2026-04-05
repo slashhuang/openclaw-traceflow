@@ -134,11 +134,57 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       if (!record || record.type !== 'message') return;
 
       const role = record.message?.role;
+      if (role !== 'user' && role !== 'assistant' && role !== 'toolResult') return;
+
+      const messageContent = record.message?.content;
+
+      // 处理 toolCall（审计关键：工具调用）
+      if (Array.isArray(messageContent)) {
+        for (const item of messageContent) {
+          if (item?.type === 'toolCall') {
+            // 触发技能开始事件
+            this.eventEmitter.emit('audit.session.message', {
+              sessionId,
+              message: {
+                type: 'skill:start',
+                skillName: item.name || 'unknown',
+                action: item.name || 'unknown',
+                input: item.arguments || {},
+                timestamp: Date.now(),
+              },
+              session: this.sessionState.getSession(sessionId) || { sessionId },
+            });
+            this.logger.log(`Tool call detected: ${item.name} in session ${sessionId}`);
+          }
+        }
+      }
+
+      // 处理 toolResult（审计关键：工具执行结果）
+      if (role === 'toolResult') {
+        const toolName = record.toolName || record.message?.toolCallId || 'unknown';
+        const toolContent = record.content || record.message?.content;
+
+        this.eventEmitter.emit('audit.session.message', {
+          sessionId,
+          message: {
+            type: 'skill:end',
+            skillName: toolName,
+            status: record.isError ? 'error' : 'success',
+            output: toolContent,
+            durationMs: record.details?.durationMs || 0,
+            timestamp: Date.now(),
+          },
+          session: this.sessionState.getSession(sessionId) || { sessionId },
+        });
+        this.logger.log(`Tool result detected: ${toolName} (${record.isError ? 'error' : 'success'}) in session ${sessionId}`);
+        return;
+      }
+
+      // 处理 user/assistant 文本消息
       if (role !== 'user' && role !== 'assistant') return;
 
       // 提取消息内容
       let textContent = '';
-      const messageContent = record.message?.content;
 
       if (typeof messageContent === 'string') {
         textContent = messageContent;
@@ -342,6 +388,54 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
           const role = entry.message?.role;
           const messageContent = entry.message?.content;
+
+          // 处理 toolCall（审计关键：工具调用）
+          if (Array.isArray(messageContent)) {
+            for (const item of messageContent) {
+              if (item?.type === 'toolCall') {
+                const session = this.sessionState.getSession(sessionId) || {
+                  sessionId,
+                  messageCount: lines.length,
+                };
+                this.eventEmitter.emit('audit.session.message', {
+                  sessionId,
+                  message: {
+                    type: 'skill:start',
+                    skillName: item.name || 'unknown',
+                    action: item.name || 'unknown',
+                    input: item.arguments || {},
+                    timestamp: Date.now(),
+                  },
+                  session,
+                });
+                this.logger.log(`Tool call detected: ${item.name} in session ${sessionId}`);
+              }
+            }
+          }
+
+          // 处理 toolResult（审计关键：工具执行结果）
+          if (role === 'toolResult') {
+            const toolName = entry.toolName || entry.message?.toolCallId || 'unknown';
+            const toolContent = entry.content || entry.message?.content;
+            const session = this.sessionState.getSession(sessionId) || {
+              sessionId,
+              messageCount: lines.length,
+            };
+            this.eventEmitter.emit('audit.session.message', {
+              sessionId,
+              message: {
+                type: 'skill:end',
+                skillName: toolName,
+                status: entry.isError ? 'error' : 'success',
+                output: toolContent,
+                durationMs: entry.details?.durationMs || 0,
+                timestamp: Date.now(),
+              },
+              session,
+            });
+            this.logger.log(`Tool result detected: ${toolName} (${entry.isError ? 'error' : 'success'}) in session ${sessionId}`);
+            continue;
+          }
 
           // 只处理 user 和 assistant 消息
           if (role !== 'user' && role !== 'assistant') {
