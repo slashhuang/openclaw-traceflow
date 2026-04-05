@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  ForbiddenException,
-  Get,
-  Logger,
-  Put,
-  UseGuards,
-} from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
+import { Body, Controller, Get, Logger, Put } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { OpenClawService } from './openclaw.service';
 
@@ -39,14 +30,12 @@ export class SystemPromptController {
     return this.openclawService.analyzeSystemPrompt();
   }
 
+  /**
+   * 写入工作区引导文件（如 AGENTS.md 等）
+   * 无权限限制，直接写入磁盘
+   */
   @Put('system-prompt/workspace-file')
-  @UseGuards(AuthGuard)
   async putWorkspaceBootstrapFile(@Body() body: PutWorkspaceBootstrapBody) {
-    if (!this.configService.isWorkspaceBootstrapWriteAllowed()) {
-      throw new ForbiddenException(
-        '当前 accessMode 为 none 且未开启 OPENCLAW_WORKSPACE_WRITE，禁止写入工作区引导文件。请将访问模式设为 token 或 local-only，或设置环境变量 OPENCLAW_WORKSPACE_WRITE=1（仅限可信环境）。',
-      );
-    }
     return this.openclawService.writeWorkspaceBootstrapFile({
       file: body?.file ?? '',
       content: body?.content ?? '',

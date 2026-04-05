@@ -1,13 +1,13 @@
 /**
  * OpenClaw 路径解析工具
- * 
+ *
  * 参考 OpenClaw 源码：external-refs/openclaw/src/config/paths.ts
  * 与 claw-commons/openclawCommonUtils/resolveOpenClawPaths.mjs 语义一致
- * 
+ *
  * 用法：
  * ```typescript
  * import { resolveUserPath, resolveWorkspaceDir, resolveAuditDir, resolveStateDir, resolveSessionsDir } from './resolveOpenClawPaths';
- * 
+ *
  * const workspaceDir = resolveWorkspaceDir();
  * const auditDir = resolveAuditDir();
  * const sessionsDir = resolveSessionsDir();
@@ -23,7 +23,7 @@ const HOME = process.env.HOME || process.env.USERPROFILE || '/root';
 /**
  * 处理 ~/ 和 $HOME 路径
  * 参考 OpenClaw 源码：external-refs/openclaw/src/utils.ts resolveUserPath
- * 
+ *
  * @param inputPath - 输入路径
  * @returns 解析后的路径
  */
@@ -40,11 +40,11 @@ export function resolveUserPath(inputPath: string): string {
 
 /**
  * 解析 workspace 目录
- * 
+ *
  * 优先级：
  * 1. OPENCLAW_WORKSPACE_DIR 环境变量
  * 2. ~/.openclaw/workspace (默认)
- * 
+ *
  * @returns workspace 目录路径
  */
 export function resolveWorkspaceDir(): string {
@@ -56,12 +56,12 @@ export function resolveWorkspaceDir(): string {
 
 /**
  * 解析 state 目录
- * 
+ *
  * 优先级：
  * 1. OPENCLAW_STATE_DIR 环境变量
  * 2. OPENCLAW_WORKSPACE_DIR/.clawStates (自定义 workspace 的 state 目录)
  * 3. ~/.openclaw/state (默认)
- * 
+ *
  * @returns state 目录路径
  */
 export function resolveStateDir(): string {
@@ -84,12 +84,12 @@ export function resolveStateDir(): string {
 
 /**
  * 解析审计目录（audit）
- * 
+ *
  * 优先级：
  * 1. OPENCLAW_AUDIT_DIR 环境变量
  * 2. workspaceDir/.openclawAudits
  * 3. ~/.openclaw/workspace/.openclawAudits (默认)
- * 
+ *
  * @returns 审计目录路径
  */
 export function resolveAuditDir(): string {
@@ -101,7 +101,7 @@ export function resolveAuditDir(): string {
 
 /**
  * 解析反思目录（reflections，alias for auditDir）
- * 
+ *
  * @returns 反思目录路径
  */
 export function resolveReflectionsDir(): string {
@@ -110,12 +110,12 @@ export function resolveReflectionsDir(): string {
 
 /**
  * 解析 sessions 目录
- * 
+ *
  * 优先级：
  * 1. OPENCLAW_SESSIONS_DIR 环境变量
  * 2. stateDir/agents/main/sessions (自定义 state 目录)
  * 3. ~/.openclaw/agents/main/sessions (默认)
- * 
+ *
  * @returns sessions 目录路径
  */
 export function resolveSessionsDir(): string {

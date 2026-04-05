@@ -11,6 +11,7 @@ import SessionArchiveList from './pages/SessionArchiveList';
 import SystemPrompt from './pages/SystemPrompt';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
+import PathConfigSettings from './pages/PathConfigSettings';
 import Pricing from './pages/Pricing';
 import Workspace from './pages/Workspace';
 import States from './pages/States';

@@ -11,11 +11,6 @@ import {
   resolveOpenClawPaths,
   type OpenClawResolvedPaths,
 } from './openclaw-paths.resolver';
-import { buildStatusOverviewFromHealth } from './gateway-overview-health';
-import { mergeGatewayOverviewFromSessionsStore } from './gateway-overview-sessions-store';
-import { type StatusOverviewResult } from './gateway-rpc';
-import { GatewayConnectionService } from './gateway-connection.service';
-import type { GatewayWsPathsResult } from './gateway-ws-paths';
 import {
   buildBreakdownFromReport,
   CORE_BOOTSTRAP_FILENAMES,
@@ -296,7 +291,7 @@ type ArchivedResetFileCacheEntry = {
   usage: ArchivedResetUsage;
 };
 
-/** systemPromptReport 上的注入文件列表（与 Gateway report 对齐） */
+/** systemPromptReport 上的注入文件列表 */
 type InjectedWorkspaceFileRef = { path?: string; name?: string };
 
 function readInjectedWorkspaceFilesFromReport(
@@ -354,7 +349,7 @@ export interface OpenClawHealth {
     enabled: boolean;
     lastCalledAt?: number;
   }>;
-  /** Gateway HTTP /health 可能返回（字段名因版本而异） */
+  /** OpenClaw /health 可能返回的字段 */
   pid?: number;
   cpu?: number;
 }
@@ -404,7 +399,6 @@ function inferSystemSentFromTranscript(lines: string[]): boolean {
 @Injectable()
 export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OpenClawService.name);
-  private baseUrl: string;
   /** 解析缓存，避免每次请求都 exec openclaw */
   private pathsCache: { at: number; paths: OpenClawResolvedPaths } | null =
     null;
@@ -443,11 +437,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }> | null = null;
   private static readonly ARCHIVE_RESET_SNAPSHOT_TTL_MS = 10_000;
 
-  constructor(
-    private configService: ConfigService,
-    private gatewayConnection: GatewayConnectionService,
-  ) {
-    this.baseUrl = this.configService.getConfig().openclawGatewayUrl;
+  constructor(private configService: ConfigService) {
     this.sessionStorage = new FileSystemSessionStorage();
   }
 
@@ -504,6 +494,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
         if (this.sessionStorage instanceof FileSystemSessionStorage) {
           const sessions = await this.sessionStorage.loadFromFileSystem();
           await this.sessionStorage.upsertBatch(sessions);
+
           this.logger.debug(
             `OpenClawService: cache refreshed (${sessions.size} sessions)`,
           );
@@ -537,38 +528,6 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 将列表/详情中的 sessionId 解析为 Gateway `chat.send` 使用的 sessionKey（如 `agent:main:main`）。
-   * 找不到时返回 null，调用方可回退 `main`。
-   */
-  async resolveGatewaySessionKeyForEvaluation(
-    sessionId: string,
-  ): Promise<string | null> {
-    try {
-      if (
-        Date.now() - this.sessionStorage.getCacheTimestamp() >
-        OpenClawService.CACHE_TTL_MS
-      ) {
-        await this.refreshCache();
-      }
-      const bare = sessionId.includes('/')
-        ? sessionId.slice(sessionId.lastIndexOf('/') + 1)
-        : sessionId;
-      const map = await this.sessionStorage.getAll();
-      for (const [, data] of map) {
-        if (data.sessionId === sessionId || data.sessionId === bare) {
-          const k = data.sessionKey?.trim();
-          if (k) return k;
-        }
-      }
-      const direct = await this.sessionStorage.get(sessionId);
-      if (direct?.sessionKey?.trim()) return direct.sessionKey.trim();
-    } catch {
-      /* ignore */
-    }
-    return null;
-  }
-
-  /**
    * 解析 OpenClaw 的 stateDir / configPath / workspaceDir（CLI + 环境变量 + 启发式）
    */
   async getResolvedPaths(forceRefresh = false): Promise<OpenClawResolvedPaths> {
@@ -584,9 +543,6 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       explicitStateDir: cfg.openclawStateDir,
       explicitWorkspaceDir: cfg.openclawWorkspaceDir,
       explicitConfigPath: cfg.openclawConfigPath,
-      gatewayHttpUrl: cfg.openclawGatewayUrl,
-      gatewayToken: cfg.openclawGatewayToken,
-      gatewayPassword: cfg.openclawGatewayPassword,
     });
     this.pathsCache = { at: Date.now(), paths };
     if (paths.stateDir) {
@@ -595,9 +551,6 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       );
     } else if (paths.cliHint) {
       this.logger.warn(`OpenClaw path discovery: ${paths.cliHint}`);
-    }
-    if (paths.gatewayHint && paths.source.stateDir !== 'gateway') {
-      this.logger.debug(`Gateway path hint: ${paths.gatewayHint}`);
     }
     return paths;
   }
@@ -664,353 +617,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 检查 OpenClaw Gateway 连接状态
-   * 参考 openclaw 的 control-ui：通过 WebSocket connect 握手验证，包含 token/password 鉴权
-   */
-  async checkConnection(): Promise<{ connected: boolean; error?: string }> {
-    const cfg = this.configService.getConfig();
-    const gatewayUrl = cfg.openclawGatewayUrl?.trim();
-    if (!gatewayUrl) {
-      return { connected: false, error: 'Gateway URL 未配置' };
-    }
-
-    const token = cfg.openclawGatewayToken?.trim();
-    const password = cfg.openclawGatewayPassword?.trim();
-    let result:
-      | {
-          ok: true;
-          stateDir: string;
-          configPath: string | null;
-          workspaceDir: string | null;
-        }
-      | { ok: false; error: string };
-    try {
-      /** 与 HealthModule 的 checkConnection 预算对齐，避免 WS 握手挂起时拖住大量并发 HTTP */
-      result = await this.withTimeout(
-        this.gatewayConnection.fetchRuntimePaths(),
-        3000,
-        'checkConnection timeout',
-      );
-    } catch (error: unknown) {
-      if (
-        error instanceof Error &&
-        error.message === 'checkConnection timeout'
-      ) {
-        return {
-          connected: false,
-          error: 'Gateway 连接检查超时（请确认 Gateway 可达或稍后重试）',
-        };
-      }
-      return {
-        connected: false,
-        error: this.formatGatewayFetchCatchError(error),
-      };
-    }
-
-    if (result.ok) {
-      return { connected: true };
-    }
-
-    const r = this.interpretGatewayFetchFailure(result, token, password);
-    return {
-      connected: r.connected,
-      error: r.gatewayError,
-    };
-  }
-
-  /**
-   * GET /api/setup/status 专用：只发起一次 Gateway connect（与 checkConnection 相同路径），
-   * 再基于 snapshot 做本地路径解析，避免与 getResolvedPaths 并行时双 WebSocket 打满 Gateway/超时 502。
-   */
-  async getSetupStatusSnapshot(): Promise<{
-    connected: boolean;
-    gatewayError?: string;
-    paths: OpenClawResolvedPaths;
-    totalTimeMs: number;
-  }> {
-    const start = Date.now();
-    const cfg = this.configService.getConfig();
-    const gatewayUrl = cfg.openclawGatewayUrl?.trim();
-    if (!gatewayUrl) {
-      const paths = await this.getResolvedPaths();
-      return {
-        connected: false,
-        gatewayError: 'Gateway URL 未配置',
-        paths,
-        totalTimeMs: Date.now() - start,
-      };
-    }
-
-    const token = cfg.openclawGatewayToken?.trim();
-    const password = cfg.openclawGatewayPassword?.trim();
-
-    try {
-      const result = await this.withTimeout(
-        this.gatewayConnection.fetchRuntimePaths(),
-        8000,
-        'checkConnection timeout',
-      );
-      if (result.ok) {
-        const paths = await this.withTimeout(
-          resolveOpenClawPaths({
-            explicitStateDir: cfg.openclawStateDir?.trim() || result.stateDir,
-            explicitWorkspaceDir: cfg.openclawWorkspaceDir,
-            explicitConfigPath: cfg.openclawConfigPath,
-          }),
-          8000,
-          'getResolvedPaths timeout',
-        );
-        this.pathsCache = { at: Date.now(), paths };
-        return {
-          connected: true,
-          paths,
-          totalTimeMs: Date.now() - start,
-        };
-      }
-
-      const { connected, gatewayError } = this.interpretGatewayFetchFailure(
-        result,
-        token,
-        password,
-      );
-      const paths = await this.withTimeout(
-        resolveOpenClawPaths({
-          explicitStateDir: cfg.openclawStateDir,
-          explicitWorkspaceDir: cfg.openclawWorkspaceDir,
-          explicitConfigPath: cfg.openclawConfigPath,
-        }),
-        8000,
-        'getResolvedPaths timeout',
-      );
-      const merged: OpenClawResolvedPaths = {
-        ...paths,
-        gatewayHint: paths.gatewayHint ?? result.error,
-      };
-      this.pathsCache = { at: Date.now(), paths: merged };
-      return {
-        connected,
-        gatewayError,
-        paths: merged,
-        totalTimeMs: Date.now() - start,
-      };
-    } catch (error: unknown) {
-      const gatewayError = this.formatGatewayFetchCatchError(error);
-      const paths = await this.withTimeout(
-        resolveOpenClawPaths({
-          explicitStateDir: cfg.openclawStateDir,
-          explicitWorkspaceDir: cfg.openclawWorkspaceDir,
-          explicitConfigPath: cfg.openclawConfigPath,
-        }),
-        8000,
-        'getResolvedPaths timeout',
-      );
-      const merged: OpenClawResolvedPaths = {
-        ...paths,
-        gatewayHint: paths.gatewayHint ?? gatewayError,
-      };
-      this.pathsCache = { at: Date.now(), paths: merged };
-      return {
-        connected: false,
-        gatewayError,
-        paths: merged,
-        totalTimeMs: Date.now() - start,
-      };
-    }
-  }
-
-  private interpretGatewayFetchFailure(
-    result: GatewayWsPathsResult,
-    token: string | undefined,
-    password: string | undefined,
-  ): { connected: boolean; gatewayError?: string } {
-    if (result.ok) {
-      return { connected: true };
-    }
-    const isDeviceIdentityRequired = result.error
-      ?.toLowerCase()
-      .includes('device identity required');
-    const hasNoAuth = !token && !password;
-    if (isDeviceIdentityRequired && hasNoAuth) {
-      return {
-        connected: false,
-        gatewayError:
-          'Gateway 需要鉴权：请在「设置」中配置 openclawGatewayToken（或 password）并点击「保存」',
-      };
-    }
-    return { connected: false, gatewayError: result.error };
-  }
-
-  private formatGatewayFetchCatchError(error: unknown): string {
-    const errorMessage = (() => {
-      if (error && typeof error === 'object') {
-        const anyError = error as {
-          message?: unknown;
-          code?: unknown;
-          errors?: unknown;
-        };
-        if (typeof anyError.message === 'string' && anyError.message.trim()) {
-          return anyError.message.trim();
-        }
-        if (Array.isArray(anyError.errors) && anyError.errors.length > 0) {
-          const nested = anyError.errors.find(
-            (item) =>
-              !!item &&
-              typeof item === 'object' &&
-              typeof (item as { message?: unknown }).message === 'string' &&
-              ((item as { message: string }).message || '').trim().length > 0,
-          ) as { message?: string } | undefined;
-          if (nested?.message?.trim()) {
-            return nested.message.trim();
-          }
-        }
-        if (typeof anyError.code === 'string' && anyError.code.trim()) {
-          return anyError.code.trim();
-        }
-      }
-      if (error instanceof Error && error.message.trim()) {
-        return error.message.trim();
-      }
-      if (typeof error === 'string' && error.trim()) {
-        return error.trim();
-      }
-      return 'unknown error';
-    })();
-    return `Gateway 连接失败：${errorMessage}`;
-  }
-
-  private async withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    timeoutMsg: string,
-  ): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(timeoutMsg)), timeoutMs),
-      ),
-    ]);
-  }
-
-  /**
-   * 获取 Status 概览（version、status、usage），用于仪表盘展示
-   */
-  async getStatusOverview(): Promise<StatusOverviewResult | null> {
-    const cfg = this.configService.getConfig();
-    const gatewayUrl = cfg.openclawGatewayUrl?.trim();
-    if (!gatewayUrl) {
-      return null;
-    }
-    const seq = await this.gatewayConnection.runSequence([
-      { method: 'health', methodParams: {} },
-    ]);
-    if (seq.ok) {
-      const overview = buildStatusOverviewFromHealth(
-        seq.payloads[0],
-        seq.gatewayVersion,
-      );
-      const dir = await this.stateDir();
-      return mergeGatewayOverviewFromSessionsStore(overview, dir || null);
-    }
-    this.logger.debug(`Status overview failed: ${seq.error}`);
-    return null;
-  }
-
-  /**
-   * 在长驻 Gateway WebSocket 上拉取 health 映射的概览 + 尽力 logs.tail。
-   * 使用 `health` 替代 `status`/`usage.status`，避免无设备身份 backend 连接报 missing scope: operator.read。
-   * `logs.tail` 仍可能因 scope 失败，此时返回空日志并打 debug。
-   */
-  async getDashboardGatewayBundle(limit: number): Promise<
-    | {
-        ok: true;
-        statusOverview: StatusOverviewResult;
-        logsTail: { cursor?: number; lines: string[] };
-      }
-    | { ok: false; error: string }
-  > {
-    const cfg = this.configService.getConfig();
-    const gatewayUrl = cfg.openclawGatewayUrl?.trim();
-    if (!gatewayUrl) {
-      return { ok: false, error: 'Gateway URL 未配置' };
-    }
-
-    const seq = await this.gatewayConnection.runSequence([
-      { method: 'health', methodParams: {} },
-    ]);
-    if (!seq.ok) {
-      return { ok: false, error: seq.error };
-    }
-
-    let statusOverview = buildStatusOverviewFromHealth(
-      seq.payloads[0],
-      seq.gatewayVersion,
-    );
-    const dir = await this.stateDir();
-    statusOverview = mergeGatewayOverviewFromSessionsStore(
-      statusOverview,
-      dir || null,
-    );
-
-    const tailParams = {
-      limit,
-      maxBytes: Math.max(250_000, limit * 4_000),
-    };
-    const logsRes = await this.gatewayConnection.request<{
-      cursor?: number;
-      lines?: unknown;
-    }>('logs.tail', tailParams, 20_000);
-
-    if (!logsRes.ok) {
-      this.logger.debug(
-        `Gateway logs.tail skipped (scope or other): ${logsRes.error}`,
-      );
-      return {
-        ok: true,
-        statusOverview,
-        logsTail: { lines: [] },
-      };
-    }
-
-    const tail = logsRes.payload ?? {};
-    const rawLines = Array.isArray(tail.lines)
-      ? tail.lines.filter(
-          (l): l is string => typeof l === 'string' && l.trim().length > 0,
-        )
-      : [];
-
-    return {
-      ok: true,
-      statusOverview,
-      logsTail: {
-        cursor: typeof tail.cursor === 'number' ? tail.cursor : undefined,
-        lines: rawLines,
-      },
-    };
-  }
-
-  /**
-   * 获取 Gateway 健康状态
-   */
-  async getHealth(): Promise<OpenClawHealth> {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(`${this.baseUrl}/health`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      return response.json();
-    } catch (error) {
-      this.logger.error('Failed to get health:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 从本地 sessions.json 读取 systemPromptReport（优先于 Gateway RPC，无需网络）
+   * 从本地 sessions.json 读取 systemPromptReport（无需网络）
    * 扫描 agents/{agent}/sessions/sessions.json，优先 agent:main:main，其次按 updatedAt 取最新
    */
   private loadSystemPromptFromSessionsJson(dir: string): {
@@ -1153,7 +760,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 从 sessions.json 读取 session 的 totalTokens/model/contextTokens 与 storeKey。
-   * OpenClaw 模型为 sessionKey -> SessionEntry；按 sessionId 反查时与 Gateway 一致使用首个匹配项（见 openclaw resolveSessionKeyForRequest）。
+   * OpenClaw 模型为 sessionKey -> SessionEntry；按 sessionId 反查时使用首个匹配项。
    */
   private loadStoreEntryForSession(
     dir: string,
@@ -1284,7 +891,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
    * 解析会话 transcript .jsonl 绝对路径（与 listSessions / 会话详情一致，支持 agents/.../sessions 布局）。
    * 供评估器等需直接读文件的模块使用。
    *
-   * Gateway 的 sessionKey（如 agent:main:main）与磁盘文件名（UUID）不一致时，findSessionFile 无法直接命中；
+   * sessionKey（如 agent:main:main）与磁盘文件名（UUID）不一致时，findSessionFile 无法直接命中；
    * 此时从会话扫描缓存（sessions.json storeKey → 文件）反查绝对路径。
    */
   async resolveSessionJsonlPath(sessionId: string): Promise<string | null> {
@@ -2181,7 +1788,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     const workspaceDir = paths.workspaceDir?.trim();
     if (!workspaceDir) {
       throw new BadRequestException(
-        '未解析到 workspace 目录，请设置 OPENCLAW_WORKSPACE_DIR 或 Gateway/配置中的工作区路径。',
+        '未解析到 workspace 目录，请设置 OPENCLAW_WORKSPACE_DIR 或配置中的工作区路径。',
       );
     }
 
@@ -2446,7 +2053,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 使用 Gateway 侧 systemPromptReport（sessions.usage + includeContextWeight），
+   * 从本地 sessions.json 读取 systemPromptReport，
    * 结合本地 workspace/skills 内容，离线重建一个与 openclaw 拼装结构尽量一致的 system prompt 正文。
    * 该接口不会读取 transcript，也不会调用会触发模型输出的"system 嗅探"链路。
    */
@@ -2496,7 +2103,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
     let sessionMeta: Record<string, unknown> | undefined;
     let sessionsJsonEntry: Record<string, unknown> | undefined;
 
-    // 1. 优先从本地 sessions.json 读取（无需 Gateway、更快）
+    // 1. 从本地 sessions.json 读取
     const dir = await this.stateDir();
     if (dir) {
       const local = this.loadSystemPromptFromSessionsJson(dir);
@@ -2548,91 +2155,12 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // 2. 若无本地数据，回退到 Gateway RPC
-    if (!report) {
-      const cfg = this.configService.getConfig();
-      const gw = cfg.openclawGatewayUrl?.trim();
-      if (!gw) {
-        return {
-          ...empty,
-          error:
-            '未找到 systemPromptReport。请配置 OPENCLAW_STATE_DIR 以读取本地 sessions.json，或配置 openclawGatewayUrl 通过 Gateway 获取。至少成功运行过一次 Agent 后才有数据。',
-        };
-      }
-
-      const end = new Date();
-      const start = new Date(end.getTime() - 120 * 86400000);
-      const dr = {
-        startDate: start.toISOString().slice(0, 10),
-        endDate: end.toISOString().slice(0, 10),
-        mode: 'utc' as const,
-      };
-
-      type UsageSess = {
-        key: string;
-        sessionId?: string;
-        agentId?: string;
-        updatedAt?: number;
-        contextWeight?: Record<string, unknown> | null;
-      };
-
-      const rpc = async (extra: Record<string, unknown>) =>
-        this.gatewayConnection.request<{ sessions?: UsageSess[] }>(
-          'sessions.usage',
-          {
-            ...dr,
-            limit: 100,
-            includeContextWeight: true,
-            ...extra,
-          },
-          35_000,
-        );
-
-      const pickReportFromSessions = (sessions: UsageSess[] | undefined) => {
-        if (!sessions?.length) return null;
-        const withCw = sessions.filter((s) => s.contextWeight != null);
-        if (!withCw.length) return null;
-        return (
-          withCw.find((s) => s.key === 'agent:main:main') ||
-          [...withCw].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]
-        );
-      };
-
-      let usageChosen: UsageSess | null = null;
-      const rMain = await rpc({ key: 'agent:main:main', limit: 8 });
-      if (rMain.ok) {
-        usageChosen = pickReportFromSessions(rMain.payload?.sessions) || null;
-      }
-      if (!usageChosen) {
-        const r = await rpc({ limit: 100 });
-        if (!r.ok) {
-          return {
-            ...empty,
-            error:
-              r.error || 'sessions.usage RPC 失败（请检查 Gateway 与 Token）',
-          };
-        }
-        usageChosen = pickReportFromSessions(r.payload?.sessions) || null;
-      }
-
-      if (!usageChosen?.contextWeight) {
-        return {
-          ...empty,
-          error:
-            '未找到 systemPromptReport。请在本机至少成功运行过一次 Agent（生成会话后 Gateway 会写入 store），并确保 Gateway 版本支持 sessions.usage.includeContextWeight。',
-        };
-      }
-
-      chosen = {
-        key: usageChosen.key,
-        sessionId: usageChosen.sessionId,
-        agentId: usageChosen.agentId,
-      };
-      report = usageChosen.contextWeight;
-    }
-
     if (!report || !chosen) {
-      return { ...empty, error: '未找到 systemPromptReport' };
+      return {
+        ...empty,
+        error:
+          '未找到 systemPromptReport。请确保已运行过 Agent 会话（ sessions.json 中才有 systemPromptReport 数据）。',
+      };
     }
     const breakdown = buildBreakdownFromReport(report);
     const workspaceFiles = (
@@ -2780,9 +2308,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       );
     }
     if (!hasToolsList) {
-      recommendations.push(
-        '未检测到 tools list，建议确认 Gateway 是否正确注入 tools',
-      );
+      recommendations.push('未检测到 tools list，建议检查工具配置是否正确');
     }
     if (!hasProjectContext) {
       recommendations.push(

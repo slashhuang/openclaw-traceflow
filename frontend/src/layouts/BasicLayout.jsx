@@ -12,16 +12,19 @@ import {
   DatabaseOutlined,
   ThunderboltOutlined,
   CodeOutlined,
+  WifiOutlined,
+  DisconnectOutlined,
 } from '@ant-design/icons';
-import { Button, Dropdown, Space, Tag, Tooltip, theme } from 'antd';
+import { Button, Dropdown, Space, Tag, Tooltip, theme, Popover } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import { useLocaleTheme } from '../providers/LocaleThemeProvider';
-import { healthApi } from '../api';
+import { healthApi, watchSessionApi } from '../api';
 import { SETTINGS_GATEWAY_PATH } from '../constants/settingsPaths';
 import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
 
 const HEADER_HEALTH_POLL_INTERVAL_MS = 10000;
+const WATCH_SESSION_POLL_INTERVAL_MS = 5000;
 
 export default function BasicLayout() {
   const location = useLocation();
@@ -30,7 +33,29 @@ export default function BasicLayout() {
   const { token } = theme.useToken();
   const { locale, setLocale, themeMode, setThemeMode, isDark } = useLocaleTheme();
   const [health, setHealth] = useState(null);
+  const [watchStatus, setWatchStatus] = useState(null);
   const healthFetchInFlightRef = useRef(false);
+  const watchFetchInFlightRef = useRef(false);
+
+  // 获取 Session Watch 状态
+  useEffect(() => {
+    const fetchWatchStatus = async () => {
+      if (watchFetchInFlightRef.current) return;
+      watchFetchInFlightRef.current = true;
+      try {
+        const data = await watchSessionApi.getStatus();
+        setWatchStatus(data);
+      } catch {
+        setWatchStatus(null);
+      } finally {
+        watchFetchInFlightRef.current = false;
+      }
+    };
+    fetchWatchStatus();
+    const t = setInterval(fetchWatchStatus, WATCH_SESSION_POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [intl]);
+
   useEffect(() => {
     const fetchHealth = async () => {
       if (healthFetchInFlightRef.current) return;
@@ -104,7 +129,7 @@ export default function BasicLayout() {
           (health?.status || health?.openclawConnected != null) && (
             <Tooltip
               key="health-poll"
-              overlayStyle={{ maxWidth: 420 }}
+              styles={{ body: { maxWidth: 420 } }}
               title={
                 health?.openclawConnected === false ? (
                   <div>
@@ -175,6 +200,82 @@ export default function BasicLayout() {
                 )}
               </Space>
             </Tooltip>
+          ),
+          // Watch Session Change 状态指示器
+          watchStatus && (
+            <Popover
+              key="watch-session"
+              content={
+                <div style={{ maxWidth: 300 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                    {intl.formatMessage({ id: 'watchSession.title', defaultMessage: '会话监听状态' })}
+                  </div>
+                  {watchStatus.activeSessions > 0 ? (
+                    <div>
+                      <div style={{ marginBottom: 8 }}>
+                        {intl.formatMessage(
+                          { id: 'watchSession.activeCount', defaultMessage: '活跃会话：{count}' },
+                          { count: watchStatus.activeSessions },
+                        )}
+                      </div>
+                      <div style={{ maxHeight: 200, overflow: 'auto' }}>
+                        {watchStatus.sessions.slice(0, 5).map((s) => (
+                          <div
+                            key={s.sessionId}
+                            style={{
+                              padding: '4px 0',
+                              borderBottom: '1px solid #f0f0f0',
+                              fontSize: 12,
+                            }}
+                          >
+                            <div style={{ fontWeight: 500 }}>{s.user}</div>
+                            <div style={{ opacity: 0.7, fontSize: 11 }}>
+                              {s.messageCount} msgs · {new Date(s.lastActivity).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        ))}
+                        {watchStatus.sessions.length > 5 && (
+                          <div style={{ padding: '4px 0', opacity: 0.7, fontSize: 12 }}>
+                            + {watchStatus.sessions.length - 5} more...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ opacity: 0.7 }}>
+                      {intl.formatMessage({ id: 'watchSession.noActive', defaultMessage: '暂无活跃会话' })}
+                    </div>
+                  )}
+                </div>
+              }
+              title={
+                <Space>
+                  {watchStatus.watching ? (
+                    <WifiOutlined style={{ color: '#52c41a' }} />
+                  ) : (
+                    <DisconnectOutlined style={{ color: '#999' }} />
+                  )}
+                  {watchStatus.watching
+                    ? intl.formatMessage({ id: 'watchSession.watching', defaultMessage: '监听中' })
+                    : intl.formatMessage({ id: 'watchSession.notWatching', defaultMessage: '未监听' })}
+                </Space>
+              }
+              trigger="hover"
+            >
+              <Tag
+                color={watchStatus.watching ? 'green' : 'default'}
+                style={{ cursor: 'pointer' }}
+              >
+                {watchStatus.watching ? (
+                  <WifiOutlined />
+                ) : (
+                  <DisconnectOutlined />
+                )}
+                {watchStatus.watching
+                  ? intl.formatMessage({ id: 'watchSession.watching', defaultMessage: '监听中' })
+                  : intl.formatMessage({ id: 'watchSession.notWatching', defaultMessage: '未监听' })}
+              </Tag>
+            </Popover>
           ),
           <a
             key="github"

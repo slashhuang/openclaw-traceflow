@@ -1,16 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { io } from 'socket.io-client';
-import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col, Alert } from 'antd';
+import { Card, Select, Button, Space, Typography, Spin, theme, message, Input, Row, Col, Tabs, Tooltip, Tag } from 'antd';
 import { useIntl } from 'react-intl';
-import { logsApi, healthApi } from '../api';
-import SectionScopeHint from '../components/SectionScopeHint';
-import { SETTINGS_GATEWAY_PATH } from '../constants/settingsPaths';
+import { FileTextOutlined, MessageOutlined } from '@ant-design/icons';
+import { logsApi } from '../api';
 
 const { Search } = Input;
 
 // 日志面板组件
-function LogPanel({ title, logs, loading, filterLevel, searchKeyword, onFilterChange, onSearch, onRefresh, autoRefresh, lastRefreshTime, socketConnected, color }) {
+function LogPanel({ title, logs, loading, filterLevel, searchKeyword, onFilterChange, onSearch, onRefresh, autoRefresh, lastRefreshTime, color, dataSource }) {
   const intl = useIntl();
   const { token } = theme.useToken();
   const logsEndRef = useRef(null);
@@ -74,14 +72,25 @@ function LogPanel({ title, logs, loading, filterLevel, searchKeyword, onFilterCh
           <Typography.Text type="secondary">暂无日志</Typography.Text>
         ) : (
           filtered.map((log, i) => (
-            <div key={i} style={{ marginBottom: 4, wordBreak: 'break-all', borderBottom: '1px solid ' + token.colorSplit, paddingBottom: 2 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 10 }}>
-                {new Date(log.timestamp).toLocaleTimeString(intl.locale, { hour12: false })}
-              </Typography.Text>{' '}
-              <span style={{ color: levelColor(log.level), fontWeight: 600, fontSize: 10 }}>
-                [{String(log.level).toUpperCase()}]
-              </span>{' '}
-              <span style={{ color: token.colorText }}>{fmt(log.content)}</span>
+            <div key={i} style={{ marginBottom: 4, wordBreak: 'break-all', borderBottom: '1px solid ' + token.colorSplit, paddingBottom: 2, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+              <Tooltip title={`数据源：${dataSource.path}`} placement="topLeft">
+                <Tag
+                  icon={dataSource.icon}
+                  color={dataSource.color}
+                  style={{ fontSize: 10, flexShrink: 0, cursor: 'help' }}
+                >
+                  {dataSource.label}
+                </Tag>
+              </Tooltip>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 10 }}>
+                  {new Date(log.timestamp).toLocaleTimeString(intl.locale, { hour12: false })}
+                </Typography.Text>{' '}
+                <span style={{ color: levelColor(log.level), fontWeight: 600, fontSize: 10 }}>
+                  [{String(log.level).toUpperCase()}]
+                </span>{' '}
+                <span style={{ color: token.colorText }}>{fmt(log.content)}</span>
+              </div>
             </div>
           ))
         )}
@@ -100,67 +109,22 @@ export default function Logs() {
   const intl = useIntl();
   const navigate = useNavigate();
   const { token } = theme.useToken();
-  /** null：健康检查中；true/false：是否已连接 Gateway（PRD §2.2：Gateway 日志按需展示） */
-  const [gatewayConnected, setGatewayConnected] = useState(null);
-  const gatewayOkRef = useRef(null);
-
-  // Gateway 日志状态
-  const [gatewayLogs, setGatewayLogs] = useState([]);
-  const [gatewayLoading, setGatewayLoading] = useState(true);
   
   // TraceFlow 日志状态
   const [traceflowLogs, setTraceflowLogs] = useState([]);
   const [traceflowLoading, setTraceflowLoading] = useState(true);
   
+  // IM 推送日志状态
+  const [imLogs, setImLogs] = useState([]);
+  const [imLoading, setImLoading] = useState(false);
+
   // 共享状态
   const [filterLevel, setFilterLevel] = useState('all');
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [socketConnected, setSocketConnected] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastRefreshTime, setLastRefreshTime] = useState(null);
-  
-  const socketRef = useRef(null);
+
   const refreshTimerRef = useRef(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    healthApi
-      .getHealth()
-      .then((h) => {
-        if (cancelled) return;
-        const ok = h ? !!h.openclawConnected : false;
-        gatewayOkRef.current = ok;
-        setGatewayConnected(ok);
-        if (!ok) setGatewayLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        gatewayOkRef.current = false;
-        setGatewayConnected(false);
-        setGatewayLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // 加载 Gateway 日志
-  const loadGatewayLogs = async (showLoading = false) => {
-    try {
-      if (showLoading) setGatewayLoading(true);
-      const data = await logsApi.getGatewayLogs(200);
-      if (!Array.isArray(data)) {
-        return;
-      }
-      // 首次加载信任服务端；后台定时刷新若短暂失败，避免用空数组冲掉 Socket 已累积的行
-      setGatewayLogs((prev) => (data.length > 0 || showLoading ? data : prev));
-      setLastRefreshTime(new Date());
-    } catch (e) {
-      console.error('Failed to load gateway logs:', e);
-    } finally {
-      if (showLoading) setGatewayLoading(false);
-    }
-  };
 
   // 加载 TraceFlow 日志
   const loadTraceflowLogs = async (showLoading = false) => {
@@ -175,44 +139,31 @@ export default function Logs() {
     }
   };
 
-  const loadAllLogs = async (showLoading = false) => {
-    await loadTraceflowLogs(showLoading);
-    if (gatewayOkRef.current === false) {
-      if (showLoading) setGatewayLoading(false);
-      return;
+  // 加载 IM 推送日志
+  const loadImLogs = async (showLoading = false) => {
+    try {
+      if (showLoading) setImLoading(true);
+      const data = await logsApi.getImPushLogs(200);
+      setImLogs(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to load IM logs:', e);
+    } finally {
+      if (showLoading) setImLoading(false);
     }
-    await loadGatewayLogs(showLoading);
   };
 
   useEffect(() => {
-    loadAllLogs(true);
-
-    socketRef.current = io(window.location.origin, {
-      path: '/socket.io',
-      transports: ['websocket', 'polling'],
-    });
-    socketRef.current.on('connect', () => {
-      setSocketConnected(true);
-      socketRef.current.emit('logs:subscribe');
-    });
-    socketRef.current.on('disconnect', () => setSocketConnected(false));
-    socketRef.current.on('logs:new', (log) => {
-      if (log.source === 'traceflow') {
-        setTraceflowLogs((prev) => [...prev, log].slice(-500));
-      } else if (gatewayOkRef.current !== false) {
-        setGatewayLogs((prev) => [...prev, log].slice(-500));
-      }
-    });
+    loadTraceflowLogs(true);
+    loadImLogs(true);
 
     refreshTimerRef.current = setInterval(() => {
       if (autoRefresh) {
         loadTraceflowLogs(false);
-        if (gatewayOkRef.current !== false) loadGatewayLogs(false);
+        loadImLogs(false);
       }
     }, 10000);
 
     return () => {
-      socketRef.current?.disconnect();
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
       }
@@ -244,13 +195,10 @@ export default function Logs() {
           <Typography.Title level={4} style={{ margin: 0 }}>
             {intl.formatMessage({ id: 'logs.title' })}
           </Typography.Title>
-          <SectionScopeHint intl={intl} messageId="logs.pageScopeDesc" />
         </div>
         <Space wrap>
-          <Typography.Text type={socketConnected ? 'success' : 'secondary'}>
-            {socketConnected
-              ? intl.formatMessage({ id: 'logs.connected' })
-              : intl.formatMessage({ id: 'logs.disconnected' })}
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            自动刷新：{autoRefresh ? '开启' : '关闭'}
           </Typography.Text>
           {lastRefreshTime && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -281,8 +229,8 @@ export default function Logs() {
           <Button
             danger
             onClick={() => {
-              setGatewayLogs([]);
               setTraceflowLogs([]);
+              setImLogs([]);
               message.success('日志已清空');
             }}
           >
@@ -291,59 +239,68 @@ export default function Logs() {
         </Space>
       </div>
 
-      <Row gutter={16}>
-        {/* 左侧：Gateway 日志（依赖 Gateway 在线；未连接时引导至设置） */}
-        <Col span={12}>
-          {gatewayConnected === false ? (
-            <Card size="small" title={<span style={{ color: token.colorPrimary }}>🔵 Gateway 日志</span>}>
-              <Alert
-                type="warning"
-                showIcon
-                message={intl.formatMessage({ id: 'logs.gatewayOfflineTitle' })}
-                description={intl.formatMessage({ id: 'logs.gatewayOfflineDesc' })}
-                action={
-                  <Button type="primary" size="small" onClick={() => navigate(SETTINGS_GATEWAY_PATH)}>
-                    {intl.formatMessage({ id: 'gateway.banner.settings' })}
-                  </Button>
-                }
-              />
-            </Card>
-          ) : (
-            <LogPanel
-              title={<span style={{ color: token.colorPrimary }}>🔵 Gateway 日志</span>}
-              logs={gatewayLogs}
-              loading={gatewayConnected === null || gatewayLoading}
-              filterLevel={filterLevel}
-              searchKeyword={searchKeyword}
-              onFilterChange={setFilterLevel}
-              onSearch={handleSearch}
-              onRefresh={() => loadGatewayLogs(true)}
-              autoRefresh={autoRefresh}
-              lastRefreshTime={lastRefreshTime}
-              socketConnected={socketConnected}
-              color={token.colorPrimary}
-            />
-          )}
-        </Col>
-
-        {/* 右侧：TraceFlow 日志 */}
-        <Col span={12}>
-          <LogPanel
-            title={<span style={{ color: token.colorSuccess }}>🟢 TraceFlow 日志</span>}
-            logs={traceflowLogs}
-            loading={traceflowLoading}
-            filterLevel={filterLevel}
-            searchKeyword={searchKeyword}
-            onFilterChange={setFilterLevel}
-            onSearch={handleSearch}
-            onRefresh={() => loadTraceflowLogs(true)}
-            autoRefresh={autoRefresh}
-            lastRefreshTime={lastRefreshTime}
-            socketConnected={socketConnected}
-            color={token.colorSuccess}
-          />
-        </Col>
-      </Row>
+      <Tabs
+        items={[
+          {
+            key: 'traceflow',
+            label: <span style={{ color: token.colorSuccess }}>🟢 TraceFlow 日志</span>,
+            children: (
+              <Row gutter={16}>
+                <Col span={24}>
+                  <LogPanel
+                    title={<span style={{ color: token.colorSuccess }}>TraceFlow 系统日志</span>}
+                    logs={traceflowLogs}
+                    loading={traceflowLoading}
+                    filterLevel={filterLevel}
+                    searchKeyword={searchKeyword}
+                    onFilterChange={setFilterLevel}
+                    onSearch={handleSearch}
+                    onRefresh={() => loadTraceflowLogs(true)}
+                    autoRefresh={autoRefresh}
+                    lastRefreshTime={lastRefreshTime}
+                    color={token.colorSuccess}
+                    dataSource={{
+                      label: 'TraceFlow',
+                      color: 'green',
+                      icon: <FileTextOutlined />,
+                      path: 'data/traceflow.log',
+                    }}
+                  />
+                </Col>
+              </Row>
+            ),
+          },
+          {
+            key: 'im',
+            label: <span style={{ color: token.colorPrimary }}>🔵 IM 推送日志</span>,
+            children: (
+              <Row gutter={16}>
+                <Col span={24}>
+                  <LogPanel
+                    title={<span style={{ color: token.colorPrimary }}>IM 推送日志（飞书/钉钉/企业微信）</span>}
+                    logs={imLogs}
+                    loading={imLoading}
+                    filterLevel={filterLevel}
+                    searchKeyword={searchKeyword}
+                    onFilterChange={setFilterLevel}
+                    onSearch={handleSearch}
+                    onRefresh={() => loadImLogs(true)}
+                    autoRefresh={autoRefresh}
+                    lastRefreshTime={lastRefreshTime}
+                    color={token.colorPrimary}
+                    dataSource={{
+                      label: 'IM Push',
+                      color: 'blue',
+                      icon: <MessageOutlined />,
+                      path: '内存存储 (LogsService.imPushLogs)',
+                    }}
+                  />
+                </Col>
+              </Row>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

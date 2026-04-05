@@ -9,7 +9,6 @@
 export type PathSource =
   | 'explicit'
   | 'env'
-  | 'gateway'
   | 'inferred'
   | 'fallback'
   | 'config-file'
@@ -45,31 +44,6 @@ export interface OpenClawConfig {
 }
 
 /**
- * Gateway 连接状态
- */
-export type GatewayConnectionStatus = 'connected' | 'disconnected' | 'error';
-
-/**
- * Gateway 配置
- */
-export interface GatewayConfig {
-  /** Gateway 是否启用（可选，非阻断） */
-  enabled: boolean;
-  /** Gateway URL */
-  url?: string;
-  /** Gateway 鉴权 token（加密存储） */
-  token?: string;
-  /** Gateway 鉴权 password（加密存储） */
-  password?: string;
-  /** 最后连接时间 */
-  lastConnected?: string;
-  /** 连接状态 */
-  connectionStatus?: GatewayConnectionStatus;
-  /** 连接错误信息 */
-  connectionError?: string;
-}
-
-/**
  * 访问模式
  */
 export type AccessMode = 'local-only' | 'token' | 'none';
@@ -96,8 +70,6 @@ export interface TraceFlowConfig {
 export interface OnBoardingSteps {
   /** 路径配置完成 */
   pathConfiguration: boolean;
-  /** Gateway 设置完成（可选） */
-  gatewaySetup: boolean;
   /** 访问控制配置完成 */
   accessConfiguration: boolean;
 }
@@ -123,8 +95,6 @@ export interface OnboardingConfig {
   user?: UserInfo;
   /** OpenClaw 配置 */
   openclaw: OpenClawConfig;
-  /** Gateway 配置 */
-  gateway: GatewayConfig;
   /** TraceFlow 配置 */
   traceflow: TraceFlowConfig;
   /** OnBoarding 步骤状态 */
@@ -156,7 +126,6 @@ export interface UIPreferences {
  * 功能偏好设置
  */
 export interface FeaturePreferences {
-  autoConnectGateway: boolean;
   enableWorkspaceWrite: boolean;
   tokenEstimateBytesDivisor: number;
 }

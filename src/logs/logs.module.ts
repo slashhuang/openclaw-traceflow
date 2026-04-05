@@ -1,14 +1,12 @@
 import { Module } from '@nestjs/common';
 import { LogsController } from './logs.controller';
-import { LogsGateway } from './logs.gateway';
 import { LogsService } from './logs.service';
 import { ConfigModule } from '../config/config.module';
-import { OpenClawModule } from '../openclaw/openclaw.module';
 
 @Module({
   controllers: [LogsController],
-  providers: [LogsService, LogsGateway],
+  providers: [LogsService],
   exports: [LogsService],
-  imports: [ConfigModule, OpenClawModule],
+  imports: [ConfigModule], // 移除 EventEmitterModule，AppModule 已统一配置
 })
 export class LogsModule {}

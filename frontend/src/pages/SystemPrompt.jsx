@@ -259,6 +259,14 @@ function BootstrapFilePreviewPanel({
 
   const saveEdit = async () => {
     if (!fileBasename) return;
+    
+    // 检查内容是否有变化
+    const originalContent = selectedBootstrapRow?.content?.text || '';
+    if (draft === originalContent) {
+      message.info(intl.formatMessage({ id: 'systemPrompt.bootstrap.noChanges' }));
+      return;
+    }
+    
     setSaving(true);
     try {
       const body = {
@@ -275,8 +283,11 @@ function BootstrapFilePreviewPanel({
     } catch (e) {
       const status = e?.response?.status;
       const msg = extractApiErrorMessage(e, intl.formatMessage({ id: 'systemPrompt.bootstrap.saveFail' }));
-      if (status === 409) {
-        message.warning(msg);
+      if (status === 409 || msg?.includes('文件已被修改')) {
+        message.warning({
+          content: intl.formatMessage({ id: 'systemPrompt.bootstrap.conflict' }),
+          duration: 3,
+        });
       } else {
         message.error(msg);
       }
@@ -284,6 +295,21 @@ function BootstrapFilePreviewPanel({
       setSaving(false);
     }
   };
+
+  // 键盘快捷键保存（Ctrl/Cmd + S）
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && editing && !saving) {
+        e.preventDefault();
+        saveEdit();
+      }
+    };
+
+    if (editing) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [editing, saving, saveEdit]);
 
   const draftOverLimit = editing && draft.length > DEFAULT_BOOTSTRAP_MAX_CHARS;
 

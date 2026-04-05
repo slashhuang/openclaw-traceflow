@@ -206,9 +206,7 @@ export class SessionsService {
         ...(s.transcriptFileSizeBytes != null
           ? { transcriptFileSizeBytes: s.transcriptFileSizeBytes }
           : {}),
-        ...(estimatedTokensFromLog != null
-          ? { estimatedTokensFromLog }
-          : {}),
+        ...(estimatedTokensFromLog != null ? { estimatedTokensFromLog } : {}),
         ...(s.messageCountCapped
           ? {
               messageCountCapped: true,
@@ -235,7 +233,9 @@ export class SessionsService {
   > {
     const [all, archivedByAgent] = await Promise.all([
       this.listSessions(),
-      this.openclawService.getArchivedUniqueSessionCountByAgent().catch(() => ({})),
+      this.openclawService
+        .getArchivedUniqueSessionCountByAgent()
+        .catch(() => ({})),
     ]);
     const map = new Map<
       string,
@@ -260,10 +260,7 @@ export class SessionsService {
       cur.last = Math.max(cur.last, s.lastActive);
       map.set(aid, cur);
     }
-    const agentIds = new Set([
-      ...map.keys(),
-      ...Object.keys(archivedByAgent),
-    ]);
+    const agentIds = new Set([...map.keys(), ...Object.keys(archivedByAgent)]);
     const rows: Array<{
       agentId: string;
       sessionCount: number;
@@ -339,7 +336,8 @@ export class SessionsService {
     const all = await this.listSessions();
     let filtered: Session[] = all;
     if (filter === 'archived') {
-      const archivedSessions = await this.openclawService.listArchivedSessions();
+      const archivedSessions =
+        await this.openclawService.listArchivedSessions();
       filtered = archivedSessions.map((row) => {
         const s = row as unknown as Session;
         const ck = inferSessionChatKind(s.sessionKey, s.sessionId);
@@ -350,7 +348,9 @@ export class SessionsService {
       });
     } else if (filter === 'stale_index') {
       // 过期索引：tokenUsageMeta.totalTokensFresh === false 的会话
-      filtered = all.filter((s) => s.tokenUsageMeta?.totalTokensFresh === false);
+      filtered = all.filter(
+        (s) => s.tokenUsageMeta?.totalTokensFresh === false,
+      );
     } else if (filter !== 'all') {
       filtered = all.filter((s) => s.status === filter);
     }

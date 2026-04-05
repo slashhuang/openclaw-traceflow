@@ -2,100 +2,55 @@
  * System Prompt 评估 API（与 api/sessions/:id/evaluations 对称）
  *
  * @see PRD: docs/PRD-openclaw-audit-system.md Section 11.2.5
+ *
+ * 注意：评估功能需要 Gateway 支持 LLM 调用，当前版本已移除 Gateway，
+ * 因此评估端点将返回"功能不可用"错误。
  */
 
 import {
   Controller,
   Get,
+  Param,
   Post,
   Delete,
-  Param,
-  Body,
   HttpStatus,
-  Res,
 } from '@nestjs/common';
-import type { Response } from 'express';
 import { EvaluationStore } from '../stores/evaluation-store';
-import { PromptEvaluator } from './prompt-evaluator';
-import { evaluationTaskQueue } from '../utils/async-task-queue';
 import { coalesceLatestEvaluation } from '../utils/evaluation-latest-coalesce';
-import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
-import { OpenClawService } from '../openclaw/openclaw.service';
 import { ConfigService } from '../config/config.service';
-import { EvaluationPromptConfigService } from './evaluation-prompt-config.service';
 
 @Controller('api/prompts')
 export class PromptEvaluationController {
-  private readonly promptEvaluator: PromptEvaluator;
+  private readonly store: EvaluationStore;
 
-  constructor(
-    private readonly gatewayConnection: GatewayConnectionService,
-    private readonly openclawService: OpenClawService,
-    configService: ConfigService,
-    evaluationPromptConfig: EvaluationPromptConfigService,
-  ) {
+  constructor(configService: ConfigService) {
     const dataDir = configService.getConfig().dataDir;
-    const store = new EvaluationStore(dataDir);
-    this.promptEvaluator = new PromptEvaluator(
-      store,
-      gatewayConnection,
-      openclawService,
-      evaluationPromptConfig,
-    );
+    this.store = new EvaluationStore(dataDir);
   }
 
   /**
-   * `body.wait === true`：单次 HTTP 内 await 完成并返回 `data`（不轮询 GET latest）。
+   * 创建 Prompt 评估 - 功能已禁用
    */
   @Post(':promptId/evaluations')
-  async createPromptEvaluation(
-    @Param('promptId') promptId: string,
-    @Body() body: { userId?: string; wait?: boolean },
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const userId = body.userId || 'anonymous';
-    if (body.wait) {
-      try {
-        const evaluation = await evaluationTaskQueue.add(() =>
-          this.promptEvaluator.evaluate(promptId, userId),
-        );
-        res.status(HttpStatus.OK);
-        return { success: true, data: evaluation };
-      } catch (error) {
-        res.status(HttpStatus.OK);
-        return { success: false, error: (error as Error).message };
-      }
-    }
-    try {
-      evaluationTaskQueue.add(() =>
-        this.promptEvaluator.evaluate(promptId, userId),
-      );
-      res.status(HttpStatus.ACCEPTED);
-      return {
-        success: true,
-        message: '评估任务已提交',
-        status: 'pending',
-      };
-    } catch (error) {
-      res.status(HttpStatus.OK);
-      return { success: false, error: (error as Error).message };
-    }
+  async createPromptEvaluation() {
+    return {
+      success: false,
+      error: '评估功能需要 Gateway 支持，当前版本已禁用',
+      code: 'GATEWAY_NOT_AVAILABLE',
+    };
   }
 
+  // 获取 Prompt 评估历史
   @Get(':promptId/evaluations')
   async getPromptEvaluations(@Param('promptId') promptId: string) {
     try {
-      const evaluations =
-        await this.promptEvaluator.getEvaluationHistory(promptId);
+      const evaluations = await this.store.listEvaluations('prompt', promptId);
       return {
         success: true,
         data: evaluations,
       };
     } catch (error) {
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
+      return { success: false, error: (error as Error).message };
     }
   }
 
@@ -104,8 +59,18 @@ export class PromptEvaluationController {
   async getLatestPromptEvaluation(@Param('promptId') promptId: string) {
     return coalesceLatestEvaluation(`prompt:${promptId}`, async () => {
       try {
-        const evaluation =
-          await this.promptEvaluator.getLatestEvaluation(promptId);
+        const index = await this.store.readIndex('prompt', promptId);
+        if (!index || !index.latestEvaluation) {
+          return {
+            success: false,
+            error: '暂无评估记录',
+          };
+        }
+        const evaluation = await this.store.readEvaluation(
+          'prompt',
+          promptId,
+          index.latestEvaluation.evaluationId,
+        );
         if (!evaluation) {
           return {
             success: false,
@@ -131,7 +96,8 @@ export class PromptEvaluationController {
     @Param('evaluationId') evaluationId: string,
   ) {
     try {
-      const evaluation = await this.promptEvaluator.getEvaluation(
+      const evaluation = await this.store.readEvaluation(
+        'prompt',
         promptId,
         evaluationId,
       );
@@ -154,20 +120,10 @@ export class PromptEvaluationController {
   }
 
   @Delete(':promptId/evaluations/:evaluationId')
-  async deletePromptEvaluation(
-    @Param('promptId') promptId: string,
-    @Param('evaluationId') evaluationId: string,
-  ) {
-    try {
-      return {
-        success: true,
-        message: '评估记录已删除',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
-    }
+  async deletePromptEvaluation() {
+    return {
+      success: false,
+      error: '删除功能暂未实现',
+    };
   }
 }

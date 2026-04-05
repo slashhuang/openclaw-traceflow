@@ -6,15 +6,6 @@ export class LogsController {
   constructor(private readonly logsService: LogsService) {}
 
   /**
-   * 获取 Gateway 最近日志
-   */
-  @Get('gateway')
-  async getGatewayLogs(@Query('limit') limit?: number): Promise<LogEntry[]> {
-    const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
-    return this.logsService.getGatewayRecentLogs(limitNum);
-  }
-
-  /**
    * 获取 TraceFlow 最近日志
    */
   @Get('traceflow')
@@ -24,31 +15,31 @@ export class LogsController {
   }
 
   /**
-   * 获取混合日志（兼容旧版）
+   * 获取 IM 推送日志
+   */
+  @Get('im')
+  async getImPushLogs(@Query('limit') limit?: number): Promise<LogEntry[]> {
+    const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
+    return this.logsService.getImPushLogs(limitNum);
+  }
+
+  /**
+   * 获取日志（兼容旧版）
    */
   @Get()
   async getAllLogs(
     @Query('limit') limit?: number,
-    @Query('source') source?: 'gateway' | 'traceflow' | 'all',
+    @Query('source') source?: 'traceflow' | 'im' | 'all',
   ): Promise<LogEntry[]> {
-    const limitNum = limit ? parseInt(limit.toString(), 10) : 100;
+    const limitNum = limit ? parseInt(limit.toString(), 10) : 200;
 
-    if (source === 'gateway') {
-      return this.logsService.getGatewayRecentLogs(limitNum);
-    } else if (source === 'traceflow') {
+    if (source === 'traceflow') {
       return this.logsService.getTraceflowRecentLogs(limitNum);
+    } else if (source === 'im') {
+      return this.logsService.getImPushLogs(limitNum);
     } else {
-      // 默认返回混合日志
-      const gatewayLogs = await this.logsService.getGatewayRecentLogs(
-        limitNum / 2,
-      );
-      const traceflowLogs = await this.logsService.getTraceflowRecentLogs(
-        limitNum / 2,
-      );
-      return [...gatewayLogs, ...traceflowLogs].sort(
-        (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-      );
+      // 默认返回所有日志
+      return this.logsService.getAllLogs(limitNum);
     }
   }
 }

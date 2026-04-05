@@ -9,6 +9,8 @@
 
 OpenClaw TraceFlow：面向 OpenClaw Agent 的 **可观测** Web 应用（NestJS + React）。通过 **Gateway WebSocket（长连接）** 与 **本机 OpenClaw 数据目录** 提供会话、Skill、Token、延迟、System Prompt、价格与日志等能力。
 
+**新增 IM 推送功能**（v1.1.0+）：支持飞书机器人实时推送会话记录，按会话聚合展示，便于搜索和回溯。详见 [docs/IM_PUSH.md](docs/IM_PUSH.md)。
+
 ### Gateway scopes（修改 OpenClaw 集成时必读）
 
 当 TraceFlow 以 **backend** 且无设备身份连接 Gateway 时，OpenClaw 可能在 `connect` 后 **清空 scopes**。依赖 **`operator.read`** 的 RPC 会报 **`missing scope: operator.read`**。
@@ -41,6 +43,7 @@ OpenClaw TraceFlow：面向 OpenClaw Agent 的 **可观测** Web 应用（NestJS
 - **实时**: Socket.IO（日志流；仪表盘 HTTP 轮询）
 - **存储**: sql.js（SQLite），`data/metrics.db`
 - **Gateway**: `GatewayConnectionService` + `TraceflowGatewayPersistentClient`
+- **IM 推送**: Feishu Bot API + EventEmitter2 事件驱动
 
 ## 目录结构（核心）
 
@@ -51,6 +54,16 @@ src/
 ├── openclaw/          # Gateway WS、health 映射、路径解析
 ├── auth/, setup/, health/, dashboard/, sessions/, logs/, metrics/
 ├── traceflow-skills/  # 内置 skills 清单 API
+├── im/                # IM 推送模块（v1.1.0+）
+│   ├── base.channel.ts
+│   ├── channels/feishu/
+│   ├── session-manager.ts
+│   ├── im-push.service.ts
+│   └── im-push.module.ts
+├── adapters/openclaw/ # OpenClaw 数据源适配器
+│   ├── file-watcher.adapter.ts
+│   ├── event-bridge.service.ts
+│   └── openclaw.adapter.module.ts
 └── common/resolveOpenClawPaths.ts
 
 resources/bundled-skills/   # 与 OpenClaw 配套的 vendored skills（如 agent-audit）
@@ -98,6 +111,31 @@ pnpm test
 
 见 `config.service.ts`：`OPENCLAW_GATEWAY_URL` 默认 `http://localhost:18789`，`PORT` 默认 `3001`，`DATA_DIR` 默认 `./data`。详见 [config/README.md](config/README.md)。
 
+**新增 IM 推送配置**（v1.1.0+）：
+
+```json
+{
+  "im": {
+    "enabled": true,
+    "channels": {
+      "feishu": {
+        "enabled": true,
+        "appId": "cli_xxx",
+        "appSecret": "xxx",
+        "targetUserId": "ou_xxx",
+        "pushStrategy": {
+          "sessionMessages": true,
+          "sessionEnd": true,
+          "errorLogs": true
+        }
+      }
+    }
+  }
+}
+```
+
+配置示例：[config/openclaw.runtime.im-example.json](config/openclaw.runtime.im-example.json)
+
 ## 路径解析（本仓库内）
 
 **本仓库事实源**：`src/common/resolveOpenClawPaths.ts`。所有 OpenClaw 数据路径须通过此处解析，**禁止**硬编码 `~/.openclaw/...`。
@@ -109,6 +147,154 @@ pnpm test
 1. 改 `src/common/resolveOpenClawPaths.ts`
 2. 若有伙伴仓库拷贝了同文件，按需手动同步
 3. 跑相关测试与审计扫描路径校验
+
+---
+
+## IM 推送开发指南（v1.1.0+）
+
+### 架构概览
+
+```
+OpenClaw Gateway (agents/*/sessions/*.jsonl)
+         │
+         ▼
+SessionManager (直接监听文件系统)
+         │
+         ▼ (emit audit.session.* events)
+ImPushService (推送协调)
+         │
+         ▼
+FeishuChannel (飞书 API + 限流)
+         │
+         ▼
+飞书审计机器人
+```
+
+### 核心组件
+
+| 组件 | 职责 | 文件 |
+|------|------|------|
+| **SessionManager** | 监听 `agents/*/sessions/*.jsonl` 文件变化，管理会话生命周期 | `src/im/session-manager.ts` |
+| **ImPushService** | 订阅 `audit.session.*` 事件，协调推送逻辑 | `src/im/im-push.service.ts` |
+| **FeishuChannel** | 飞书 API 封装（限流 + 重试） | `src/im/channels/feishu/feishu.channel.ts` |
+| **FeishuMessageFormatter** | 消息格式化（富文本） | `src/im/channels/feishu/feishu.formatter.ts` |
+
+**架构说明**（v1.1.1+）：
+- 已移除冗余的 `OpenClawFileWatcher` 和 `OpenClawEventBridge`
+- `SessionManager` 直接监听 OpenClaw 的 `agents/*/sessions/*.jsonl` 文件
+- 事件流简化为：`SessionManager` → `ImPushService`（通过 `audit.session.*` 事件）
+
+### 事件流
+
+```typescript
+// 1. SessionManager 直接监听 agents/*/sessions/*.jsonl 文件变化
+//    检测到新会话时触发：
+eventEmitter.emit('audit.session.start', session);
+
+//    检测到新消息时触发：
+eventEmitter.emit('audit.session.message', { sessionId, message, session });
+
+//    会话结束（5 分钟无活动）时触发：
+eventEmitter.emit('audit.session.end', session);
+
+// 2. ImPushService 处理
+handleSessionStart() → FeishuChannel.send(parentMessage)
+handleSessionMessage() → FeishuChannel.send(message, { reply_id: parentId })
+handleSessionEnd() → FeishuChannel.update(parentId, updatedMessage)
+handleErrorLog() → FeishuChannel.send(errorMessage)
+```
+
+### 限流与重试
+
+**限流**：令牌桶算法（10 条/秒，突发容量 20 条）
+
+```typescript
+// FeishuChannel 内部实现
+private async acquireToken(): Promise<void> {
+  while (true) {
+    this.refill();
+    if (this.tokenBucket >= 1) {
+      this.tokenBucket--;
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+```
+
+**重试**：待实现（当前版本无重试队列，网络抖动时消息可能丢失）
+
+### 推送策略
+
+```typescript
+pushStrategy: {
+  sessionStart: false,     // 不推送会话开始通知
+  sessionMessages: true,   // 推送会话消息
+  sessionEnd: true,        // 推送会话结束汇总
+  errorLogs: true,         // 推送 ERROR 日志
+  warnLogs: false          // 不推送 WARN 日志
+}
+```
+
+### 会话结束检测
+
+**超时机制**：5 分钟无活动视为会话结束
+
+```typescript
+// SessionManager 内部实现
+private readonly SESSION_END_TIMEOUT_MS = 5 * 60 * 1000;
+private cleanupInterval = setInterval(() => {
+  for (const [sessionId, session] of this.activeSessions.entries()) {
+    const inactiveTime = Date.now() - session.lastActivity;
+    if (inactiveTime > this.SESSION_END_TIMEOUT_MS) {
+      this.completeSession(sessionId);
+    }
+  }
+}, 60000); // 每分钟检查一次
+```
+
+### 模块依赖关系
+
+```typescript
+// AppModule（唯一调用 forRoot() 的地方）
+EventEmitterModule.forRoot({
+  wildcard: true,
+  maxListeners: 20,
+  verboseMemoryLeak: true,
+})
+
+// 其他模块只导入，不调用 forRoot()
+ImPushModule → imports: [SessionsModule]
+OpenClawAdapterModule → imports: [ConfigModule]
+LogsModule → imports: [ConfigModule]
+```
+
+### 配置验证
+
+**必填字段**（运行时检查）：
+
+- `im.channels.feishu.appId`
+- `im.channels.feishu.appSecret`
+- `im.channels.feishu.targetUserId`
+
+缺失时会在日志中输出错误，但不会阻止服务启动。
+
+### 测试方法
+
+1. **配置飞书凭证**：编辑 `config/openclaw.runtime.im.json`
+2. **启动开发环境**：`pnpm run start:dev`
+3. **触发会话**：在飞书与 OpenClaw 机器人对话
+4. **检查日志**：`tail -f data/traceflow.log`
+5. **验证推送**：查看飞书审计机器人是否收到消息
+
+### 故障排查
+
+| 问题 | 检查点 |
+|------|--------|
+| 收不到推送 | 检查 `im.enabled`、飞书凭证、日志中的 `Feishu API error` |
+| 推送延迟高 | 检查网络、限流配置、重试日志 |
+| 会话未聚合 | 检查 `reply_id` 是否正确传递、SessionManager 日志 |
+| ERROR 日志未推送 | 检查 `LogsService` 是否触发 `audit.log.error` 事件 |
 
 ---
 

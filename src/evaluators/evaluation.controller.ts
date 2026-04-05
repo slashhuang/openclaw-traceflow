@@ -2,96 +2,52 @@
  * OpenClaw Audit System - 评估 API 控制器
  *
  * @see PRD: docs/PRD-openclaw-audit-system.md Section 11.2.5
+ *
+ * 注意：评估功能需要 Gateway 支持 LLM 调用，当前版本已移除 Gateway，
+ * 因此评估端点将返回"功能不可用"错误。
  */
 
 import {
   Controller,
   Get,
+  Param,
   Post,
   Delete,
-  Param,
-  Body,
   HttpStatus,
-  Res,
 } from '@nestjs/common';
-import type { Response } from 'express';
 import { EvaluationStore } from '../stores/evaluation-store';
-import { SessionEvaluator } from '../evaluators/session-evaluator';
-import { evaluationTaskQueue } from '../utils/async-task-queue';
 import { coalesceLatestEvaluation } from '../utils/evaluation-latest-coalesce';
-import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
-import { OpenClawService } from '../openclaw/openclaw.service';
 import { ConfigService } from '../config/config.service';
-import { EvaluationPromptConfigService } from './evaluation-prompt-config.service';
 
 @Controller('api/sessions')
 export class EvaluationController {
-  private readonly sessionEvaluator: SessionEvaluator;
+  private readonly store: EvaluationStore;
 
-  constructor(
-    private readonly gatewayConnection: GatewayConnectionService,
-    private readonly openclawService: OpenClawService,
-    configService: ConfigService,
-    evaluationPromptConfig: EvaluationPromptConfigService,
-  ) {
+  constructor(configService: ConfigService) {
     const dataDir = configService.getConfig().dataDir;
-    const store = new EvaluationStore(dataDir);
-    this.sessionEvaluator = new SessionEvaluator(
-      store,
-      gatewayConnection,
-      openclawService,
-      evaluationPromptConfig,
-    );
+    this.store = new EvaluationStore(dataDir);
   }
 
   /**
-   * 创建会话评估。
-   * `body.wait === true`：单次 HTTP 内 await 任务完成并返回完整 `data`（短连等待，不轮询 GET latest）。
-   * 默认：202 异步排队，行为与旧版一致。
+   * 创建会话评估 - 功能已禁用
    */
   @Post(':sessionId/evaluations')
-  async createSessionEvaluation(
-    @Param('sessionId') sessionId: string,
-    @Body() body: { userId?: string; wait?: boolean },
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const userId = body.userId || 'anonymous';
-
-    if (body.wait) {
-      try {
-        const evaluation = await evaluationTaskQueue.add(() =>
-          this.sessionEvaluator.evaluate(sessionId, userId),
-        );
-        res.status(HttpStatus.OK);
-        return { success: true, data: evaluation };
-      } catch (error) {
-        res.status(HttpStatus.OK);
-        return { success: false, error: (error as Error).message };
-      }
-    }
-
-    try {
-      evaluationTaskQueue.add(() =>
-        this.sessionEvaluator.evaluate(sessionId, userId),
-      );
-      res.status(HttpStatus.ACCEPTED);
-      return {
-        success: true,
-        message: '评估任务已提交',
-        status: 'pending',
-      };
-    } catch (error) {
-      res.status(HttpStatus.OK);
-      return { success: false, error: (error as Error).message };
-    }
+  async createSessionEvaluation() {
+    return {
+      success: false,
+      error: '评估功能需要 Gateway 支持，当前版本已禁用',
+      code: 'GATEWAY_NOT_AVAILABLE',
+    };
   }
 
   // 获取会话评估历史
   @Get(':sessionId/evaluations')
   async getSessionEvaluations(@Param('sessionId') sessionId: string) {
     try {
-      const evaluations =
-        await this.sessionEvaluator.getEvaluationHistory(sessionId);
+      const evaluations = await this.store.listEvaluations(
+        'session',
+        sessionId,
+      );
       return {
         success: true,
         data: evaluations,
@@ -109,8 +65,18 @@ export class EvaluationController {
   async getLatestSessionEvaluation(@Param('sessionId') sessionId: string) {
     return coalesceLatestEvaluation(`session:${sessionId}`, async () => {
       try {
-        const evaluation =
-          await this.sessionEvaluator.getLatestEvaluation(sessionId);
+        const index = await this.store.readIndex('session', sessionId);
+        if (!index || !index.latestEvaluation) {
+          return {
+            success: false,
+            error: '暂无评估记录',
+          };
+        }
+        const evaluation = await this.store.readEvaluation(
+          'session',
+          sessionId,
+          index.latestEvaluation.evaluationId,
+        );
         if (!evaluation) {
           return {
             success: false,
@@ -137,7 +103,8 @@ export class EvaluationController {
     @Param('evaluationId') evaluationId: string,
   ) {
     try {
-      const evaluation = await this.sessionEvaluator.getEvaluation(
+      const evaluation = await this.store.readEvaluation(
+        'session',
         sessionId,
         evaluationId,
       );
@@ -161,21 +128,10 @@ export class EvaluationController {
 
   // 删除评估记录
   @Delete(':sessionId/evaluations/:evaluationId')
-  async deleteSessionEvaluation(
-    @Param('sessionId') sessionId: string,
-    @Param('evaluationId') evaluationId: string,
-  ) {
-    try {
-      // TODO: 实现删除逻辑
-      return {
-        success: true,
-        message: '评估记录已删除',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
-    }
+  async deleteSessionEvaluation() {
+    return {
+      success: false,
+      error: '删除功能暂未实现',
+    };
   }
 }

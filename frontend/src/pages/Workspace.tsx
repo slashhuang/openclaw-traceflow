@@ -169,7 +169,7 @@ export const Workspace: React.FC = () => {
       </div>
       <div className="workspace-content">
         {selectedFile ? (
-          <FilePreview filePath={selectedFile} onClose={() => setSelectedFile(null)} />
+          <FilePreview filePath={selectedFile} onClose={() => setSelectedFile(null)} onFileSaved={() => loadTree()} />
         ) : (
           <div className="workspace-empty">
             <p>选择一个文件进行预览</p>

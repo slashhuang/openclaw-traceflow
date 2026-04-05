@@ -102,7 +102,8 @@ export class AuditController {
 
       // 动态添加会话统计(包括归档会话)
       const allSessions = await this.sessionsService.getAllSessions('all');
-      const archivedSessions = await this.sessionsService.getAllSessions('archived');
+      const archivedSessions =
+        await this.sessionsService.getAllSessions('archived');
 
       snapshot.sessions = {
         total: allSessions.total,

@@ -1,113 +1,129 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '../config/config.service';
 import * as fs from 'fs';
-import { createHash } from 'crypto';
-import { GatewayConnectionService } from '../openclaw/gateway-connection.service';
 import * as path from 'path';
 
 export interface LogEntry {
   timestamp: string;
   level: 'info' | 'warn' | 'error' | 'debug';
   content: string;
-  source?: 'gateway' | 'traceflow';
+  source?: 'traceflow' | 'im-push';
 }
 
 @Injectable()
-export class LogsService {
+export class LogsService implements OnModuleInit {
   private readonly logger = new Logger(LogsService.name);
-  private gatewayLogTailer: import('chokidar').FSWatcher | null = null;
   private traceflowLogTailer: import('chokidar').FSWatcher | null = null;
   private logSubscribers: Set<(entry: LogEntry) => void> = new Set();
-
-  // OpenClaw Gateway tail via `logs.tail` cursor protocol
-  private gatewayCursor: number | null = null;
-  private gatewayTimer: NodeJS.Timeout | null = null;
-  private gatewayPollInFlight = false;
-  private gatewaySuppressNextEmit = false;
-  private gatewaySubscribers: Set<(entry: LogEntry) => void> = new Set();
-  private gatewayPollOptions: {
-    limit: number;
-    pollIntervalMs: number;
-    maxBytes: number;
-  } | null = null;
-  private gatewayCurrentPollMs = 1500;
-  private gatewayFailureCount = 0;
-  private gatewayNoNewDataCount = 0;
-  private gatewayDedupeOrder: string[] = [];
-  private gatewayDedupeSet: Set<string> = new Set();
-  private readonly gatewayDedupeMax = 1000;
 
   // TraceFlow 自身日志
   private traceflowLogPath: string | null = null;
 
+  // IM 推送日志（内存存储）
+  private imPushLogs: LogEntry[] = [];
+  private readonly maxImLogs = 500;
+
   constructor(
     private configService: ConfigService,
-    private gatewayConnection: GatewayConnectionService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
-  /**
-   * 启动日志追踪 - Gateway 日志和 TraceFlow 日志
-   */
-  async startTailing(gatewayLogPath?: string): Promise<void> {
-    const config = this.configService.getConfig();
-
-    // 1. 启动 Gateway 日志追踪
-    if (gatewayLogPath) {
-      await this.startGatewayTailing(gatewayLogPath);
-    }
-
-    // 2. 启动 TraceFlow 自身日志追踪
-    this.traceflowLogPath = path.join(config.dataDir, 'traceflow.log');
-    await this.startTraceflowTailing(this.traceflowLogPath);
+  async onModuleInit(): Promise<void> {
+    // 订阅 IM 推送事件
+    this.subscribeToImPushEvents();
   }
 
   /**
-   * 启动 Gateway 日志追踪
+   * 订阅 IM 推送相关事件
    */
-  private async startGatewayTailing(logPath: string): Promise<void> {
-    if (!fs.existsSync(logPath)) {
-      this.logger.warn(`Gateway log file does not exist: ${logPath}`);
-      return;
-    }
-
-    try {
-      const chokidar = await import('chokidar');
-      this.gatewayLogTailer = chokidar.watch(logPath, { persistent: true });
-
-      let lastSize = fs.statSync(logPath).size;
-
-      this.gatewayLogTailer.on('change', () => {
-        try {
-          const stats = fs.statSync(logPath);
-          if (stats.size > lastSize) {
-            const fd = fs.openSync(logPath, 'r');
-            const buffer = Buffer.alloc(stats.size - lastSize);
-            fs.readSync(fd, buffer, 0, buffer.length, lastSize);
-            fs.closeSync(fd);
-
-            const newLines = buffer
-              .toString('utf-8')
-              .split('\n')
-              .filter((line) => line.trim());
-            for (const line of newLines) {
-              const entry = this.parseLogLine(line, 'gateway');
-              this.notifySubscribers(entry);
-            }
-
-            lastSize = stats.size;
-          }
-        } catch (err) {
-          this.logger.error('Error reading gateway log file:', err);
-        }
-      });
-
-      this.logger.log(`Started tailing gateway logs from: ${logPath}`);
-    } catch (error: any) {
-      this.logger.error(
-        'Failed to start gateway log tailing:',
-        error?.message || error,
+  private subscribeToImPushEvents(): void {
+    // 会话生命周期事件
+    this.eventEmitter.on('audit.session.start', (session) => {
+      this.addImPushLog(
+        'info',
+        `[Session Start] ${session.user?.name || session.sessionId}`,
       );
+    });
+
+    this.eventEmitter.on('audit.session.message', (data) => {
+      const msgType = data.message?.type || 'unknown';
+      if (msgType === 'skill:start') {
+        this.addImPushLog(
+          'info',
+          `[Skill Start] ${data.message?.skillName || 'unknown'}`,
+        );
+      } else if (msgType === 'skill:end') {
+        this.addImPushLog(
+          'info',
+          `[Skill End] ${data.message?.skillName || 'unknown'} - ${data.message?.status || 'unknown'}`,
+        );
+      } else if (msgType === 'user' || msgType === 'assistant') {
+        this.addImPushLog('debug', `[Message] ${msgType}`);
+      }
+    });
+
+    this.eventEmitter.on('audit.session.end', (session) => {
+      this.addImPushLog('info', `[Session End] ${session.sessionId}`);
+    });
+
+    this.eventEmitter.on('audit.log.error', (log) => {
+      this.addImPushLog('error', `[Error] ${log.component}: ${log.message}`);
+    });
+
+    // IM Push Service 详细事件（新增）
+    this.eventEmitter.on('im.push.session.parent.created', (data) => {
+      this.addImPushLog(
+        'info',
+        `[Parent Created] ${data.sessionId} -> ${data.messageId}`,
+      );
+    });
+
+    this.eventEmitter.on('im.push.message.sent', (data) => {
+      this.addImPushLog(
+        'info',
+        `[Message Sent] ${data.sessionId} -> ${data.messageId}`,
+      );
+    });
+
+    this.eventEmitter.on('im.push.error', (data) => {
+      this.addImPushLog('error', `[Error] ${data.sessionId}: ${data.error}`);
+    });
+
+    this.eventEmitter.on('im.push.session.completed', (data) => {
+      this.addImPushLog('info', `[Session Completed] ${data.sessionId}`);
+    });
+
+    this.logger.log('IM push event listeners registered');
+  }
+
+  /**
+   * 添加 IM 推送日志
+   */
+  private addImPushLog(level: LogEntry['level'], content: string): void {
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      content,
+      source: 'im-push',
+    };
+    this.imPushLogs.push(entry);
+    if (this.imPushLogs.length > this.maxImLogs) {
+      this.imPushLogs.shift();
     }
+    // 通知订阅者
+    this.notifySubscribers(entry);
+  }
+
+  /**
+   * 启动日志追踪 - TraceFlow 日志
+   */
+  async startTailing(): Promise<void> {
+    const config = this.configService.getConfig();
+
+    // 启动 TraceFlow 自身日志追踪
+    this.traceflowLogPath = path.join(config.dataDir, 'traceflow.log');
+    await this.startTraceflowTailing(this.traceflowLogPath);
   }
 
   /**
@@ -181,100 +197,10 @@ export class LogsService {
         this.logger.error('Error in log subscriber:', error);
       }
     }
-  }
 
-  /**
-   * 映射 Gateway tail payload 到日志条目（用于 dashboard bundle）
-   */
-  mapGatewayTailPayloadToEntries(payload: {
-    cursor?: number;
-    lines: string[];
-  }): LogEntry[] {
-    if (typeof payload.cursor === 'number') {
-      this.gatewayCursor = payload.cursor;
-    }
-    const rawLines = payload.lines.filter(
-      (l) => typeof l === 'string' && l.trim().length > 0,
-    );
-    for (const line of rawLines) {
-      this.rememberGatewayLine(line);
-    }
-    return rawLines.map((l) => this.parseLogLine(l, 'gateway'));
-  }
-
-  /**
-   * 获取 Gateway 最近日志
-   * 与 Socket 轮询一致：已配置 Gateway URL 时优先 `logs.tail`（无需 OPENCLAW_LOG_PATH）；
-   * 失败或未配置 URL 时再读 `OPENCLAW_LOG_PATH` 本地文件。
-   */
-  async getGatewayRecentLogs(limit: number = 100): Promise<LogEntry[]> {
-    const config = this.configService.getConfig();
-    const gatewayHttpUrl = config.openclawGatewayUrl?.trim();
-
-    if (gatewayHttpUrl) {
-      const maxBytes = Math.max(250_000, limit * 4_000);
-      try {
-        const res = await this.gatewayConnection.request<{
-          file?: string;
-          cursor?: number;
-          lines?: string[];
-          truncated?: boolean;
-          reset?: boolean;
-        }>(
-          'logs.tail',
-          {
-            limit,
-            maxBytes,
-          },
-          8000,
-        );
-
-        if (res.ok && res.payload) {
-          const rawLines = Array.isArray(res.payload.lines)
-            ? res.payload.lines.filter(
-                (l): l is string =>
-                  typeof l === 'string' && l.trim().length > 0,
-              )
-            : [];
-          return this.mapGatewayTailPayloadToEntries({
-            cursor:
-              typeof res.payload.cursor === 'number'
-                ? res.payload.cursor
-                : undefined,
-            lines: rawLines,
-          });
-        }
-
-        this.logger.debug(
-          `Gateway logs.tail failed for recent logs: ${!res.ok ? res.error : 'empty payload'}`,
-        );
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.debug(`Gateway logs.tail error for recent logs: ${msg}`);
-      }
-    }
-
-    const logPath = config.openclawLogPath?.trim();
-    if (!logPath) {
-      return [];
-    }
-
-    try {
-      if (!fs.existsSync(logPath)) {
-        this.logger.warn(`Gateway log file does not exist: ${logPath}`);
-        return [];
-      }
-
-      const content = fs.readFileSync(logPath, 'utf-8');
-      const lines = content.split('\n').filter((line) => line.trim());
-      const rawLines = lines.slice(-limit);
-
-      return rawLines.map((l) => this.parseLogLine(l, 'gateway'));
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to get gateway recent logs from file: ${msg}`);
-      return [];
-    }
+    // 注意：不再触发 audit.log.error 事件
+    // TraceFlow 自身的错误日志不应该推送到飞书
+    // OpenClaw 的错误日志应该由 OpenClaw 自己推送
   }
 
   /**
@@ -304,181 +230,27 @@ export class LogsService {
   }
 
   /**
-   * 订阅 Gateway 日志（WebSocket 实时推送）
+   * 获取 IM 推送日志
    */
-  subscribeGatewayLogs(
-    callback: (entry: LogEntry) => void,
-    opts?: Partial<{ limit: number; pollIntervalMs: number; maxBytes: number }>,
-  ): () => void {
-    this.gatewaySubscribers.add(callback);
-
-    if (!this.gatewayTimer) {
-      const limit =
-        typeof opts?.limit === 'number' &&
-        Number.isFinite(opts.limit) &&
-        opts.limit > 0
-          ? Math.floor(opts.limit)
-          : 200;
-      const pollIntervalMs =
-        typeof opts?.pollIntervalMs === 'number' &&
-        Number.isFinite(opts.pollIntervalMs) &&
-        opts.pollIntervalMs > 0
-          ? Math.floor(opts.pollIntervalMs)
-          : 1500;
-      const maxBytes =
-        typeof opts?.maxBytes === 'number' &&
-        Number.isFinite(opts.maxBytes) &&
-        opts.maxBytes > 0
-          ? Math.floor(opts.maxBytes)
-          : 1_000_000;
-
-      this.gatewayPollOptions = { limit, pollIntervalMs, maxBytes };
-      this.gatewayCurrentPollMs = pollIntervalMs;
-      this.gatewayFailureCount = 0;
-      this.gatewayNoNewDataCount = 0;
-      this.gatewaySuppressNextEmit = this.gatewayCursor == null;
-      this.scheduleGatewayPoll();
-
-      void this.pollGatewayTailOnce();
-    }
-
-    return () => {
-      this.gatewaySubscribers.delete(callback);
-      if (this.gatewaySubscribers.size === 0) {
-        if (this.gatewayTimer) {
-          clearInterval(this.gatewayTimer);
-          this.gatewayTimer = null;
-        }
-        this.gatewayPollOptions = null;
-      }
-    };
+  getImPushLogs(limit: number = 100): LogEntry[] {
+    return this.imPushLogs.slice(-limit);
   }
 
-  private scheduleGatewayPoll() {
-    if (this.gatewayTimer) {
-      clearInterval(this.gatewayTimer);
-    }
-    this.gatewayTimer = setInterval(() => {
-      void this.pollGatewayTailOnce();
-    }, this.gatewayCurrentPollMs);
-  }
+  /**
+   * 获取所有日志（TraceFlow + IM 推送）
+   */
+  async getAllLogs(limit: number = 200): Promise<LogEntry[]> {
+    const traceflowLogs = await this.getTraceflowRecentLogs(limit);
+    const imPushLogs = this.getImPushLogs(limit);
 
-  private updateGatewayPollInterval(nextMs: number): void {
-    const normalized = Math.max(500, Math.floor(nextMs));
-    if (normalized === this.gatewayCurrentPollMs) return;
-    this.gatewayCurrentPollMs = normalized;
-    this.scheduleGatewayPoll();
-  }
+    // 合并并排序
+    const allLogs = [...traceflowLogs, ...imPushLogs];
+    allLogs.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
 
-  private async pollGatewayTailOnce(): Promise<void> {
-    if (this.gatewayPollInFlight) return;
-    if (!this.gatewayPollOptions) return;
-
-    this.gatewayPollInFlight = true;
-    try {
-      const config = this.configService.getConfig();
-      const gatewayHttpUrl = config.openclawGatewayUrl?.trim();
-      if (!gatewayHttpUrl) return;
-
-      const { limit, maxBytes } = this.gatewayPollOptions;
-      const cursorToUse = this.gatewayCursor ?? undefined;
-
-      const res = await this.gatewayConnection.request<{
-        cursor?: number;
-        lines?: string[];
-        truncated?: boolean;
-        reset?: boolean;
-      }>(
-        'logs.tail',
-        {
-          cursor: cursorToUse,
-          limit,
-          maxBytes,
-        },
-        8000,
-      );
-
-      if (!res.ok || !res.payload) {
-        this.gatewayFailureCount += 1;
-        this.gatewayNoNewDataCount = 0;
-        const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
-        this.updateGatewayPollInterval(
-          Math.min(60_000, base * 2 ** Math.min(this.gatewayFailureCount, 6)),
-        );
-        return;
-      }
-      if (this.gatewayFailureCount > 0 || this.gatewayNoNewDataCount > 0) {
-        this.gatewayFailureCount = 0;
-        this.gatewayNoNewDataCount = 0;
-        this.updateGatewayPollInterval(
-          this.gatewayPollOptions?.pollIntervalMs || 1500,
-        );
-      }
-
-      if (typeof res.payload.cursor === 'number') {
-        this.gatewayCursor = res.payload.cursor;
-      }
-
-      const rawLines = Array.isArray(res.payload.lines)
-        ? res.payload.lines.filter(
-            (l): l is string => typeof l === 'string' && l.trim().length > 0,
-          )
-        : [];
-
-      if (rawLines.length === 0) {
-        this.gatewayNoNewDataCount += 1;
-        const base = this.gatewayPollOptions?.pollIntervalMs || 1500;
-        this.updateGatewayPollInterval(
-          Math.min(60_000, base * 2 ** Math.min(this.gatewayNoNewDataCount, 5)),
-        );
-      } else if (this.gatewayNoNewDataCount > 0) {
-        this.gatewayNoNewDataCount = 0;
-        this.updateGatewayPollInterval(
-          this.gatewayPollOptions?.pollIntervalMs || 1500,
-        );
-      }
-
-      const resetOrTruncated = Boolean(
-        res.payload.reset || res.payload.truncated,
-      );
-      if (resetOrTruncated) {
-        this.gatewayDedupeOrder = [];
-        this.gatewayDedupeSet.clear();
-      }
-
-      for (const line of rawLines) {
-        const firstTime = this.rememberGatewayLine(line);
-        if (!firstTime) continue;
-        if (this.gatewaySuppressNextEmit) continue;
-
-        const entry = this.parseLogLine(line, 'gateway');
-        for (const subscriber of this.gatewaySubscribers) {
-          try {
-            subscriber(entry);
-          } catch (e) {
-            this.logger.error('Error in gateway log subscriber:', e);
-          }
-        }
-      }
-
-      if (this.gatewaySuppressNextEmit) {
-        this.gatewaySuppressNextEmit = false;
-      }
-    } finally {
-      this.gatewayPollInFlight = false;
-    }
-  }
-
-  private rememberGatewayLine(line: string): boolean {
-    const h = createHash('sha1').update(line).digest('hex');
-    if (this.gatewayDedupeSet.has(h)) return false;
-    this.gatewayDedupeSet.add(h);
-    this.gatewayDedupeOrder.push(h);
-    if (this.gatewayDedupeOrder.length > this.gatewayDedupeMax) {
-      const removed = this.gatewayDedupeOrder.shift();
-      if (removed) this.gatewayDedupeSet.delete(removed);
-    }
-    return true;
+    return allLogs.slice(0, limit);
   }
 
   /**
@@ -486,7 +258,7 @@ export class LogsService {
    */
   private parseLogLine(
     line: string,
-    source: 'gateway' | 'traceflow' = 'gateway',
+    source: 'traceflow' = 'traceflow',
   ): LogEntry {
     const trimmed = line.trim();
     if (!trimmed) {

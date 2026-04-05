@@ -41,7 +41,7 @@ async function listenWithDevRetry(
       PORT=3003 pnpm run start:dev
     前端 Vite 需指向同一后端：
       VITE_API_PROXY_TARGET=http://localhost:3003 pnpm run dev:frontend
-  · macOS 查看占用：lsof -nP -iTCP:${port} -sTCP:LISTEN
+     macOS 查看占用：lsof -nP -iTCP:${port} -sTCP:LISTEN
 `);
         }
         throw e;
@@ -141,9 +141,9 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const config = configService.getConfig();
 
-  // 启动日志追踪（Gateway 日志 + TraceFlow 日志）
+  // 启动日志追踪（TraceFlow 日志）
   const logsService = app.get(LogsService);
-  logsService.startTailing(config.openclawLogPath);
+  logsService.startTailing();
 
   // 监听配置的主机/端口
   const port = config.port;
@@ -167,7 +167,6 @@ async function bootstrap() {
 ║           OpenClaw TraceFlow UI                             ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  Running on: http://${host}:${port}
-║  Gateway URL: ${config.openclawGatewayUrl}
 ║  Access Mode: ${config.accessMode}${config.accessMode === 'token' ? ' (token required)' : ''}
 ║                                                           ║
 ║  Open http://localhost:${port} in your browser           ║
