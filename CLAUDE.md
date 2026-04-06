@@ -134,7 +134,7 @@ pnpm test
 }
 ```
 
-配置示例：[config/openclaw.runtime.im-example.json](config/openclaw.runtime.im-example.json)
+配置示例：[config/openclaw.runtime.example.json](config/openclaw.runtime.example.json)
 
 ## 路径解析（本仓库内）
 
@@ -172,14 +172,15 @@ FeishuChannel (飞书 API + 限流)
 
 ### 核心组件
 
-| 组件 | 职责 | 文件 |
-|------|------|------|
-| **SessionManager** | 监听 `agents/*/sessions/*.jsonl` 文件变化，管理会话生命周期 | `src/im/session-manager.ts` |
-| **ImPushService** | 订阅 `audit.session.*` 事件，协调推送逻辑 | `src/im/im-push.service.ts` |
-| **FeishuChannel** | 飞书 API 封装（限流 + 重试） | `src/im/channels/feishu/feishu.channel.ts` |
-| **FeishuMessageFormatter** | 消息格式化（富文本） | `src/im/channels/feishu/feishu.formatter.ts` |
+| 组件                       | 职责                                                        | 文件                                         |
+| -------------------------- | ----------------------------------------------------------- | -------------------------------------------- |
+| **SessionManager**         | 监听 `agents/*/sessions/*.jsonl` 文件变化，管理会话生命周期 | `src/im/session-manager.ts`                  |
+| **ImPushService**          | 订阅 `audit.session.*` 事件，协调推送逻辑                   | `src/im/im-push.service.ts`                  |
+| **FeishuChannel**          | 飞书 API 封装（限流 + 重试）                                | `src/im/channels/feishu/feishu.channel.ts`   |
+| **FeishuMessageFormatter** | 消息格式化（富文本）                                        | `src/im/channels/feishu/feishu.formatter.ts` |
 
 **架构说明**（v1.1.1+）：
+
 - 已移除冗余的 `OpenClawFileWatcher` 和 `OpenClawEventBridge`
 - `SessionManager` 直接监听 OpenClaw 的 `agents/*/sessions/*.jsonl` 文件
 - 事件流简化为：`SessionManager` → `ImPushService`（通过 `audit.session.*` 事件）
@@ -289,12 +290,12 @@ LogsModule → imports: [ConfigModule]
 
 ### 故障排查
 
-| 问题 | 检查点 |
-|------|--------|
-| 收不到推送 | 检查 `im.enabled`、飞书凭证、日志中的 `Feishu API error` |
-| 推送延迟高 | 检查网络、限流配置、重试日志 |
-| 会话未聚合 | 检查 `reply_id` 是否正确传递、SessionManager 日志 |
-| ERROR 日志未推送 | 检查 `LogsService` 是否触发 `audit.log.error` 事件 |
+| 问题             | 检查点                                                   |
+| ---------------- | -------------------------------------------------------- |
+| 收不到推送       | 检查 `im.enabled`、飞书凭证、日志中的 `Feishu API error` |
+| 推送延迟高       | 检查网络、限流配置、重试日志                             |
+| 会话未聚合       | 检查 `reply_id` 是否正确传递、SessionManager 日志        |
+| ERROR 日志未推送 | 检查 `LogsService` 是否触发 `audit.log.error` 事件       |
 
 ---
 

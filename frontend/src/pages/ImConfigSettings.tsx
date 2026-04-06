@@ -1,21 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Card,
-  Form,
-  Input,
-  Button,
-  Space,
-  Alert,
-  Switch,
-  message,
-  Tag,
-  Spin,
-  Divider,
-} from 'antd';
-import {
-  SaveOutlined,
-  MessageOutlined,
-} from '@ant-design/icons';
+import { Card, Form, Input, Button, Space, Alert, Switch, message, Tag, Spin, Divider } from 'antd';
+import { SaveOutlined, MessageOutlined } from '@ant-design/icons';
 
 interface ImConfig {
   enabled: boolean;
@@ -46,11 +31,6 @@ const ImConfigSettings: React.FC = () => {
   const [imStatus, setImStatus] = useState<ImStatus | null>(null);
   const [feishuEnabled, setFeishuEnabled] = useState(false);
 
-  // 监听飞书开关状态，实时更新输入框禁用状态
-  Form.useWatch('feishu_enabled', form, (value) => {
-    setFeishuEnabled(!!value);
-  });
-
   // 加载配置
   useEffect(() => {
     loadConfig();
@@ -66,9 +46,11 @@ const ImConfigSettings: React.FC = () => {
       const status = await statusResponse.json();
 
       setImStatus(status);
+      const feishuEnabledValue = !!config.channels?.feishu?.enabled;
+      setFeishuEnabled(feishuEnabledValue);
       form.setFieldsValue({
         enabled: config.enabled,
-        feishu_enabled: config.channels?.feishu?.enabled,
+        feishu_enabled: feishuEnabledValue,
         feishu_appId: config.channels?.feishu?.appId,
         feishu_appSecret: config.channels?.feishu?.appSecret,
         feishu_targetUserId: config.channels?.feishu?.targetUserId,
@@ -87,12 +69,14 @@ const ImConfigSettings: React.FC = () => {
       const config: ImConfig = {
         enabled: values.enabled,
         channels: {
-          feishu: values.feishu_enabled ? {
-            enabled: values.feishu_enabled,
-            appId: values.feishu_appId,
-            appSecret: values.feishu_appSecret,
-            targetUserId: values.feishu_targetUserId,
-          } : undefined,
+          feishu: values.feishu_enabled
+            ? {
+                enabled: values.feishu_enabled,
+                appId: values.feishu_appId,
+                appSecret: values.feishu_appSecret,
+                targetUserId: values.feishu_targetUserId,
+              }
+            : undefined,
         },
       };
 
@@ -119,7 +103,14 @@ const ImConfigSettings: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '200px',
+        }}
+      >
         <Spin size="large" tip="加载配置中..." />
       </div>
     );
@@ -130,11 +121,7 @@ const ImConfigSettings: React.FC = () => {
       {/* IM 状态 */}
       {imStatus && (
         <Alert
-          message={
-            imStatus.enabled
-              ? 'IM 推送已启用'
-              : 'IM 推送已禁用'
-          }
+          message={imStatus.enabled ? 'IM 推送已启用' : 'IM 推送已禁用'}
           type={imStatus.enabled ? 'success' : 'warning'}
           showIcon
           style={{ marginBottom: 16 }}
@@ -156,11 +143,19 @@ const ImConfigSettings: React.FC = () => {
         />
       )}
 
-      <Card title={<><MessageOutlined /> IM 推送配置</>}>
+      <Card
+        title={
+          <>
+            <MessageOutlined /> IM 推送配置
+          </>
+        }
+      >
         <Form
           form={form}
           layout="vertical"
-          onFinish={handleSave}
+          onFinish={(values) => {
+            void handleSave(values);
+          }}
         >
           <Form.Item
             label="启用 IM 推送"
@@ -173,12 +168,12 @@ const ImConfigSettings: React.FC = () => {
 
           <Divider orientation="left">飞书配置</Divider>
 
-          <Form.Item
-            label="启用飞书"
-            name="feishu_enabled"
-            valuePropName="checked"
-          >
-            <Switch />
+          <Form.Item label="启用飞书" name="feishu_enabled" valuePropName="checked">
+            <Switch
+              onChange={(checked) => {
+                setFeishuEnabled(!!checked);
+              }}
+            />
           </Form.Item>
 
           <Form.Item
@@ -210,15 +205,15 @@ const ImConfigSettings: React.FC = () => {
 
           <Form.Item>
             <Space>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={saving}
-                icon={<SaveOutlined />}
-              >
+              <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
                 保存配置
               </Button>
-              <Button onClick={loadConfig} disabled={saving}>
+              <Button
+                onClick={() => {
+                  void loadConfig();
+                }}
+                disabled={saving}
+              >
                 重置
               </Button>
             </Space>

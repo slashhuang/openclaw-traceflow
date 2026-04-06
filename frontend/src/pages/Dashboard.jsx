@@ -119,9 +119,18 @@ function formatBuildTimeDisplay(iso, intl) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
+    // 始终使用北京时间 (Asia/Shanghai) 展示
     return intl.locale === 'zh-CN'
-      ? d.toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'medium' })
-      : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+      ? d.toLocaleString('zh-CN', {
+          dateStyle: 'short',
+          timeStyle: 'medium',
+          timeZone: 'Asia/Shanghai',
+        })
+      : d.toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+          timeZone: 'Asia/Shanghai',
+        });
   } catch {
     return iso;
   }
@@ -150,7 +159,11 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
                 ? intl.formatMessage({ id: 'sessions.chatKind.direct' })
                 : null;
         const chatKindColor =
-          chatKind === 'group' || chatKind === 'channel' ? 'purple' : chatKind === 'direct' ? 'geekblue' : undefined;
+          chatKind === 'group' || chatKind === 'channel'
+            ? 'purple'
+            : chatKind === 'direct'
+              ? 'geekblue'
+              : undefined;
         return (
           <Link
             to={`/sessions/${encodeURIComponent(r.sessionId)}`}
@@ -201,7 +214,9 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
     {
       title: (
         <Tooltip title={intl.formatMessage({ id: 'sessions.column.statusTooltip' })}>
-          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.status' })}</span>
+          <span style={{ cursor: 'help' }}>
+            {intl.formatMessage({ id: 'sessions.column.status' })}
+          </span>
         </Tooltip>
       ),
       key: 'status',
@@ -213,7 +228,9 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
     {
       title: (
         <Tooltip title={intl.formatMessage({ id: 'sessions.column.participantTooltip' })}>
-          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.user' })}</span>
+          <span style={{ cursor: 'help' }}>
+            {intl.formatMessage({ id: 'sessions.column.user' })}
+          </span>
         </Tooltip>
       ),
       key: 'user',
@@ -255,10 +272,18 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
                   textOverflow: 'ellipsis',
                   marginTop: 2,
                 }}
-                title={showLastSpeaker ? `${intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })} · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}` : undefined}
+                title={
+                  showLastSpeaker
+                    ? `${intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })} · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}`
+                    : undefined
+                }
               >
-                {intl.formatMessage({ id: 'sessions.participantCount' }, { count: participantCount })}
-                {showLastSpeaker && ` · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}`}
+                {intl.formatMessage(
+                  { id: 'sessions.participantCount' },
+                  { count: participantCount },
+                )}
+                {showLastSpeaker &&
+                  ` · ${intl.formatMessage({ id: 'sessions.lastSpeaker' })}: ${lastSpeaker}`}
               </Typography.Text>
             )}
           </Link>
@@ -288,7 +313,12 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
         if (r.messageCountCapped) {
           const n = r.messageCountScanMaxLines ?? 1000;
           return (
-            <Tooltip title={intl.formatMessage({ id: 'sessions.column.messagesExceededScanTooltip' }, { n })}>
+            <Tooltip
+              title={intl.formatMessage(
+                { id: 'sessions.column.messagesExceededScanTooltip' },
+                { n },
+              )}
+            >
               <span style={{ cursor: 'help' }}>{text}</span>
             </Tooltip>
           );
@@ -306,7 +336,9 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
     {
       title: (
         <Tooltip title={intl.formatMessage({ id: 'sessions.column.archivedTooltip' })}>
-          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.archived' })}</span>
+          <span style={{ cursor: 'help' }}>
+            {intl.formatMessage({ id: 'sessions.column.archived' })}
+          </span>
         </Tooltip>
       ),
       key: 'archived',
@@ -349,9 +381,19 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
     },
     {
       title: (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', width: '100%' }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            justifyContent: 'flex-end',
+            width: '100%',
+          }}
+        >
           <Tooltip title={intl.formatMessage({ id: 'sessions.column.recordedTokensTooltip' })}>
-            <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.recordedTokens' })}</span>
+            <span style={{ cursor: 'help' }}>
+              {intl.formatMessage({ id: 'sessions.column.recordedTokens' })}
+            </span>
           </Tooltip>
           <TokenMetricHint intl={intl} />
         </div>
@@ -375,7 +417,14 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
               width: '100%',
             }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                justifyContent: 'flex-end',
+              }}
+            >
               <Tooltip
                 title={
                   unreliable
@@ -395,9 +444,7 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
             </span>
             <Tooltip
               title={
-                unreliable
-                  ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' })
-                  : undefined
+                unreliable ? intl.formatMessage({ id: 'sessions.utilUnreliableHint' }) : undefined
               }
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -423,7 +470,9 @@ function buildRecentSessionColumns(intl, archiveCountMap = {}) {
     {
       title: (
         <Tooltip title={intl.formatMessage({ id: 'sessions.column.estimatedLogTooltip' })}>
-          <span style={{ cursor: 'help' }}>{intl.formatMessage({ id: 'sessions.column.estimatedLog' })}</span>
+          <span style={{ cursor: 'help' }}>
+            {intl.formatMessage({ id: 'sessions.column.estimatedLog' })}
+          </span>
         </Tooltip>
       ),
       key: 'tokenEstimated',
@@ -453,7 +502,8 @@ function resolveSessionDetailPath(mainSession) {
   if (!mainSession?.sessionId) return null;
   const sid = String(mainSession.sessionId);
   if (sid.includes('/')) return sid;
-  const agentId = mainSession.agentId || (mainSession.key && String(mainSession.key).split(':')[1]) || 'main';
+  const agentId =
+    mainSession.agentId || (mainSession.key && String(mainSession.key).split(':')[1]) || 'main';
   return `${agentId}/${sid}`;
 }
 
@@ -522,7 +572,12 @@ function GatewayStatusCard({ overview, intl }) {
   const runtimeKind = mainSession?.kind === 'group' ? 'group' : 'direct';
   const think = mainSession?.thinkingLevel ?? 'off';
   const elevated = formatElevated(mainSession?.elevatedLevel);
-  const runtimeParts = [`Runtime: ${runtimeKind}`, `Think: ${think}`, mainSession?.fastMode ? 'Fast: on' : null, elevated].filter(Boolean);
+  const runtimeParts = [
+    `Runtime: ${runtimeKind}`,
+    `Think: ${think}`,
+    mainSession?.fastMode ? 'Fast: on' : null,
+    elevated,
+  ].filter(Boolean);
   const queueDepth = queuedEvents.length;
 
   const src = overview.traceflowGatewayStatusSource;
@@ -544,7 +599,15 @@ function GatewayStatusCard({ overview, intl }) {
       size="small"
       bodyStyle={{ padding: '12px 16px' }}
     >
-      <Typography.Paragraph style={{ fontFamily: 'monospace', fontSize: 12, marginBottom: 8, lineHeight: 1.7, color: token.colorTextSecondary }}>
+      <Typography.Paragraph
+        style={{
+          fontFamily: 'monospace',
+          fontSize: 12,
+          marginBottom: 8,
+          lineHeight: 1.7,
+          color: token.colorTextSecondary,
+        }}
+      >
         {versionLine}
         <br />
         Model: {model}
@@ -618,9 +681,9 @@ export default function Dashboard() {
       const data = await dashboardApi
         .getOverview({ timeRangeMs: DASHBOARD_METRICS_TIME_RANGE_MS })
         .catch((err) => {
-        overviewHttpErr = err;
-        return null;
-      });
+          overviewHttpErr = err;
+          return null;
+        });
 
       const fallbackDetail = intl.formatMessage({ id: 'dashboard.overviewFetchFailed' });
       const errDetail = extractApiErrorMessage(overviewHttpErr, fallbackDetail);
@@ -700,10 +763,7 @@ export default function Dashboard() {
   }, [fetchData]);
 
   const recentSessions10 = useMemo(
-    () =>
-      [...sessions]
-        .sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0))
-        .slice(0, 10),
+    () => [...sessions].sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0)).slice(0, 10),
     [sessions],
   );
 
@@ -722,7 +782,8 @@ export default function Dashboard() {
   const totalSessions = sessions.length;
 
   const buildTimeText = formatBuildTimeDisplay(APP_BUILD_TIME_ISO, intl);
-  const gitShort = typeof APP_GIT_SHA === 'string' && APP_GIT_SHA.length >= 7 ? APP_GIT_SHA.slice(0, 7) : '';
+  const gitShort =
+    typeof APP_GIT_SHA === 'string' && APP_GIT_SHA.length >= 7 ? APP_GIT_SHA.slice(0, 7) : '';
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -743,7 +804,11 @@ export default function Dashboard() {
           <SectionScopeHint intl={intl} messageId="dashboard.titleDesc" />
         </div>
         {(buildTimeText || gitShort) && (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }} title={APP_BUILD_TIME_ISO || undefined}>
+          <Typography.Text
+            type="secondary"
+            style={{ fontSize: 12 }}
+            title={APP_BUILD_TIME_ISO || undefined}
+          >
             {buildTimeText ? (
               <>
                 {intl.formatMessage({ id: 'dashboard.buildLabel' })}
@@ -772,7 +837,10 @@ export default function Dashboard() {
           }
           description={
             overviewFetchHint.type === 'stale'
-              ? intl.formatMessage({ id: 'dashboard.overviewStaleDetail' }, { detail: overviewFetchHint.detail })
+              ? intl.formatMessage(
+                  { id: 'dashboard.overviewStaleDetail' },
+                  { detail: overviewFetchHint.detail },
+                )
               : overviewFetchHint.detail
           }
           action={
@@ -865,7 +933,10 @@ export default function Dashboard() {
               <Space size="small">
                 <SectionScopeHint intl={intl} messageId="dashboard.healthDesc" />
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {intl.formatMessage({ id: 'dashboard.healthRefreshEvery' }, { seconds: DASHBOARD_POLL_INTERVAL_MS / 1000 })}
+                  {intl.formatMessage(
+                    { id: 'dashboard.healthRefreshEvery' },
+                    { seconds: DASHBOARD_POLL_INTERVAL_MS / 1000 },
+                  )}
                 </Typography.Text>
               </Space>
             }
@@ -874,17 +945,26 @@ export default function Dashboard() {
           >
             <Typography.Paragraph style={{ marginBottom: 4 }}>
               <Tooltip title={intl.formatMessage({ id: 'dashboard.healthGatewayDesc' })}>
-                <span style={{ cursor: 'help' }}>Gateway: {health?.openclawConnected ? '✓' : '✗'}</span>
+                <span style={{ cursor: 'help' }}>
+                  Gateway: {health?.openclawConnected ? '✓' : '✗'}
+                </span>
               </Tooltip>
             </Typography.Paragraph>
             <Typography.Paragraph style={{ marginBottom: 4 }}>
               <Tooltip title={intl.formatMessage({ id: 'dashboard.healthMemoryDesc' })}>
-                <span style={{ cursor: 'help' }}>Memory: {health?.gateway?.memory != null ? `${Math.round(health.gateway.memory)} MB` : '—'}</span>
+                <span style={{ cursor: 'help' }}>
+                  Memory:{' '}
+                  {health?.gateway?.memory != null
+                    ? `${Math.round(health.gateway.memory)} MB`
+                    : '—'}
+                </span>
               </Tooltip>
             </Typography.Paragraph>
             <Typography.Paragraph style={{ marginBottom: 0 }}>
               <Tooltip title={intl.formatMessage({ id: 'dashboard.healthCpuDesc' })}>
-                <span style={{ cursor: 'help' }}>CPU: {health?.gateway?.cpu != null ? `${health.gateway.cpu}%` : '—'}</span>
+                <span style={{ cursor: 'help' }}>
+                  CPU: {health?.gateway?.cpu != null ? `${health.gateway.cpu}%` : '—'}
+                </span>
               </Tooltip>
             </Typography.Paragraph>
           </Card>
@@ -978,174 +1058,205 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      {metrics.tokenSummary && (() => {
-        const ts = metrics.tokenSummary;
-        const chartData = [
-          {
-            name: intl.formatMessage({ id: 'dashboard.tokenCategoryActive' }),
-            recorded: ts.activeTokens ?? 0,
-            recordedIn: ts.activeInput ?? 0,
-            recordedOut: ts.activeOutput ?? 0,
-            estimated: ts.activeTokens ?? 0,
-          },
-          {
-            name: intl.formatMessage({ id: 'dashboard.tokenCategoryArchived' }),
-            recorded: ts.archivedTokens ?? 0,
-            recordedIn: ts.archivedInput ?? 0,
-            recordedOut: ts.archivedOutput ?? 0,
-            estimated: ts.archivedTokens ?? 0,
-          },
-        ];
-        return (
-          <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
-            <Col xs={24}>
-              <Card
-                extra={
-                  <Space wrap size={4}>
-                    <SectionScopeHint intl={intl} messageId="dashboard.tokenMetricsTraceDoc" overlayMaxWidth={520} />
-                  </Space>
-                }
-                size="small"
-                bodyStyle={{ padding: '12px 16px' }}
-              >
-                {(() => {
-                  const archivedRecZero =
-                    (ts.archivedTokens ?? 0) === 0 &&
-                    (ts.archivedInput ?? 0) === 0 &&
-                    (ts.archivedOutput ?? 0) === 0;
-                  if (!archivedRecZero) return null;
-                  return (
-                    <Alert
-                      type="info"
-                      showIcon
-                      style={{ marginBottom: 12 }}
-                      message={intl.formatMessage({ id: 'dashboard.tokenArchivedZeroBannerTitle' })}
-                      description={intl.formatMessage(
-                        { id: 'dashboard.tokenArchivedZeroBannerDesc' },
-                        { estArchived: (ts.archivedTokens ?? 0).toLocaleString() },
-                      )}
-                    />
-                  );
-                })()}
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart
-                    data={chartData}
-                    margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
-                    barCategoryGap="18%"
-                    barGap={2}
+      {metrics.tokenSummary &&
+        (() => {
+          const ts = metrics.tokenSummary;
+          const chartData = [
+            {
+              name: intl.formatMessage({ id: 'dashboard.tokenCategoryActive' }),
+              recorded: ts.activeTokens ?? 0,
+              recordedIn: ts.activeInput ?? 0,
+              recordedOut: ts.activeOutput ?? 0,
+              estimated: ts.activeTokens ?? 0,
+            },
+            {
+              name: intl.formatMessage({ id: 'dashboard.tokenCategoryArchived' }),
+              recorded: ts.archivedTokens ?? 0,
+              recordedIn: ts.archivedInput ?? 0,
+              recordedOut: ts.archivedOutput ?? 0,
+              estimated: ts.archivedTokens ?? 0,
+            },
+          ];
+          return (
+            <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
+              <Col xs={24}>
+                <Card
+                  extra={
+                    <Space wrap size={4}>
+                      <SectionScopeHint
+                        intl={intl}
+                        messageId="dashboard.tokenMetricsTraceDoc"
+                        overlayMaxWidth={520}
+                      />
+                    </Space>
+                  }
+                  size="small"
+                  bodyStyle={{ padding: '12px 16px' }}
+                >
+                  {(() => {
+                    const archivedRecZero =
+                      (ts.archivedTokens ?? 0) === 0 &&
+                      (ts.archivedInput ?? 0) === 0 &&
+                      (ts.archivedOutput ?? 0) === 0;
+                    if (!archivedRecZero) return null;
+                    return (
+                      <Alert
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 12 }}
+                        message={intl.formatMessage({
+                          id: 'dashboard.tokenArchivedZeroBannerTitle',
+                        })}
+                        description={intl.formatMessage(
+                          { id: 'dashboard.tokenArchivedZeroBannerDesc' },
+                          { estArchived: (ts.archivedTokens ?? 0).toLocaleString() },
+                        )}
+                      />
+                    );
+                  })()}
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
+                      barCategoryGap="18%"
+                      barGap={2}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 12, fill: token.colorTextSecondary }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: token.colorTextSecondary }}
+                        tickFormatter={(v) => formatTokensShort(v)}
+                        width={56}
+                      />
+                      <RechartsTooltip
+                        formatter={(value, name) => [formatTokensShort(value), name]}
+                        contentStyle={{ background: token.colorBgElevated }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar
+                        dataKey="recorded"
+                        name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecorded' })}
+                        fill={token.colorPrimary}
+                        radius={[2, 2, 0, 0]}
+                        maxBarSize={36}
+                      />
+                      <Bar
+                        dataKey="recordedIn"
+                        name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecordedIn' })}
+                        fill={token.colorInfo}
+                        radius={[2, 2, 0, 0]}
+                        maxBarSize={36}
+                      />
+                      <Bar
+                        dataKey="recordedOut"
+                        name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecordedOut' })}
+                        fill={token.colorWarning}
+                        radius={[2, 2, 0, 0]}
+                        maxBarSize={36}
+                      />
+                      <Bar
+                        dataKey="estimated"
+                        name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesEstimated' })}
+                        fill={token.colorSuccess}
+                        radius={[2, 2, 0, 0]}
+                        maxBarSize={36}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+
+                  <Typography.Paragraph
+                    type="secondary"
+                    style={{ marginTop: 12, marginBottom: 4, fontSize: 12, lineHeight: 1.6 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
-                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: token.colorTextSecondary }} />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: token.colorTextSecondary }}
-                      tickFormatter={(v) => formatTokensShort(v)}
-                      width={56}
-                    />
-                    <RechartsTooltip
-                      formatter={(value, name) => [formatTokensShort(value), name]}
-                      contentStyle={{ background: token.colorBgElevated }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar
-                      dataKey="recorded"
-                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecorded' })}
-                      fill={token.colorPrimary}
-                      radius={[2, 2, 0, 0]}
-                      maxBarSize={36}
-                    />
-                    <Bar
-                      dataKey="recordedIn"
-                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecordedIn' })}
-                      fill={token.colorInfo}
-                      radius={[2, 2, 0, 0]}
-                      maxBarSize={36}
-                    />
-                    <Bar
-                      dataKey="recordedOut"
-                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesRecordedOut' })}
-                      fill={token.colorWarning}
-                      radius={[2, 2, 0, 0]}
-                      maxBarSize={36}
-                    />
-                    <Bar
-                      dataKey="estimated"
-                      name={intl.formatMessage({ id: 'dashboard.tokenChartSeriesEstimated' })}
-                      fill={token.colorSuccess}
-                      radius={[2, 2, 0, 0]}
-                      maxBarSize={36}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                    {intl.formatMessage(
+                      { id: 'dashboard.tokenIoFootnote' },
+                      {
+                        ai: (ts.activeInput ?? 0).toLocaleString(),
+                        ao: (ts.activeOutput ?? 0).toLocaleString(),
+                        ri: (ts.archivedInput ?? 0).toLocaleString(),
+                        ro: (ts.archivedOutput ?? 0).toLocaleString(),
+                      },
+                    )}
+                  </Typography.Paragraph>
+                  <Typography.Paragraph
+                    type="secondary"
+                    style={{ marginTop: 0, marginBottom: 8, fontSize: 12, lineHeight: 1.6 }}
+                  >
+                    {intl.formatMessage({ id: 'dashboard.tokenFixtureDocLine' })}
+                  </Typography.Paragraph>
 
-                <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 4, fontSize: 12, lineHeight: 1.6 }}>
-                  {intl.formatMessage(
-                    { id: 'dashboard.tokenIoFootnote' },
-                    {
-                      ai: (ts.activeInput ?? 0).toLocaleString(),
-                      ao: (ts.activeOutput ?? 0).toLocaleString(),
-                      ri: (ts.archivedInput ?? 0).toLocaleString(),
-                      ro: (ts.archivedOutput ?? 0).toLocaleString(),
-                    },
-                  )}
-                </Typography.Paragraph>
-                <Typography.Paragraph type="secondary" style={{ marginTop: 0, marginBottom: 8, fontSize: 12, lineHeight: 1.6 }}>
-                  {intl.formatMessage({ id: 'dashboard.tokenFixtureDocLine' })}
-                </Typography.Paragraph>
-
-                <Row gutter={[12, 12]}>
-                  <Col xs={12} sm={6} md={6}>
-                    <Statistic
-                      title={
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          {intl.formatMessage({ id: 'token.overviewStaleCount' })}
-                          <SectionScopeHint intl={intl} messageId="token.overviewStaleCountDesc" />
-                        </span>
-                      }
-                      value={0}
-                    />
-                  </Col>
-                  <Col xs={12} sm={6} md={6}>
-                    <Statistic
-                      title={
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          {intl.formatMessage({ id: 'token.overviewStaleWithActive' })}
-                          <SectionScopeHint intl={intl} messageId="token.overviewStaleWithActiveDesc" />
-                        </span>
-                      }
-                      value={0}
-                    />
-                  </Col>
-                  <Col xs={12} sm={6} md={6}>
-                    <Statistic
-                      title={
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          {intl.formatMessage({ id: 'token.overviewEstimatedSum' })}
-                          <SectionScopeHint intl={intl} messageId="token.overviewEstimatedSumDesc" />
-                        </span>
-                      }
-                      value={ts.activeTokens ?? 0}
-                    />
-                  </Col>
-                  <Col xs={12} sm={6} md={6}>
-                    <Statistic
-                      title={
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          {intl.formatMessage({ id: 'dashboard.estimatedOrphanLabel' })}
-                          <SectionScopeHint intl={intl} messageId="dashboard.estimatedOrphanHint" />
-                        </span>
-                      }
-                      value={0}
-                    />
-                  </Col>
-                </Row>
-                <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
-                  {intl.formatMessage({ id: 'token.dualTrack.formulaHint' })}
-                </Typography.Paragraph>
-              </Card>
-            </Col>
-          </Row>
-        );
-      })()}
+                  <Row gutter={[12, 12]}>
+                    <Col xs={12} sm={6} md={6}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'token.overviewStaleCount' })}
+                            <SectionScopeHint
+                              intl={intl}
+                              messageId="token.overviewStaleCountDesc"
+                            />
+                          </span>
+                        }
+                        value={0}
+                      />
+                    </Col>
+                    <Col xs={12} sm={6} md={6}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'token.overviewStaleWithActive' })}
+                            <SectionScopeHint
+                              intl={intl}
+                              messageId="token.overviewStaleWithActiveDesc"
+                            />
+                          </span>
+                        }
+                        value={0}
+                      />
+                    </Col>
+                    <Col xs={12} sm={6} md={6}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'token.overviewEstimatedSum' })}
+                            <SectionScopeHint
+                              intl={intl}
+                              messageId="token.overviewEstimatedSumDesc"
+                            />
+                          </span>
+                        }
+                        value={ts.activeTokens ?? 0}
+                      />
+                    </Col>
+                    <Col xs={12} sm={6} md={6}>
+                      <Statistic
+                        title={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {intl.formatMessage({ id: 'dashboard.estimatedOrphanLabel' })}
+                            <SectionScopeHint
+                              intl={intl}
+                              messageId="dashboard.estimatedOrphanHint"
+                            />
+                          </span>
+                        }
+                        value={0}
+                      />
+                    </Col>
+                  </Row>
+                  <Typography.Paragraph
+                    type="secondary"
+                    style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}
+                  >
+                    {intl.formatMessage({ id: 'token.dualTrack.formulaHint' })}
+                  </Typography.Paragraph>
+                </Card>
+              </Col>
+            </Row>
+          );
+        })()}
     </div>
   );
 }
