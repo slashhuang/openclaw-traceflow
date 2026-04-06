@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { OnboardingStorageService } from './onboarding-storage.service';
 import type { Config } from '../config/config.service';
 import type { OnboardingConfig } from './types';
@@ -228,10 +229,7 @@ export class ConfigMigrationService {
    */
   private expandPath(pathStr: string): string {
     if (pathStr.startsWith('~/') || pathStr === '~') {
-      return path.join(
-        require('os').homedir(),
-        pathStr.slice(1).replace(/^\//, ''),
-      );
+      return path.join(os.homedir(), pathStr.slice(1).replace(/^\//, ''));
     }
     return path.resolve(pathStr);
   }
@@ -254,12 +252,8 @@ export class ConfigMigrationService {
         version: '1.0.0',
         completedAt: new Date().toISOString(),
         openclaw: {
-          stateDir: path.join(require('os').homedir(), '.openclaw'),
-          workspaceDir: path.join(
-            require('os').homedir(),
-            '.openclaw',
-            'workspace',
-          ),
+          stateDir: path.join(os.homedir(), '.openclaw'),
+          workspaceDir: path.join(os.homedir(), '.openclaw', 'workspace'),
           pathSources: {
             stateDir: 'fallback',
             workspaceDir: 'fallback',
