@@ -102,14 +102,24 @@ class SessionWorker {
     const messageData = JSON.parse(message.message_data);
 
     // 检查是否有嵌入的元数据（从 ImPushService 传入）
-
     const _im_meta = messageData._im_meta;
     const content = messageData as Omit<typeof messageData, '_im_meta'>;
 
-    // 获取 parent_id
-    let parentId = message.parent_id;
+    // 获取 parent_id：优先使用 message.parent_id（入库时的值），_im_meta.parentId 作为备份
+    let parentId: string | undefined = message.parent_id;
     if (!parentId && _im_meta?.parentId) {
       parentId = _im_meta.parentId;
+      this.logger.debug(
+        `Using parentId from _im_meta for message ${message.id}: ${parentId}`,
+      );
+    }
+
+    // 防御性检查：如果消息已经标记为 sent，跳过发送（避免重复）
+    if (message.status === 'sent') {
+      this.logger.warn(
+        `Message ${message.id} already marked as sent, skipping`,
+      );
+      return;
     }
 
     // 使用熔断器发送

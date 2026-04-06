@@ -518,10 +518,6 @@ export class MessagePersistenceService
       const messages: MessageRecord[] = [];
       while (stmt.step()) {
         const msg = stmt.getAsObject() as unknown as MessageRecord;
-        // 重置"sending"状态为"pending"
-        if (msg.status === 'sending') {
-          msg.status = 'pending';
-        }
         messages.push(msg);
       }
       stmt.free();
@@ -532,6 +528,20 @@ export class MessagePersistenceService
     }
 
     return result;
+  }
+
+  /**
+   * 重置所有"sending"状态为"pending"（服务重启恢复时使用）
+   */
+  resetSendingMessages(): void {
+    if (!this.db) return;
+
+    const stmt = this.db.prepare(
+      `UPDATE messages SET status = 'pending' WHERE status = 'sending'`,
+    );
+    stmt.run();
+    stmt.free();
+    this.saveDatabase();
   }
 
   /**
@@ -600,10 +610,8 @@ export class MessagePersistenceService
   recoverPendingMessages(): Map<string, MessageRecord[]> {
     if (!this.db) return new Map();
 
-    // 重置所有"sending"状态
-    this.db.run(
-      `UPDATE messages SET status = 'pending' WHERE status = 'sending'`,
-    );
+    // 重置所有"sending"状态为"pending"
+    this.resetSendingMessages();
 
     // 重置所有未完成会话的状态
     this.db.run(
