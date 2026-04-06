@@ -127,8 +127,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
    *
    * 流程：
    * 1. 持久化会话信息到 SQLite
-   * 2. 创建父消息并持久化
-   * 3. 通知 dispatcher 启动 worker
+   * 2. 通知 dispatcher 启动 worker
    */
   private handleSessionStart(session: {
     sessionId: string;
@@ -158,41 +157,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       created_at: session.startTime || Date.now(),
     });
 
-    // 2. 创建父消息
-    const sessionState = {
-      sessionId,
-      sessionKey: session.sessionKey,
-      user: session.user,
-      account: session.account,
-      startTime: session.startTime || Date.now(),
-      messageCount: session.messageCount || 0,
-      status: 'active' as const,
-      firstMessage: session.firstMessage,
-    };
-
-    const parentMessage = this.formatter.formatSessionParent(
-      sessionState,
-      'active',
-    );
-    const messageId = `${sessionId}-parent-${Date.now()}`;
-
-    // 持久化父消息（将元数据嵌入到 message_data 中）
-    this.persistence.enqueueMessage({
-      id: messageId,
-      session_id: sessionId,
-      message_type: 'session_parent',
-      message_data: JSON.stringify({
-        ...parentMessage,
-        _im_meta: { type: 'session_parent' },
-      }),
-      status: 'pending',
-      retry_count: 0,
-      parent_id: undefined,
-    });
-
-    this.logger.debug(`Parent message enqueued: ${messageId}`);
-
-    // 3. 通知 dispatcher 启动 worker
+    // 2. 通知 dispatcher 启动 worker
     this.dispatcher.notifyNewMessage(sessionId);
   }
 
@@ -200,9 +165,10 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
    * 处理会话消息
    *
    * 流程：
-   * 1. 从 SQLite 获取 thread 信息（parent_id）
-   * 2. 持久化消息到 SQLite（自动分配 seq）
-   * 3. 通知 dispatcher（如果 session 已有 worker 则跳过）
+   * 1. 持久化消息到 SQLite（每条消息独立，不设置 parent_id）
+   * 2. 通知 dispatcher
+   *
+   * 注意：每条用户消息是独立的母消息，AI 回复作为对应消息的子消息
    */
   private handleSessionMessage(data: {
     sessionId: string;
@@ -212,27 +178,32 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const sessionId = data.sessionId;
     const message = data.message as { type?: string; [key: string]: unknown };
 
-    // 获取 thread 信息
-    const threadInfo = this.persistence.getSessionThread(sessionId);
-    const parentId = threadInfo?.parent_message_id;
+    // 判断消息类型
+    const messageType = message.type as string;
 
-    // 如果 parent_id 不存在，说明父消息还未发送完成
-    if (!parentId) {
-      this.logger.warn(
-        `Parent message not ready for session ${sessionId}, queuing message`,
+    // 用户消息：作为独立的母消息
+    // assistant 消息：作为最近一条用户消息的子消息
+    let parentId: string | undefined;
+
+    if (messageType === 'assistant') {
+      // 获取会话中最近一条用户消息的 ID 作为父消息
+      const lastUserMessage = this.persistence.getLastMessageByType(
+        sessionId,
+        'user',
       );
-      // 仍然入队，等待父消息完成后处理
+      parentId = lastUserMessage?.message_id;
     }
+    // user 消息：parentId 保持 undefined，作为独立母消息
 
     // 持久化消息（将元数据嵌入到 message_data 中）
     const messageId = `${sessionId}-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.persistence.enqueueMessage({
       id: messageId,
       session_id: sessionId,
-      message_type: message.type || 'unknown',
+      message_type: messageType || 'unknown',
       message_data: JSON.stringify({
         ...message,
-        _im_meta: { parentId, type: message.type },
+        _im_meta: { parentId, type: messageType },
       }),
       status: 'pending',
       retry_count: 0,
@@ -240,7 +211,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.logger.debug(
-      `Message enqueued: ${messageId} (session: ${sessionId}, parent: ${parentId || 'none'})`,
+      `Message enqueued: ${messageId} (session: ${sessionId}, parent: ${parentId || 'none (root message)'})`,
     );
 
     // 通知 dispatcher
@@ -251,7 +222,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
    * 处理会话结束
    *
    * 流程：
-   * 1. 发送会话结束消息
+   * 1. 发送会话结束汇总消息（作为独立消息，不回复到任何 thread）
    * 2. 更新会话状态为 completed
    * 3. 停止 worker
    */
@@ -259,69 +230,59 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const sessionId = session.sessionId;
     this.logger.log(`Session ended: ${sessionId}`);
 
-    // 获取 thread 信息
-    const threadInfo = this.persistence.getSessionThread(sessionId);
-    const parentId = threadInfo?.parent_message_id;
+    // 获取会话数据用于格式化结束消息
+    const sessionRecord = this.persistence.getSession(sessionId);
+    const sessionData = sessionRecord
+      ? {
+          sessionId: sessionRecord.session_id,
+          sessionKey: sessionRecord.session_key,
+          user: { id: sessionRecord.user_id, name: sessionRecord.user_name },
+          account: sessionRecord.agent_id,
+          startTime: sessionRecord.created_at,
+          endTime: Date.now(),
+          messageCount: 0,
+          status: 'completed' as const,
+        }
+      : {
+          sessionId,
+          sessionKey: sessionId,
+          user: { id: 'unknown', name: 'Unknown User' },
+          account: 'unknown',
+          startTime: Date.now(),
+          endTime: Date.now(),
+          messageCount: 0,
+          status: 'completed' as const,
+        };
 
-    if (parentId) {
-      // 获取会话数据用于格式化结束消息
-      const sessionRecord = this.persistence.getSession(sessionId);
-      const sessionData = sessionRecord
-        ? {
-            sessionId: sessionRecord.session_id,
-            sessionKey: sessionRecord.session_key,
-            user: { id: sessionRecord.user_id, name: sessionRecord.user_name },
-            account: sessionRecord.agent_id, // 使用 agent_id 作为 account
-            startTime: sessionRecord.created_at,
-            endTime: Date.now(),
-            messageCount: 0, // 实际值需要从其他地方获取
-            status: 'completed' as const,
-          }
-        : {
-            sessionId,
-            sessionKey: sessionId,
-            user: { id: 'unknown', name: 'Unknown User' },
-            account: 'unknown',
-            startTime: Date.now(),
-            endTime: Date.now(),
-            messageCount: 0,
-            status: 'completed' as const,
-          };
+    // 创建会话结束消息（作为独立消息发送）
+    const endMessage = this.formatter.formatSessionEnd(sessionData);
+    const messageId = `${sessionId}-end-${Date.now()}`;
 
-      // 创建会话结束消息
-      const endMessage = this.formatter.formatSessionEnd(sessionData);
-      const messageId = `${sessionId}-end-${Date.now()}`;
+    // 持久化（不设置 parent_id，作为独立消息）
+    this.persistence.enqueueMessage({
+      id: messageId,
+      session_id: sessionId,
+      message_type: 'session_end',
+      message_data: JSON.stringify({
+        ...endMessage,
+        _im_meta: { type: 'session_end' },
+      }),
+      status: 'pending',
+      retry_count: 0,
+      parent_id: undefined,
+    });
 
-      // 持久化（将元数据嵌入到 message_data 中）
-      this.persistence.enqueueMessage({
-        id: messageId,
-        session_id: sessionId,
-        message_type: 'session_end',
-        message_data: JSON.stringify({
-          ...endMessage,
-          _im_meta: { type: 'session_end', parentId },
-        }),
-        status: 'pending',
-        retry_count: 0,
-        parent_id: parentId,
-      });
+    this.logger.debug(`Session end message enqueued: ${messageId}`);
 
-      this.logger.debug(`Session end message enqueued: ${messageId}`);
+    // 通知 dispatcher 发送
+    this.dispatcher.notifyNewMessage(sessionId);
 
-      // 通知 dispatcher 发送
-      this.dispatcher.notifyNewMessage(sessionId);
-
-      // 延迟停止 worker（等待消息发送完成）
-      setTimeout(() => {
-        this.persistence.completeSession(sessionId);
-        this.dispatcher.stopWorker(sessionId);
-        this.logger.debug(`Session worker stopped: ${sessionId}`);
-      }, 3000);
-    } else {
-      // 没有 parent_id，直接标记完成
+    // 延迟停止 worker（等待消息发送完成）
+    setTimeout(() => {
       this.persistence.completeSession(sessionId);
       this.dispatcher.stopWorker(sessionId);
-    }
+      this.logger.debug(`Session worker stopped: ${sessionId}`);
+    }, 3000);
   }
 
   /**

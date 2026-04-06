@@ -318,6 +318,32 @@ export class MessagePersistenceService
   }
 
   /**
+   * 获取会话中指定类型的最后一条消息
+   */
+  getLastMessageByType(
+    sessionId: string,
+    messageType: string,
+  ): MessageRecord | null {
+    if (!this.db) return null;
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM messages
+      WHERE session_id = ? AND message_type = ?
+      ORDER BY seq DESC
+      LIMIT 1
+    `);
+    stmt.bind([sessionId, messageType]);
+
+    let result: MessageRecord | null = null;
+    if (stmt.step()) {
+      result = stmt.getAsObject() as unknown as MessageRecord;
+    }
+    stmt.free();
+
+    return result;
+  }
+
+  /**
    * 设置会话的 thread（父消息）
    */
   setSessionThread(
