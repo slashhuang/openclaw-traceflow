@@ -144,30 +144,47 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     // 使用原生 fs.watch (跨平台：macOS fsevents / Linux inotify / Windows ReadDirectoryChangesW)
     const watcher = chokidar.watch(sessionsDir, {
       // 只监听 .jsonl 和 sessions.json 文件 (chokidar v4 风格：返回 true 表示忽略)
+      // 修复：当 stats 为 undefined 时检查 filePath 后缀
       ignored: (filePath, stats) => {
-        if (!stats?.isFile()) return false; // 不忽略目录
+        // 第一次调用（没有 stats）：基于路径快速过滤
+        if (!stats) {
+          // 目录不忽略（需要递归监听）
+          return false;
+        }
+        // 第二次调用（有 stats）：基于文件类型过滤
+        if (!stats.isFile()) {
+          return false; // 不忽略目录
+        }
+        // 只监听 .jsonl 和 sessions.json 文件
         return !(
           filePath.endsWith('.jsonl') || filePath.endsWith('sessions.json')
         );
       },
       persistent: true,
-      ignoreInitial: false, // 需要触发 add 事件来初始化文件位置
+      ignoreInitial: true, // 不触发 add 事件，由 scanExistingSessions 处理现有文件
       // 使用原生 watching (默认)，只在网络文件系统时开启 polling
       usePolling: false,
       // awaitWriteFinish 配置，避免写入中途触发事件
       awaitWriteFinish: {
-        stabilityThreshold: 200,
-        pollInterval: 50,
+        stabilityThreshold: 500, // 增加稳定性阈值
+        pollInterval: 100,       // 增加轮询间隔
       },
-      depth: 1,
-      alwaysStat: true, // 始终提供 stats 对象
+      depth: 2,                  // 增加深度限制
+      alwaysStat: true,          // 始终提供 stats 对象
+      // 启用原始事件监听，用于调试
+      followSymlinks: false,     // 不跟随符号链接
     });
 
     this.watchers.push(watcher);
 
+    // 添加 raw 事件监听，用于调试和故障排查
+    watcher.on('raw', (event, path) => {
+      this.logger.debug(`Raw event: ${event} ${path}`);
+    });
+
     watcher
-      .on('add', (filePath) => {
-        this.logger.log(`File created: ${filePath}`);
+      .on('add', (filePath, stats) => {
+        this.logger.log(`File created: ${filePath}, size: ${stats?.size || 'unknown'}`);
         if (filePath.endsWith('.jsonl')) {
           this.handleNewSessionFile(filePath, agentId);
         }
@@ -183,15 +200,59 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           this.handleSessionsJsonChange(filePath, agentId);
         }
       })
+      .on('unlink', (filePath) => {
+        this.logger.log(`File deleted: ${filePath}`);
+        // 文件删除时清理会话状态
+        if (filePath.endsWith('.jsonl')) {
+          const sessionId = path.basename(filePath, '.jsonl');
+          if (!sessionId.includes('.reset.')) {
+            this.logger.log(`Session file deleted: ${sessionId}`);
+            // 不立即删除会话状态，等待超时清理
+          }
+        }
+      })
       .on('error', (error) => {
         this.logger.error('Watcher error:', error as Error);
+        // 尝试重启 watcher
+        this.logger.log('Attempting to restart watcher...');
+        setTimeout(() => {
+          this.restartWatcher(agentId, sessionsDir);
+        }, 1000);
       })
       .on('ready', () => {
         this.logger.log(`Watcher ready for agent ${agentId}`);
         this.watcherReady = true;
+
+        // ready 事件触发后，扫描现有文件（因为 ignoreInitial: true）
+        this.logger.log(`Scanning existing files after watcher ready...`);
+        this.scanExistingSessions(sessionsDir, agentId);
       });
 
     this.logger.log(`Watcher started for agent ${agentId}`);
+  }
+
+  /**
+   * 重启 watcher（用于错误恢复）
+   */
+  private restartWatcher(agentId: string, sessionsDir: string): void {
+    this.logger.log(`Restarting watcher for agent ${agentId}...`);
+
+    // 关闭旧的 watcher
+    const oldWatcherIndex = this.watchers.findIndex(w =>
+      w.getWatched && Object.keys(w.getWatched()).some(key => key.includes(sessionsDir))
+    );
+
+    if (oldWatcherIndex >= 0) {
+      const oldWatcher = this.watchers[oldWatcherIndex];
+      oldWatcher.close().then(() => {
+        this.watchers.splice(oldWatcherIndex, 1);
+        this.startAgentFileWatcher(agentId, sessionsDir);
+      }).catch((err) => {
+        this.logger.error('Failed to close old watcher:', err as Error);
+      });
+    } else {
+      this.startAgentFileWatcher(agentId, sessionsDir);
+    }
   }
 
   /**
@@ -564,7 +625,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       }
 
       // 触发会话开始事件
-      await this.onSessionStart({
+      this.onSessionStart({
         sessionId,
         sessionKey,
         user: { id: userId, name: userName },
@@ -706,7 +767,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 完成会话
    */
-  private async completeSession(sessionId: string): Promise<void> {
+  private completeSession(sessionId: string): void {
     const sessionState = this.sessionState.getSession(sessionId);
     if (!sessionState || sessionState.status === 'completed') return;
 
@@ -727,9 +788,8 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
    * 恢复会话（从 sessions.json 读取）
    * 注：当前版本暂不实现，待后续从 sessions.json 直接读取
    */
-  private async recoverSession(sessionId: string): Promise<void> {
+  private recoverSession(sessionId: string): void {
     this.logger.warn(`Session recovery not implemented for: ${sessionId}`);
-    return;
   }
 
   /**
