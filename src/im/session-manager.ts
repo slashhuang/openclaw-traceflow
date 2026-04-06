@@ -67,8 +67,11 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
-    // 启动文件监听器前，清空位置记录（每次启动都从 0 开始）
+    // 启动文件监听器前，清空并重新记录位置（每次启动都从 0 开始）
     this.sessionFilePositions.clear();
+
+    // 先记录已存在文件的位置，避免重复推送历史消息
+    this.recordExistingFilePositions();
 
     setTimeout(() => {
       this.startFileWatcher();
@@ -126,6 +129,57 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     for (const { agentId, sessionsDir } of agentsSessionsDirs) {
       this.startAgentFileWatcher(agentId, sessionsDir);
     }
+  }
+
+  /**
+   * 记录已存在文件的位置（启动后调用，避免重复推送历史消息）
+   */
+  private recordExistingFilePositions(): void {
+    const config = this.configService.getConfig();
+    const stateDir = config.openclawStateDir;
+
+    if (!stateDir || !fs.existsSync(stateDir)) {
+      return;
+    }
+
+    const agentsDir = path.join(stateDir, 'agents');
+    if (!fs.existsSync(agentsDir)) {
+      return;
+    }
+
+    const agentIds = fs.readdirSync(agentsDir);
+    for (const agentId of agentIds) {
+      const sessionsDir = path.join(agentsDir, agentId, 'sessions');
+      if (!fs.existsSync(sessionsDir)) {
+        continue;
+      }
+
+      // 扫描所有 .jsonl 文件
+      try {
+        const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl') && !f.includes('.reset.'));
+        for (const file of files) {
+          const filePath = path.join(sessionsDir, file);
+          const stats = fs.statSync(filePath);
+          if (stats.size === 0) {
+            continue;
+          }
+
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const lines = content.trim().split('\n').filter((line) => line.trim());
+          if (lines.length > 0) {
+            const sessionId = path.basename(file, '.jsonl');
+            this.sessionFilePositions.set(sessionId, {
+              size: stats.size,
+              lastLine: lines[lines.length - 1],
+            });
+          }
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to scan sessions for agent ${agentId}: ${error as Error}`);
+      }
+    }
+
+    this.logger.log(`Recorded positions for ${this.sessionFilePositions.size} existing session file(s)`);
   }
 
   /**
