@@ -195,7 +195,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         sessionId,
         'user',
       );
-      parentId = lastUserMessage?.message_id;
+      parentId = lastUserMessage?.id;
 
       if (!parentId) {
         // 理论上不会发生，除非数据损坏

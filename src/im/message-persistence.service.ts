@@ -470,7 +470,7 @@ export class MessagePersistenceService
       return record.id;
     } catch (error) {
       // 回滚 sequenceCache
-      this.sequenceCache.set(sessionId, seq - 1);
+      this.sequenceCache.set(record.session_id, seq - 1);
       this.logger.error(
         `Failed to enqueue message, seq cache rolled back: ${message.id}`,
         error as Error,
