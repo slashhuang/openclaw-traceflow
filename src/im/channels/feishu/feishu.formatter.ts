@@ -69,12 +69,23 @@ export class FeishuMessageFormatter {
 
   /**
    * 格式化会话父消息
+   * 注意：不显示"会话开始"，因为用户感知到的是自己先发起了对话
    */
   formatSessionParent(
     session: SessionData,
     status: 'active' | 'completed',
   ): FormattedMessage {
-    const text = `💬 会话开始：${session.user.name}`;
+    // 当用户名是默认值时，使用更友好的展示方式
+    let userDisplay = session.user.name;
+    if (userDisplay === 'Unknown User' || !userDisplay) {
+      // 尝试用用户 ID 展示（ou_xxx 格式）
+      userDisplay = session.user.id?.startsWith('ou_')
+        ? session.user.id
+        : '用户';
+    }
+
+    // 不显示"会话开始"，改成更自然的标题
+    const text = `📝 会话记录：${userDisplay}`;
 
     return {
       msg_type: 'text',
@@ -168,7 +179,12 @@ ${this.truncateJson(message.output, 2000)}`;
    * 格式化会话结束
    */
   formatSessionEnd(session: SessionData): FormattedMessage {
-    const text = `✅ 会话结束：${session.messageCount} 条消息，${this.formatDuration(session.endTime! - session.startTime)}`;
+    // 不显示"会话结束"，改成更自然的总结
+    const duration =
+      session.endTime && session.startTime
+        ? this.formatDuration(session.endTime - session.startTime)
+        : '未知时长';
+    const text = `✅ 会话完成：共 ${session.messageCount} 条消息，耗时 ${duration}`;
 
     return {
       msg_type: 'text',
