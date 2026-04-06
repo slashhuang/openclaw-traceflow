@@ -139,6 +139,9 @@ class SessionWorker {
         this.logger.error(
           `Message ${message.id} exceeded max retries, dropping`,
         );
+        // 从数据库中删除失败消息，防止无限重试
+        this.persistence.removeSentMessage(message.id);
+        return;
       }
     }
   }
