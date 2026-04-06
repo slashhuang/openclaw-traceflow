@@ -264,6 +264,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       })
       .on('error', (error) => {
         this.logger.error('Watcher error:', error as Error);
+        // 触发错误事件，由上层决定是否通知用户
+        this.eventEmitter.emit('audit.watcher.error', {
+          agentId,
+          error: (error as Error).message,
+          timestamp: Date.now(),
+        });
         // 尝试重启 watcher
         this.logger.log('Attempting to restart watcher...');
         setTimeout(() => {

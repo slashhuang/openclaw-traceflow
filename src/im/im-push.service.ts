@@ -9,6 +9,7 @@ import { ConfigService } from '../config/config.service';
 import { MessagePersistenceService } from './message-persistence.service';
 import { MessageDispatcherService } from './message-dispatcher.service';
 import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
+import { FeishuChannel } from './channels/feishu/feishu.channel';
 import type { FormattedMessage } from './channel.interface';
 
 /**
@@ -38,6 +39,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     private configService: ConfigService,
     private persistence: MessagePersistenceService,
     private dispatcher: MessageDispatcherService,
+    private feishuChannel: FeishuChannel,
   ) {
     this.formatter = new FeishuMessageFormatter();
   }
@@ -97,6 +99,15 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       // 订阅会话结束事件
       this.eventEmitter.on('audit.session.end', (session: unknown) => {
         void this.handleSessionEnd(session as { sessionId: string });
+      });
+
+      // 订阅 watcher 错误事件（发送通知）
+      this.eventEmitter.on('audit.watcher.error', (data: unknown) => {
+        void this.handleWatcherError(data as {
+          agentId: string;
+          error: string;
+          timestamp: number;
+        });
       });
 
       this.eventListenersRegistered = true;
@@ -348,6 +359,45 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       return parts[1]; // main (agent ID)
     }
     return 'default';
+  }
+
+  /**
+   * 处理 watcher 错误事件，发送通知消息
+   */
+  private async handleWatcherError(data: {
+    agentId: string;
+    error: string;
+    timestamp: number;
+  }): Promise<void> {
+    const config = this.configService.getConfig();
+
+    // 检查是否配置了错误通知
+    if (!config.im?.enabled || !config.im.channels?.feishu?.enabled) {
+      this.logger.warn('IM push disabled, skipping watcher error notification');
+      return;
+    }
+
+    try {
+      // 格式化错误消息
+      const errorMessage: FormattedMessage = {
+        msg_type: 'text',
+        content: {
+          text: `[IM Push 告警] SessionManager Watcher 错误
+
+Agent ID: ${data.agentId}
+错误信息：${data.error}
+发生时间：${new Date(data.timestamp).toISOString()}
+
+Watcher 将尝试自动重启，请检查日志了解详情。`
+        }
+      };
+
+      // 直接发送消息（不持久化，避免循环）
+      await this.feishuChannel.send(errorMessage);
+      this.logger.log('Watcher error notification sent to Feishu');
+    } catch (sendError) {
+      this.logger.error('Failed to send watcher error notification:', sendError as Error);
+    }
   }
 
   /**
