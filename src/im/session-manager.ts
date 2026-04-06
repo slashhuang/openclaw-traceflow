@@ -395,12 +395,22 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         try {
           const entry = JSON.parse(line);
 
-          if (entry.type !== 'message') {
+          // 支持两种格式：
+          // 1. {"type":"message","message":{"role":"user|assistant",...}}
+          // 2. {"type":"user|assistant","role":"user|assistant",...}（直接 type = role）
+          const isMessageEntry = entry.type === 'message';
+          const isDirectRoleEntry =
+            entry.type === 'user' ||
+            entry.type === 'assistant' ||
+            entry.type === 'system';
+
+          if (!isMessageEntry && !isDirectRoleEntry) {
             continue;
           }
 
-          const role = entry.message?.role;
-          const messageContent = entry.message?.content;
+          // 兼容两种格式：entry.message.role 或 entry.role
+          const role = entry.message?.role ?? entry.type ?? entry.role;
+          const messageContent = entry.message?.content ?? entry.content;
 
           // 处理 toolCall（审计关键：工具调用）
           if (Array.isArray(messageContent)) {
@@ -432,7 +442,8 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           // 注意：toolResult 可能没有 message.role，而是直接在顶层有 toolName
           if (
             role === 'toolResult' ||
-            (entry.type === 'message' && entry.toolName && !entry.message?.role)
+            entry.toolName ||
+            (entry.type === 'tool_use' && !entry.message?.role)
           ) {
             const toolName =
               entry.toolName || entry.message?.toolCallId || 'unknown';
