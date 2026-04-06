@@ -100,45 +100,25 @@ class SessionWorker {
    */
   private async sendMessage(message: MessageRecord): Promise<void> {
     const messageData = JSON.parse(message.message_data);
-
-    // 检查是否有嵌入的元数据（从 ImPushService 传入）
-
     const _im_meta = messageData._im_meta;
     const content = messageData as Omit<typeof messageData, '_im_meta'>;
 
     // 获取 parent_id
-    let parentId = message.parent_id;
-    if (!parentId && _im_meta?.parentId) {
-      parentId = _im_meta.parentId;
-    }
+    const parentId = message.parent_id || _im_meta?.parentId;
 
     // 使用熔断器发送
     const result =
       await this.circuitBreaker.executeAndSuppress<SendResult | null>(
         async () =>
-          this.channelManager.sendToChannel(
-            'feishu',
-            content as never, // FormattedMessage structure
-            {
-              reply_id: parentId || undefined,
-            },
-          ),
+          this.channelManager.sendToChannel('feishu', content as never, {
+            reply_id: parentId || undefined,
+          }),
         null,
       );
 
     if (result) {
-      // 发送成功
       this.persistence.markMessageSent(message.id);
       this.currentRetry = 0;
-
-      // 如果是父消息，更新 session thread
-      if (_im_meta?.type === 'session_parent') {
-        this.persistence.setSessionThread(
-          this.sessionId,
-          result.message_id,
-          result.message_id,
-        );
-      }
 
       // 清理已发送消息
       void setTimeout(() => {
@@ -149,7 +129,6 @@ class SessionWorker {
         `Message sent: ${this.sessionId} -> ${result.message_id}`,
       );
     } else {
-      // 发送失败（熔断器打开或其他错误）
       this.persistence.markMessageFailed(
         message.id,
         'Send failed or circuit breaker open',
@@ -160,7 +139,6 @@ class SessionWorker {
         this.logger.error(
           `Message ${message.id} exceeded max retries, dropping`,
         );
-        // 这里不删除，让上层清理
       }
     }
   }

@@ -80,6 +80,7 @@ export class MessagePersistenceService
 
   async onModuleInit(): Promise<void> {
     await this.initDatabase();
+    await this.rebuildSequenceCache(); // 重建序列号缓存
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -90,6 +91,32 @@ export class MessagePersistenceService
     }
 
     return Promise.resolve();
+  }
+
+  /**
+   * 重建序列号缓存（服务重启后从数据库恢复）
+   * 确保 seq 连续性，避免重启后 seq 冲突
+   */
+  private async rebuildSequenceCache(): Promise<void> {
+    if (!this.db) return;
+
+    const stmt = this.db.prepare(`
+      SELECT session_id, MAX(seq) as maxSeq
+      FROM messages
+      GROUP BY session_id
+    `);
+
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as { session_id: string; maxSeq: number };
+      if (row.session_id && row.maxSeq) {
+        this.sequenceCache.set(row.session_id, row.maxSeq);
+      }
+    }
+    stmt.free();
+
+    this.logger.debug(
+      `Sequence cache rebuilt: ${this.sequenceCache.size} sessions`,
+    );
   }
 
   private async initDatabase(): Promise<void> {
@@ -318,6 +345,32 @@ export class MessagePersistenceService
   }
 
   /**
+   * 获取会话中指定类型的最后一条消息
+   */
+  getLastMessageByType(
+    sessionId: string,
+    messageType: string,
+  ): MessageRecord | null {
+    if (!this.db) return null;
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM messages
+      WHERE session_id = ? AND message_type = ?
+      ORDER BY seq DESC
+      LIMIT 1
+    `);
+    stmt.bind([sessionId, messageType]);
+
+    let result: MessageRecord | null = null;
+    if (stmt.step()) {
+      result = stmt.getAsObject() as unknown as MessageRecord;
+    }
+    stmt.free();
+
+    return result;
+  }
+
+  /**
    * 设置会话的 thread（父消息）
    */
   setSessionThread(
@@ -362,6 +415,8 @@ export class MessagePersistenceService
 
   /**
    * 添加消息到队列（原子操作，自动分配 seq）
+   *
+   * 注意：如果数据库写入失败，会回滚 sequenceCache
    */
   enqueueMessage(message: Omit<PendingMessage, 'seq' | 'created_at'>): string {
     if (!this.db) return message.id;
@@ -387,31 +442,41 @@ export class MessagePersistenceService
       sent_at: message.sent_at,
     };
 
-    this.db.run(
-      `INSERT OR REPLACE INTO messages
-       (id, session_id, seq, message_type, message_data, status, retry_count, error, parent_id, created_at, sent_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        record.id,
-        record.session_id,
-        record.seq,
-        record.message_type,
-        record.message_data,
-        record.status,
-        record.retry_count,
-        record.error || null,
-        record.parent_id || null,
-        record.created_at,
-        record.sent_at || null,
-      ],
-    );
-    this.saveDatabase();
+    try {
+      this.db.run(
+        `INSERT OR REPLACE INTO messages
+         (id, session_id, seq, message_type, message_data, status, retry_count, error, parent_id, created_at, sent_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          record.id,
+          record.session_id,
+          record.seq,
+          record.message_type,
+          record.message_data,
+          record.status,
+          record.retry_count,
+          record.error || null,
+          record.parent_id || null,
+          record.created_at,
+          record.sent_at || null,
+        ],
+      );
+      this.saveDatabase();
 
-    this.logger.debug(
-      `Message enqueued: ${record.id} (session: ${record.session_id}, seq: ${record.seq})`,
-    );
+      this.logger.debug(
+        `Message enqueued: ${record.id} (session: ${record.session_id}, seq: ${record.seq})`,
+      );
 
-    return record.id;
+      return record.id;
+    } catch (error) {
+      // 回滚 sequenceCache
+      this.sequenceCache.set(sessionId, seq - 1);
+      this.logger.error(
+        `Failed to enqueue message, seq cache rolled back: ${message.id}`,
+        error as Error,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -453,10 +518,6 @@ export class MessagePersistenceService
       const messages: MessageRecord[] = [];
       while (stmt.step()) {
         const msg = stmt.getAsObject() as unknown as MessageRecord;
-        // 重置"sending"状态为"pending"
-        if (msg.status === 'sending') {
-          msg.status = 'pending';
-        }
         messages.push(msg);
       }
       stmt.free();
@@ -467,18 +528,6 @@ export class MessagePersistenceService
     }
 
     return result;
-  }
-
-  /**
-   * 标记消息发送中
-   */
-  markMessageSending(messageId: string): void {
-    if (!this.db) return;
-
-    this.db.run(`UPDATE messages SET status = 'sending' WHERE id = ?`, [
-      messageId,
-    ]);
-    this.saveDatabase();
   }
 
   /**
@@ -535,19 +584,13 @@ export class MessagePersistenceService
   recoverPendingMessages(): Map<string, MessageRecord[]> {
     if (!this.db) return new Map();
 
-    // 重置所有"sending"状态
+    // 重置所有"sending"状态为"pending"
     this.db.run(
       `UPDATE messages SET status = 'pending' WHERE status = 'sending'`,
     );
-
-    // 重置所有未完成会话的状态
-    this.db.run(
-      `UPDATE sessions SET status = 'active' WHERE status = 'active'`,
-    );
-
     this.saveDatabase();
 
-    return this.getPendingMessages(100); // 恢复时每会话最多 100 条
+    return this.getPendingMessages(100);
   }
 
   /**

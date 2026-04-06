@@ -14,7 +14,6 @@ import {
   Statistic,
   Row,
   Col,
-  Text,
 } from 'antd';
 import {
   RobotOutlined,
@@ -27,7 +26,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const { Option } = Select;
 
 interface Reflection {
@@ -49,8 +48,8 @@ interface Reflection {
   status: 'pending' | 'applied' | 'ignored' | 'escalated';
   diff?: {
     file: string;
-    old: Record<string, any>;
-    new: Record<string, any>;
+    old: Record<string, unknown>;
+    new: Record<string, unknown>;
   };
   fullContent?: string;
 }
@@ -112,7 +111,7 @@ export const Reflections: React.FC = () => {
   }, [statusFilter, priorityFilter, dimensionFilter, intl]);
 
   useEffect(() => {
-    loadReflections();
+    void loadReflections();
   }, [loadReflections]);
 
 
@@ -335,7 +334,8 @@ export const Reflections: React.FC = () => {
           <span>优先级：</span>
           <Select
             value={priorityFilter}
-            onChange={setPriorityFilter}
+            // eslint-disable-next-line @typescript-eslint/no-misused-promises
+            onChange={(value) => { setPriorityFilter(value); }}
             style={{ width: 100 }}
           >
             <Option value="all">全部</Option>
@@ -347,7 +347,8 @@ export const Reflections: React.FC = () => {
           <span>维度：</span>
           <Select
             value={dimensionFilter}
-            onChange={setDimensionFilter}
+            // eslint-disable-next-line @typescript-eslint/no-misused-promises
+            onChange={(value) => { setDimensionFilter(value); }}
             style={{ width: 120 }}
           >
             <Option value="all">全部</Option>
