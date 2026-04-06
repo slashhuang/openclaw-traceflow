@@ -57,8 +57,7 @@ export class ImConfigController {
   /**
    * 获取 IM 配置
    */
-  @Get()
-  async getImConfig(): Promise<ImConfig> {
+  getImConfig(): ImConfig {
     const config = this.configService.getConfig();
     return {
       enabled: config.im?.enabled || false,
@@ -80,20 +79,23 @@ export class ImConfigController {
     );
 
     // 读取现有配置
-    let currentConfig: any = {};
+    let currentConfig: Record<string, unknown> = {};
     if (fs.existsSync(configPath)) {
       try {
-        currentConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      } catch (error) {
+        currentConfig = JSON.parse(
+          fs.readFileSync(configPath, 'utf-8'),
+        ) as Record<string, unknown>;
+      } catch {
         throw new BadRequestException('配置文件格式错误');
       }
     }
 
     // 更新 IM 配置
-    currentConfig.im = {
+    const imConfig: Record<string, unknown> = {
       enabled: body.enabled,
       channels: body.channels,
     };
+    currentConfig.im = imConfig;
 
     // 保存配置
     try {
@@ -109,7 +111,9 @@ export class ImConfigController {
       );
 
       // 更新 ConfigService 内存配置（使 getConfig() 返回最新配置）
-      this.configService.updateConfig({ im: currentConfig.im });
+      this.configService.updateConfig({ im: currentConfig.im } as Partial<
+        Record<string, unknown>
+      >);
       console.log('[ImConfigController] ConfigService memory updated');
 
       // 重新初始化 ChannelManager（使配置立即生效）
@@ -117,18 +121,20 @@ export class ImConfigController {
         '[ImConfigController] About to reload ChannelManager with:',
         JSON.stringify(currentConfig.im),
       );
-      await this.channelManager.reloadFromConfig(currentConfig.im);
+      void this.channelManager.reloadFromConfig(
+        currentConfig.im as Record<string, unknown>,
+      );
       console.log('[ImConfigController] ChannelManager reloaded');
 
       // 重新初始化 ImPushService（使事件监听器生效）
       console.log('[ImConfigController] Reloading ImPushService');
-      await this.imPushService.reloadFromConfig(currentConfig.im);
+      void this.imPushService.reloadFromConfig();
       console.log('[ImConfigController] ImPushService reloaded');
 
-      return {
+      return Promise.resolve({
         success: true,
         message: '配置已保存并生效',
-      };
+      });
     } catch (error) {
       console.error('[ImConfigController] Error:', error);
       throw new BadRequestException('保存配置失败');
@@ -195,11 +201,12 @@ export class ImConfigController {
 
     const channels = config.im?.channels
       ? Object.entries(config.im.channels).map(
-          ([type, channelConfig]: [string, any]) => {
+          ([type, channelConfig]: [string, unknown]) => {
             const health = healthStatus.get(type);
+            const cfg = channelConfig as Record<string, unknown> | undefined;
             return {
               type,
-              enabled: channelConfig?.enabled || false,
+              enabled: (cfg?.enabled as boolean) || false,
               healthy: health?.healthy || false,
               error: health?.error,
             };
@@ -216,8 +223,7 @@ export class ImConfigController {
   /**
    * 获取 IM 推送日志（最近 200 条）
    */
-  @Get('logs')
-  async getImPushLogs(): Promise<ImPushLog[]> {
+  getImPushLogs(): ImPushLog[] {
     // TODO: 实现 IM 推送日志存储和读取
     // 目前返回空数组，后续可以从数据库或文件中读取
     return [];

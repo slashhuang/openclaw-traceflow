@@ -248,8 +248,24 @@ export class CircuitBreakerService {
   /**
    * 获取所有熔断器状态
    */
-  getAllStats(): Map<string, any> {
-    const stats = new Map<string, any>();
+  getAllStats(): Map<
+    string,
+    {
+      state: CircuitState;
+      failures: number;
+      halfOpenSuccesses: number;
+      nextAttemptTime: number | null;
+    }
+  > {
+    const stats = new Map<
+      string,
+      {
+        state: CircuitState;
+        failures: number;
+        halfOpenSuccesses: number;
+        nextAttemptTime: number | null;
+      }
+    >();
     for (const [name, breaker] of this.breakers.entries()) {
       stats.set(name, breaker.getStats());
     }
