@@ -169,6 +169,11 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
    * 2. 通知 dispatcher
    *
    * 注意：每条用户消息是独立的母消息，AI 回复作为对应消息的子消息
+   *
+   * 并发保证：
+   * - OpenClaw 按顺序写入 .jsonl 文件
+   * - parseSessionFileUpdate 同步遍历新增行
+   * - 用户消息一定先于 AI 回复入队
    */
   private handleSessionMessage(data: {
     sessionId: string;
@@ -177,8 +182,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   }): void {
     const sessionId = data.sessionId;
     const message = data.message as { type?: string; [key: string]: unknown };
-
-    // 判断消息类型
     const messageType = message.type as string;
 
     // 用户消息：作为独立的母消息
@@ -187,7 +190,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
     if (messageType === 'assistant') {
       // 获取会话中最后一条用户消息的 ID 作为父消息
-      // 由于 JavaScript 单线程，用户消息肯定先于 AI 消息入队
+      // 由于 OpenClaw 队列模式 + 同步遍历，用户消息肯定先于 AI 消息入队
       const lastUserMessage = this.persistence.getLastMessageByType(
         sessionId,
         'user',
@@ -195,52 +198,14 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       parentId = lastUserMessage?.message_id;
 
       if (!parentId) {
-        // 重试机制：等待 100ms 后再次尝试（最多 3 次）
-        // 这种情况通常发生在服务刚启动或极端并发场景
+        // 理论上不会发生，除非数据损坏
         this.logger.warn(
-          `No user message found for assistant reply in session ${sessionId}, retrying in 100ms...`,
+          `No user message found for assistant reply in session ${sessionId}, sending as independent message`,
         );
-        setTimeout(() => {
-          const retryLastUserMessage = this.persistence.getLastMessageByType(
-            sessionId,
-            'user',
-          );
-          if (retryLastUserMessage) {
-            this.logger.log(
-              `Retry success: found user message for assistant reply in session ${sessionId}`,
-            );
-            // 重新入队 AI 消息（带正确的 parent_id）
-            const messageId = `${sessionId}-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            this.persistence.enqueueMessage({
-              id: messageId,
-              session_id: sessionId,
-              message_type: messageType,
-              message_data: JSON.stringify({
-                ...message,
-                _im_meta: {
-                  parentId: retryLastUserMessage.message_id,
-                  type: messageType,
-                },
-              }),
-              status: 'pending',
-              retry_count: 0,
-              parent_id: retryLastUserMessage.message_id,
-            });
-            this.dispatcher.notifyNewMessage(sessionId);
-          } else {
-            this.logger.error(
-              `Retry failed: still no user message for assistant reply in session ${sessionId}, sending as independent message`,
-            );
-            // 最终降级：作为独立消息发送
-            this.enqueueMessageWithParent(sessionId, message, undefined);
-          }
-        }, 100);
-        return; // 跳过本次入队，等待重试
       }
     }
-    // user 消息：parentId 保持 undefined，作为独立母消息
 
-    this.enqueueMessageWithParent(sessionId, message, parentId);
+    this.enqueueMessageWithParent(sessionId, message, parentId, messageType);
   }
 
   /**
@@ -250,8 +215,8 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     message: Record<string, unknown>,
     parentId: string | undefined,
+    messageType: string,
   ): void {
-    const messageType = message.type as string;
     const messageId = `${sessionId}-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     this.persistence.enqueueMessage({
