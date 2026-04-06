@@ -103,11 +103,13 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
       // 订阅 watcher 错误事件（发送通知）
       this.eventEmitter.on('audit.watcher.error', (data: unknown) => {
-        void this.handleWatcherError(data as {
-          agentId: string;
-          error: string;
-          timestamp: number;
-        });
+        void this.handleWatcherError(
+          data as {
+            agentId: string;
+            error: string;
+            timestamp: number;
+          },
+        );
       });
 
       this.eventListenersRegistered = true;
@@ -388,15 +390,18 @@ Agent ID: ${data.agentId}
 错误信息：${data.error}
 发生时间：${new Date(data.timestamp).toISOString()}
 
-Watcher 将尝试自动重启，请检查日志了解详情。`
-        }
+Watcher 将尝试自动重启，请检查日志了解详情。`,
+        },
       };
 
       // 直接发送消息（不持久化，避免循环）
       await this.feishuChannel.send(errorMessage);
       this.logger.log('Watcher error notification sent to Feishu');
     } catch (sendError) {
-      this.logger.error('Failed to send watcher error notification:', sendError as Error);
+      this.logger.error(
+        'Failed to send watcher error notification:',
+        sendError as Error,
+      );
     }
   }
 

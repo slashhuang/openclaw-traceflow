@@ -156,7 +156,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
       // 扫描所有 .jsonl 文件
       try {
-        const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl') && !f.includes('.reset.'));
+        const files = fs
+          .readdirSync(sessionsDir)
+          .filter((f) => f.endsWith('.jsonl') && !f.includes('.reset.'));
         for (const file of files) {
           const filePath = path.join(sessionsDir, file);
           const stats = fs.statSync(filePath);
@@ -165,7 +167,10 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           }
 
           const content = fs.readFileSync(filePath, 'utf-8');
-          const lines = content.trim().split('\n').filter((line) => line.trim());
+          const lines = content
+            .trim()
+            .split('\n')
+            .filter((line) => line.trim());
           if (lines.length > 0) {
             const sessionId = path.basename(file, '.jsonl');
             this.sessionFilePositions.set(sessionId, {
@@ -175,11 +180,15 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           }
         }
       } catch (error) {
-        this.logger.warn(`Failed to scan sessions for agent ${agentId}: ${error as Error}`);
+        this.logger.warn(
+          `Failed to scan sessions for agent ${agentId}: ${error as Error}`,
+        );
       }
     }
 
-    this.logger.log(`Recorded positions for ${this.sessionFilePositions.size} existing session file(s)`);
+    this.logger.log(
+      `Recorded positions for ${this.sessionFilePositions.size} existing session file(s)`,
+    );
   }
 
   /**
@@ -218,12 +227,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       // awaitWriteFinish 配置，避免写入中途触发事件
       awaitWriteFinish: {
         stabilityThreshold: 500, // 增加稳定性阈值
-        pollInterval: 100,       // 增加轮询间隔
+        pollInterval: 100, // 增加轮询间隔
       },
-      depth: 2,                  // 增加深度限制
-      alwaysStat: true,          // 始终提供 stats 对象
+      depth: 2, // 增加深度限制
+      alwaysStat: true, // 始终提供 stats 对象
       // 启用原始事件监听，用于调试
-      followSymlinks: false,     // 不跟随符号链接
+      followSymlinks: false, // 不跟随符号链接
     });
 
     this.watchers.push(watcher);
@@ -235,7 +244,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
     watcher
       .on('add', (filePath, stats) => {
-        this.logger.log(`File created: ${filePath}, size: ${stats?.size || 'unknown'}`);
+        this.logger.log(
+          `File created: ${filePath}, size: ${stats?.size || 'unknown'}`,
+        );
         if (filePath.endsWith('.jsonl')) {
           void this.handleNewSessionFile(filePath, agentId);
         }
@@ -292,18 +303,23 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Restarting watcher for agent ${agentId}...`);
 
     // 关闭旧的 watcher
-    const oldWatcherIndex = this.watchers.findIndex(w =>
-      w.getWatched && Object.keys(w.getWatched()).some(key => key.includes(sessionsDir))
+    const oldWatcherIndex = this.watchers.findIndex(
+      (w) =>
+        w.getWatched &&
+        Object.keys(w.getWatched()).some((key) => key.includes(sessionsDir)),
     );
 
     if (oldWatcherIndex >= 0) {
       const oldWatcher = this.watchers[oldWatcherIndex];
-      oldWatcher.close().then(() => {
-        this.watchers.splice(oldWatcherIndex, 1);
-        this.startAgentFileWatcher(agentId, sessionsDir);
-      }).catch((err) => {
-        this.logger.error('Failed to close old watcher:', err as Error);
-      });
+      oldWatcher
+        .close()
+        .then(() => {
+          this.watchers.splice(oldWatcherIndex, 1);
+          this.startAgentFileWatcher(agentId, sessionsDir);
+        })
+        .catch((err) => {
+          this.logger.error('Failed to close old watcher:', err as Error);
+        });
     } else {
       this.startAgentFileWatcher(agentId, sessionsDir);
     }
@@ -493,7 +509,10 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 处理新会话文件
    */
-  private async handleNewSessionFile(filePath: string, agentId: string): Promise<void> {
+  private async handleNewSessionFile(
+    filePath: string,
+    agentId: string,
+  ): Promise<void> {
     try {
       const sessionId = path.basename(filePath, '.jsonl');
 
