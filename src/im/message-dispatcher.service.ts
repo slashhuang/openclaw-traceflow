@@ -131,15 +131,6 @@ class SessionWorker {
       this.persistence.markMessageSent(message.id);
       this.currentRetry = 0;
 
-      // 如果是父消息，更新 session thread
-      if (_im_meta?.type === 'session_parent') {
-        this.persistence.setSessionThread(
-          this.sessionId,
-          result.message_id,
-          result.message_id,
-        );
-      }
-
       // 清理已发送消息
       void setTimeout(() => {
         this.persistence.removeSentMessage(message.id);

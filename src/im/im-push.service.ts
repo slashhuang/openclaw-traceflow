@@ -182,16 +182,23 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const messageType = message.type as string;
 
     // 用户消息：作为独立的母消息
-    // assistant 消息：作为最近一条用户消息的子消息
+    // assistant 消息：作为最后一条用户消息的子消息（不管发送状态）
     let parentId: string | undefined;
 
     if (messageType === 'assistant') {
-      // 获取会话中最近一条用户消息的 ID 作为父消息
+      // 获取会话中最后一条用户消息的 ID 作为父消息
+      // 使用 getLastMessageByType 而不是 getLastSentMessageByType，因为用户消息肯定先于 AI 消息入队
       const lastUserMessage = this.persistence.getLastMessageByType(
         sessionId,
         'user',
       );
       parentId = lastUserMessage?.message_id;
+
+      if (!parentId) {
+        this.logger.warn(
+          `No user message found for assistant reply in session ${sessionId}, sending as independent message`,
+        );
+      }
     }
     // user 消息：parentId 保持 undefined，作为独立母消息
 
