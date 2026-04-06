@@ -20,6 +20,14 @@ export interface SessionState {
 }
 
 /**
+ * 排队等待的消息
+ */
+export interface QueuedMessage {
+  message: any;
+  timestamp: number;
+}
+
+/**
  * 会话状态存储服务
  * 提供持久化的会话状态管理，解耦事件时序问题
  */
@@ -29,6 +37,12 @@ export class SessionStateService {
 
   // 内存中的会话状态映射
   private states = new Map<string, SessionState>();
+
+  // 每个会话的消息队列（等待 parent message 创建完成）
+  private messageQueues = new Map<string, QueuedMessage[]>();
+
+  // 会话是否已准备好接收消息（parent message 已创建）
+  private sessionReady = new Set<string>();
 
   /**
    * 创建或更新会话状态
@@ -91,17 +105,59 @@ export class SessionStateService {
   }
 
   /**
-   * 设置父消息 ID
+   * 标记会话准备好接收消息（parent message 已创建）
+   */
+  markSessionReady(sessionId: string): void {
+    this.sessionReady.add(sessionId);
+    this.logger.debug(`Session marked ready: ${sessionId}`);
+  }
+
+  /**
+   * 检查会话是否准备好接收消息
+   */
+  isSessionReady(sessionId: string): boolean {
+    return this.sessionReady.has(sessionId);
+  }
+
+  /**
+   * 将消息加入队列
+   */
+  queueMessage(sessionId: string, message: any): void {
+    if (!this.messageQueues.has(sessionId)) {
+      this.messageQueues.set(sessionId, []);
+    }
+    this.messageQueues.get(sessionId)!.push({
+      message,
+      timestamp: Date.now(),
+    });
+    this.logger.debug(
+      `Message queued for session ${sessionId}, queue size: ${this.messageQueues.get(sessionId)?.length}`,
+    );
+  }
+
+  /**
+   * 获取并清除队列中的所有消息
+   */
+  dequeueAll(sessionId: string): QueuedMessage[] {
+    const queue = this.messageQueues.get(sessionId) || [];
+    this.messageQueues.delete(sessionId);
+    return queue;
+  }
+
+  /**
+   * 设置父消息 ID 并标记会话准备好
    */
   setParentId(sessionId: string, parentId: string): boolean {
     const existing = this.states.get(sessionId);
     if (existing) {
       existing.parentId = parentId;
+      this.sessionReady.add(sessionId);
       this.logger.debug(`ParentId set for session ${sessionId}: ${parentId}`);
       return true;
     }
     // 如果会话不存在，先创建再设置
     this.upsert(sessionId, { sessionId, parentId });
+    this.sessionReady.add(sessionId);
     return true;
   }
 

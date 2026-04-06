@@ -145,16 +145,20 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       );
 
       if (result) {
-        // 记录父消息 ID 到 SessionStateService
+        // 记录父消息 ID 到 SessionStateService，并标记会话准备好
         this.sessionState.setParentId(session.sessionId, result.message_id);
         this.logger.log(
           `Session parent message created: ${session.sessionId} -> ${result.message_id}`,
         );
+
         // 发送事件到 LogsService
         this.eventEmitter.emit('im.push.session.parent.created', {
           sessionId: session.sessionId,
           messageId: result.message_id,
         });
+
+        // 处理队列中的消息
+        await this.flushQueuedMessages(session.sessionId);
       }
     } catch (error) {
       this.logger.error(
@@ -171,6 +175,83 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 处理队列中的消息
+   */
+  private async flushQueuedMessages(sessionId: string): Promise<void> {
+    const queuedMessages = this.sessionState.dequeueAll(sessionId);
+    if (queuedMessages.length === 0) return;
+
+    this.logger.log(
+      `Flushing ${queuedMessages.length} queued messages for session ${sessionId}`,
+    );
+
+    // 按顺序发送队列中的消息
+    for (const { message } of queuedMessages) {
+      await this.sendMessageWithParentId(sessionId, message);
+    }
+  }
+
+  /**
+   * 发送单条消息（使用 parentId）
+   */
+  private async sendMessageWithParentId(
+    sessionId: string,
+    message: any,
+  ): Promise<void> {
+    const parentId = this.sessionState.getParentId(sessionId);
+    if (!parentId) {
+      this.logger.warn(`No parent ID for session: ${sessionId}`);
+      return;
+    }
+
+    try {
+      let formattedMessage;
+
+      // 根据消息类型发送
+      switch (message.type) {
+        case 'user':
+          formattedMessage = this.formatter.formatUserMessage(message);
+          break;
+        case 'assistant':
+          formattedMessage = this.formatter.formatAssistantMessage(message);
+          break;
+        case 'skill:start':
+          formattedMessage = this.formatter.formatSkillStart(message);
+          break;
+        case 'skill:end':
+          formattedMessage = this.formatter.formatSkillEnd(message);
+          break;
+        default:
+          this.logger.warn(`Unknown message type: ${message.type}`);
+          return;
+      }
+
+      await this.channelManager.sendToChannel('feishu', formattedMessage, {
+        reply_id: parentId,
+      });
+
+      this.logger.log(
+        `Queued message sent to thread: ${sessionId} -> ${parentId}`,
+      );
+      this.eventEmitter.emit('im.push.message.sent', {
+        sessionId,
+        messageId: parentId,
+        type: message.type,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send queued message: ${sessionId}`,
+        error as Error,
+      );
+      this.eventEmitter.emit('im.push.error', {
+        sessionId,
+        error: (error as Error).message,
+        phase: 'message_send',
+      });
+    }
+  }
+
+  /**
    * 处理会话消息
    * 从 SessionStateService 获取 parentId，确保时序正确
    */
@@ -179,83 +260,16 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     message: any;
     session: any;
   }): Promise<void> {
-    // 从 SessionStateService 获取 parentId
-    let parentId = this.sessionState.getParentId(data.sessionId);
-
-    // 如果没有 parentId，说明 session start 事件还没处理完成，等待一下
-    if (!parentId) {
-      this.logger.warn(
-        `No parent ID for session: ${data.sessionId}, waiting for session start...`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      parentId = this.sessionState.getParentId(data.sessionId);
+    // 检查会话是否准备好（parent message 已创建）
+    if (!this.sessionState.isSessionReady(data.sessionId)) {
+      // 会话还没准备好，将消息加入队列
+      this.sessionState.queueMessage(data.sessionId, data.message);
+      this.logger.warn(`Session not ready, message queued: ${data.sessionId}`);
+      return;
     }
 
-    // 如果还是没有，说明会话开始时没有触发 start 事件，需要创建父消息
-    if (!parentId) {
-      this.logger.warn(
-        `Still no parent ID for session: ${data.sessionId}, creating parent message now`,
-      );
-      const sessionState = this.sessionState.getOrCreate(data.sessionId);
-      await this.createParentMessage(sessionState);
-      parentId = this.sessionState.getParentId(data.sessionId);
-      if (!parentId) {
-        this.logger.error(
-          `Failed to create parent message for session: ${data.sessionId}`,
-        );
-        return;
-      }
-    }
-
-    this.logger.debug(`Sending message to thread with reply_id: ${parentId}`);
-
-    try {
-      let message;
-
-      // 根据消息类型发送
-      switch (data.message.type) {
-        case 'user':
-          message = this.formatter.formatUserMessage(data.message);
-          break;
-        case 'assistant':
-          message = this.formatter.formatAssistantMessage(data.message);
-          break;
-        case 'skill:start':
-          message = this.formatter.formatSkillStart(data.message);
-          break;
-        case 'skill:end':
-          message = this.formatter.formatSkillEnd(data.message);
-          break;
-        default:
-          this.logger.warn(`Unknown message type: ${data.message.type}`);
-          return;
-      }
-
-      await this.channelManager.sendToChannel('feishu', message, {
-        reply_id: parentId,
-      });
-
-      this.logger.log(
-        `Message sent to thread: ${data.sessionId} -> ${parentId}`,
-      );
-      // 发送事件到 LogsService
-      this.eventEmitter.emit('im.push.message.sent', {
-        sessionId: data.sessionId,
-        messageId: parentId,
-        type: data.message.type,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to send message: ${data.sessionId}`,
-        error as Error,
-      );
-      // 发送错误事件到 LogsService
-      this.eventEmitter.emit('im.push.error', {
-        sessionId: data.sessionId,
-        error: (error as Error).message,
-        phase: 'message_send',
-      });
-    }
+    // 会话已准备好，直接发送
+    await this.sendMessageWithParentId(data.sessionId, data.message);
   }
 
   /**
