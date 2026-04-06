@@ -449,7 +449,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       // 触发会话开始事件
       await this.parseNewSessionFile(filePath, sessionId, agentId);
 
-      // 同时处理文件中的消息（从文件开头开始）
+      // 处理文件中的消息（从文件开头开始，因为启动时清空了位置）
       this.parseSessionFileUpdate(filePath, sessionId);
     } catch (error) {
       this.logger.error('Error handling new session file:', error as Error);
