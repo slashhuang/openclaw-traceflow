@@ -67,11 +67,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
-    // 启动文件监听器前，清空并重新记录位置（每次启动都从 0 开始）
+    // 重启时清空所有位置记录，不补推历史消息
+    // 新会话从 0 开始，已存在会话从当前时刻开始监听
     this.sessionFilePositions.clear();
-
-    // 先记录已存在文件的位置，避免重复推送历史消息
-    this.recordExistingFilePositions();
 
     setTimeout(() => {
       this.startFileWatcher();
@@ -129,66 +127,6 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     for (const { agentId, sessionsDir } of agentsSessionsDirs) {
       this.startAgentFileWatcher(agentId, sessionsDir);
     }
-  }
-
-  /**
-   * 记录已存在文件的位置（启动后调用，避免重复推送历史消息）
-   */
-  private recordExistingFilePositions(): void {
-    const config = this.configService.getConfig();
-    const stateDir = config.openclawStateDir;
-
-    if (!stateDir || !fs.existsSync(stateDir)) {
-      return;
-    }
-
-    const agentsDir = path.join(stateDir, 'agents');
-    if (!fs.existsSync(agentsDir)) {
-      return;
-    }
-
-    const agentIds = fs.readdirSync(agentsDir);
-    for (const agentId of agentIds) {
-      const sessionsDir = path.join(agentsDir, agentId, 'sessions');
-      if (!fs.existsSync(sessionsDir)) {
-        continue;
-      }
-
-      // 扫描所有 .jsonl 文件
-      try {
-        const files = fs
-          .readdirSync(sessionsDir)
-          .filter((f) => f.endsWith('.jsonl') && !f.includes('.reset.'));
-        for (const file of files) {
-          const filePath = path.join(sessionsDir, file);
-          const stats = fs.statSync(filePath);
-          if (stats.size === 0) {
-            continue;
-          }
-
-          const content = fs.readFileSync(filePath, 'utf-8');
-          const lines = content
-            .trim()
-            .split('\n')
-            .filter((line) => line.trim());
-          if (lines.length > 0) {
-            const sessionId = path.basename(file, '.jsonl');
-            this.sessionFilePositions.set(sessionId, {
-              size: stats.size,
-              lastLine: lines[lines.length - 1],
-            });
-          }
-        }
-      } catch (error) {
-        this.logger.warn(
-          `Failed to scan sessions for agent ${agentId}: ${error as Error}`,
-        );
-      }
-    }
-
-    this.logger.log(
-      `Recorded positions for ${this.sessionFilePositions.size} existing session file(s)`,
-    );
   }
 
   /**
@@ -348,6 +286,10 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 解析会话文件更新（增量推送：只处理新增的行）
+   *
+   * 行为：
+   * - 没有 position 记录：从当前文件末尾开始（不补推历史）
+   * - 有 position 记录：从上次的 lastLine 之后开始
    */
   private parseSessionFileUpdate(filePath: string, sessionId: string): void {
     try {
@@ -366,10 +308,23 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       // 找到上次处理的行索引
       let startIndex = 0;
       if (lastProcessedLine) {
+        // 有上次记录，从 lastLine 之后开始
         const lastIdx = lines.lastIndexOf(lastProcessedLine);
         if (lastIdx >= 0) {
           startIndex = lastIdx + 1;
         }
+      } else {
+        // 没有上次记录，从当前文件末尾开始，不补推历史
+        const newLastLine = lines[lines.length - 1];
+        const stats = fs.statSync(filePath);
+        this.sessionFilePositions.set(sessionId, {
+          size: stats.size,
+          lastLine: newLastLine,
+        });
+        this.logger.debug(
+          `Session ${sessionId} initialized at end of file (${lines.length} lines)`,
+        );
+        return;
       }
 
       // 只处理新增的行
@@ -539,8 +494,22 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       // 触发会话开始事件
       await this.parseNewSessionFile(filePath, sessionId, agentId);
 
-      // 处理文件中的消息（从文件开头开始，因为启动时清空了位置）
-      this.parseSessionFileUpdate(filePath, sessionId);
+      // 初始化位置到文件末尾，不处理历史消息
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content
+        .trim()
+        .split('\n')
+        .filter((line) => line.trim());
+      if (lines.length > 0) {
+        const stats = fs.statSync(filePath);
+        this.sessionFilePositions.set(sessionId, {
+          size: stats.size,
+          lastLine: lines[lines.length - 1],
+        });
+        this.logger.debug(
+          `Session ${sessionId} initialized at end of file (${lines.length} lines, no backfill)`,
+        );
+      }
     } catch (error) {
       this.logger.error('Error handling new session file:', error as Error);
     }
