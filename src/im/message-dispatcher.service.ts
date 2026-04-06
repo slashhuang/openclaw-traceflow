@@ -117,7 +117,11 @@ class SessionWorker {
       );
 
     if (result) {
-      this.persistence.markMessageSent(message.id);
+      this.persistence.markMessageSent(
+        message.id,
+        undefined,
+        result.message_id,
+      );
       this.currentRetry = 0;
 
       // 清理已发送消息

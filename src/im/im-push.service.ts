@@ -189,18 +189,19 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     let parentId: string | undefined;
 
     if (messageType === 'assistant') {
-      // 获取会话中最后一条用户消息的 ID 作为父消息
+      // 获取会话中最后一条已发送成功的用户消息的飞书 message_id 作为父消息
       // 由于 OpenClaw 队列模式 + 同步遍历，用户消息肯定先于 AI 消息入队
       const lastUserMessage = this.persistence.getLastMessageByType(
         sessionId,
         'user',
       );
-      parentId = lastUserMessage?.id;
+      // 使用飞书返回的 message_id，而不是本地数据库 ID
+      parentId = lastUserMessage?.sent_message_id;
 
       if (!parentId) {
-        // 理论上不会发生，除非数据损坏
-        this.logger.warn(
-          `No user message found for assistant reply in session ${sessionId}, sending as independent message`,
+        // 最后一条用户消息未成功发送到飞书，作为独立消息发送
+        this.logger.debug(
+          `No sent_message_id found for assistant reply in session ${sessionId}, sending as independent message`,
         );
       }
     }

@@ -38,6 +38,7 @@ export interface MessageRecord {
   retry_count: number;
   error?: string;
   parent_id?: string;
+  sent_message_id?: string; // 飞书返回的消息 ID
   created_at: number;
   sent_at?: number;
 }
@@ -178,6 +179,7 @@ export class MessagePersistenceService
         retry_count INTEGER NOT NULL DEFAULT 0,
         error TEXT,
         parent_id TEXT,
+        sent_message_id TEXT,
         created_at INTEGER NOT NULL,
         sent_at INTEGER,
         FOREIGN KEY (session_id) REFERENCES sessions(session_id)
@@ -533,14 +535,18 @@ export class MessagePersistenceService
   /**
    * 标记消息发送成功
    */
-  markMessageSent(messageId: string, sentAt?: number): void {
+  markMessageSent(
+    messageId: string,
+    sentAt?: number,
+    sentMessageId?: string,
+  ): void {
     if (!this.db) return;
 
     const now = sentAt || Date.now();
     this.db.run(
-      `UPDATE messages SET status = 'sent', sent_at = ?, error = NULL
+      `UPDATE messages SET status = 'sent', sent_at = ?, error = NULL, sent_message_id = ?
        WHERE id = ?`,
-      [now, messageId],
+      [now, sentMessageId || null, messageId],
     );
 
     this.recordSendHistory(messageId, 'sent');
