@@ -21,6 +21,9 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
   private formatter: FeishuMessageFormatter;
 
+  // 事件监听器是否已注册
+  private eventListenersRegistered = false;
+
   constructor(
     private eventEmitter: EventEmitter2,
     private channelManager: ChannelManager,
@@ -31,11 +34,24 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
+    this.initializeEventListeners();
+  }
+
+  /**
+   * 初始化事件监听器（支持热重载）
+   */
+  initializeEventListeners(): void {
     const config = this.configService.getConfig();
+
+    // 如果已经注册过监听器，先清理
+    if (this.eventListenersRegistered) {
+      this.removeEventListeners();
+    }
 
     // 仅当配置了 IM 推送时启动
     if (!config.im?.enabled) {
       this.logger.log('IM Push disabled in config, skipping initialization');
+      this.eventListenersRegistered = false;
       return;
     }
 
@@ -45,6 +61,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       const enabledChannels = this.channelManager.getEnabledChannels();
       if (enabledChannels.length === 0) {
         this.logger.log('No IM channels enabled');
+        this.eventListenersRegistered = false;
         return;
       }
 
@@ -64,7 +81,28 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       });
 
       this.logger.log('IM Push Service event listeners registered');
+      this.eventListenersRegistered = true;
     }, 1000);
+  }
+
+  /**
+   * 移除事件监听器（用于热重载）
+   */
+  private removeEventListeners(): void {
+    this.eventEmitter.removeAllListeners('audit.session.start');
+    this.eventEmitter.removeAllListeners('audit.session.message');
+    this.eventEmitter.removeAllListeners('audit.session.end');
+    this.eventListenersRegistered = false;
+    this.logger.log('IM Push Service event listeners removed');
+  }
+
+  /**
+   * 从配置重新加载（热重载入口）
+   */
+  async reloadFromConfig(imConfig: any): Promise<void> {
+    this.logger.log('ImPushService reloading from config...');
+    // 重新初始化事件监听器
+    this.initializeEventListeners();
   }
 
   /**

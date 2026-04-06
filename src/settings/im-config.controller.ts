@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '../config/config.service';
 import { ChannelManager } from '../im/channel-manager';
 import { FeishuChannel } from '../im/channels/feishu/feishu.channel';
+import { ImPushService } from '../im/im-push.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -50,6 +51,7 @@ export class ImConfigController {
     private configService: ConfigService,
     private channelManager: ChannelManager,
     private feishuChannel: FeishuChannel,
+    private imPushService: ImPushService,
   ) {}
 
   /**
@@ -117,6 +119,11 @@ export class ImConfigController {
       );
       await this.channelManager.reloadFromConfig(currentConfig.im);
       console.log('[ImConfigController] ChannelManager reloaded');
+
+      // 重新初始化 ImPushService（使事件监听器生效）
+      console.log('[ImConfigController] Reloading ImPushService');
+      await this.imPushService.reloadFromConfig(currentConfig.im);
+      console.log('[ImConfigController] ImPushService reloaded');
 
       return {
         success: true,
