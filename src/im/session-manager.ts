@@ -38,9 +38,6 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   // 使用 SessionStateService 存储会话状态
   private sessionState: SessionStateService;
 
-  // 已知的会话文件（用于检测新会话）
-  private knownSessionFiles = new Set<string>();
-
   // 会话结束超时（5 分钟无活动）
   private readonly SESSION_END_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -54,6 +51,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   private watcherReady = false;
 
   // 记录每个会话文件最后处理的位置（用于增量推送）
+  // 每次启动时清空，从 0 开始
   private sessionFilePositions: Map<
     string,
     { size: number; lastLine: string }
@@ -69,7 +67,9 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
-    // 启动文件监听器，直接监听 agents/*/sessions/*.jsonl 文件变化
+    // 启动文件监听器前，清空位置记录（每次启动都从 0 开始）
+    this.sessionFilePositions.clear();
+
     setTimeout(() => {
       this.startFileWatcher();
     }, 1000);
@@ -183,7 +183,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       .on('add', (filePath, stats) => {
         this.logger.log(`File created: ${filePath}, size: ${stats?.size || 'unknown'}`);
         if (filePath.endsWith('.jsonl')) {
-          this.handleNewSessionFile(filePath, agentId);
+          void this.handleNewSessionFile(filePath, agentId);
         }
       })
       .on('change', (filePath, stats) => {
@@ -262,27 +262,6 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       }
 
       this.logger.log(`Session file updated: ${sessionId} (agent: ${agentId})`);
-
-      // 检查是否有 session state（表示是重启后活跃监听中的会话）
-      const hasSessionState = this.sessionState.getSession(sessionId);
-
-      if (!hasSessionState) {
-        // 没有 session state，说明是启动前已存在的会话文件
-        // 仅记录文件位置，不推送历史消息（避免重启时的消息风暴）
-        this.logger.log(
-          `Existing session file detected, skipping historical messages: ${sessionId}`,
-        );
-        // 记录当前文件末尾位置，后续变化从该位置开始推送
-        const stats = fs.statSync(filePath);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter((line) => line.trim());
-        const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
-        this.sessionFilePositions.set(sessionId, {
-          size: stats.size,
-          lastLine,
-        });
-        return;
-      }
 
       // 触发会话消息事件（解析文件内容并推送增量消息）
       void this.parseSessionFileUpdate(filePath, sessionId);
@@ -454,7 +433,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 处理新会话文件
    */
-  private handleNewSessionFile(filePath: string, agentId: string): void {
+  private async handleNewSessionFile(filePath: string, agentId: string): Promise<void> {
     try {
       const sessionId = path.basename(filePath, '.jsonl');
 
@@ -463,33 +442,15 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      if (!this.knownSessionFiles.has(sessionId)) {
-        this.knownSessionFiles.add(sessionId);
-        this.logger.log(
-          `New session file detected: ${sessionId} (agent: ${agentId})`,
-        );
+      this.logger.log(
+        `New session file detected: ${sessionId} (agent: ${agentId})`,
+      );
 
-        // 记录初始文件位置，不推送历史消息
-        const stats = fs.statSync(filePath);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content
-          .trim()
-          .split('\n')
-          .filter((line) => line.trim());
-        const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
+      // 触发会话开始事件
+      await this.parseNewSessionFile(filePath, sessionId, agentId);
 
-        this.sessionFilePositions.set(sessionId, {
-          size: stats.size,
-          lastLine,
-        });
-
-        this.logger.debug(
-          `Recorded initial position for new session ${sessionId}: ${stats.size} bytes`,
-        );
-
-        // 读取文件获取会话信息（但不推送历史消息）
-        this.parseNewSessionFile(filePath, sessionId, agentId);
-      }
+      // 同时处理文件中的消息（从文件开头开始）
+      this.parseSessionFileUpdate(filePath, sessionId);
     } catch (error) {
       this.logger.error('Error handling new session file:', error as Error);
     }
