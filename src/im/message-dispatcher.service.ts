@@ -65,7 +65,7 @@ class SessionWorker {
       const pending = this.persistence.getPendingMessages(1);
       const messages = pending.get(this.sessionId) || [];
 
-      this.logger.debug(
+      this.logger.warn(
         `Worker processing: sessionId=${this.sessionId}, messages=${messages.length}, pending.size=${pending.size}`,
       );
 
@@ -123,6 +123,10 @@ class SessionWorker {
         'user',
       );
       replyId = firstUserMessage?.sent_message_id;
+
+      this.logger.warn(
+        `Looking for user message: sessionId=${this.sessionId}, firstUserMessage=${firstUserMessage ? 'found' : 'not found'}, sent_message_id=${firstUserMessage?.sent_message_id || 'N/A'}`,
+      );
 
       if (!replyId) {
         // 没有找到 user 消息，跳过发送（避免刷屏）

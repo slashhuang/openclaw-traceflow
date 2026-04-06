@@ -108,12 +108,17 @@ export class FeishuChannel implements ImChannel {
       );
 
       if (response.code !== 0) {
+        this.logger.error(
+          `Feishu API error: ${response.msg} (code: ${response.code}), data: ${JSON.stringify(response.data)}`,
+        );
         throw new Error(
           `Feishu API error: ${response.msg} (code: ${response.code})`,
         );
       }
 
-      this.logger.debug(`Message sent: ${response.data?.message_id}`);
+      this.logger.warn(
+        `Feishu API returned: message_id=${response.data?.message_id}, chat_id=${response.data?.chat_id}, code=${response.code}`,
+      );
 
       // 保存 chat_id 用于后续回复消息
       if (response.data?.chat_id && !this.config.chatId) {
@@ -126,7 +131,15 @@ export class FeishuChannel implements ImChannel {
         chat_id: response.data?.chat_id,
       };
     } catch (error) {
-      this.logger.error('Failed to send message:', error as Error);
+      const errorData = error;
+      this.logger.error(
+        `Failed to send message: ${errorData?.message || errorData?.toString()}`,
+      );
+      if (errorData?.response?.data) {
+        this.logger.error(
+          `Feishu API response: ${JSON.stringify(errorData.response.data)}`,
+        );
+      }
       throw error;
     }
   }

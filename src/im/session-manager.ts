@@ -288,7 +288,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
    * 解析会话文件更新（增量推送：只处理新增的行）
    *
    * 行为：
-   * - 没有 position 记录：从当前文件末尾开始（不补推历史）
+   * - 没有 position 记录：扫描找到第一条 user 消息，从那里开始处理
    * - 有 position 记录：从上次的 lastLine 之后开始
    */
   private parseSessionFileUpdate(filePath: string, sessionId: string): void {
@@ -314,17 +314,54 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           startIndex = lastIdx + 1;
         }
       } else {
-        // 没有上次记录，从当前文件末尾开始，不补推历史
-        const newLastLine = lines[lines.length - 1];
-        const stats = fs.statSync(filePath);
-        this.sessionFilePositions.set(sessionId, {
-          size: stats.size,
-          lastLine: newLastLine,
-        });
-        this.logger.debug(
-          `Session ${sessionId} initialized at end of file (${lines.length} lines)`,
+        // 没有上次记录，说明是新会话，从文件开头扫描（需要找到第一条 user 消息）
+        // 这样确保飞书用户发送的第一条消息能被推送到飞书（形成 thread）
+        let foundFirstUser = false;
+        this.logger.warn(
+          `Session ${sessionId}: scanning ${lines.length} lines for first user message`,
         );
-        return;
+        for (let i = 0; i < lines.length; i++) {
+          try {
+            const entry = JSON.parse(lines[i]);
+            const role = entry.message?.role ?? entry.type ?? entry.role;
+            this.logger.warn(
+              `Session ${sessionId}: line ${i} has role="${role}", type="${entry.type}"`,
+            );
+            if (role === 'user') {
+              // 找到第一条 user 消息，从这行开始处理
+              const newLastLine = lines[lines.length - 1];
+              const stats = fs.statSync(filePath);
+              this.sessionFilePositions.set(sessionId, {
+                size: stats.size,
+                lastLine: lines[i - 1] || lines[0], // 从第一条 user 消息之前开始
+              });
+              startIndex = i;
+              foundFirstUser = true;
+              this.logger.warn(
+                `Session ${sessionId}: found first user message at line ${i}, processing from there`,
+              );
+              break;
+            }
+          } catch (parseErr) {
+            this.logger.warn(
+              `Session ${sessionId}: line ${i} parse error: ${(parseErr as Error).message}`,
+            );
+          }
+        }
+
+        if (!foundFirstUser) {
+          // 没有找到 user 消息，从当前文件末尾开始
+          const newLastLine = lines[lines.length - 1];
+          const stats = fs.statSync(filePath);
+          this.sessionFilePositions.set(sessionId, {
+            size: stats.size,
+            lastLine: newLastLine,
+          });
+          this.logger.warn(
+            `Session ${sessionId} initialized at end of file (no user message found, ${lines.length} lines)`,
+          );
+          return;
+        }
       }
 
       // 只处理新增的行

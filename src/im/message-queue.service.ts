@@ -39,8 +39,8 @@ export class MessageQueue {
       status: 'pending',
     };
     this.messages.push(queuedMessage);
-    this.logger.debug(
-      `Message enqueued for ${this.sessionId}, queue size: ${this.messages.length}`,
+    this.logger.warn(
+      `Message enqueued for ${this.sessionId}, type=${message.type}, queue size: ${this.messages.length}`,
     );
     return queuedMessage;
   }
@@ -113,7 +113,13 @@ export class MessageQueue {
   }
 
   getOldestMessage(): QueuedMessage | undefined {
-    return this.messages.find((m) => m.status === 'pending');
+    const msg = this.messages.find((m) => m.status === 'pending');
+    if (msg) {
+      this.logger.warn(
+        `getOldestMessage: sessionId=${this.sessionId}, id=${msg.id}, type=${msg.message?.type}`,
+      );
+    }
+    return msg;
   }
 }
 

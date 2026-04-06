@@ -10,20 +10,9 @@ import { DingTalkChannel } from './channels/dingtalk/dingtalk.channel';
 import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
 import { MessageQueueService } from './message-queue.service';
 import { CircuitBreakerService } from './circuit-breaker.service';
-import { MessagePersistenceService } from './message-persistence.service';
-import { MessageDispatcherService } from './message-dispatcher.service';
 
 /**
- * IM 推送模块
- * 使用 Channel 插件架构
- *
- * 增强特性（v1.3.0 - 高可靠架构）：
- * - SQLite 作为单一事实来源 - 支持多 Agent/多用户并发
- * - 每会话独立 worker - 会话间天然隔离，互不影响
- * - 会话内严格 FIFO - seq 序列号保证顺序
- * - 熔断器保护 - API 失败时快速失败
- * - 持久化存储 - 服务重启后完整恢复
- * - 指数退避重试 - 失败消息自动重试
+ * IM 推送模块（简化版 - 内存队列）
  */
 @Module({
   imports: [ConfigModule],
@@ -36,8 +25,6 @@ import { MessageDispatcherService } from './message-dispatcher.service';
     FeishuMessageFormatter,
     MessageQueueService,
     CircuitBreakerService,
-    MessagePersistenceService,
-    MessageDispatcherService,
     // 注册所有 Channel 插件
     {
       provide: 'CHANNEL_PLUGINS',
@@ -47,7 +34,6 @@ import { MessageDispatcherService } from './message-dispatcher.service';
       ) => [feishuChannel, dingtalkChannel],
       inject: [FeishuChannel, DingTalkChannel],
     },
-    // 为 SessionManager 提供字符串别名，方便 OpenClawService 注入
     {
       provide: 'SessionManager',
       useExisting: SessionManager,
@@ -62,8 +48,6 @@ import { MessageDispatcherService } from './message-dispatcher.service';
     SessionStateService,
     MessageQueueService,
     CircuitBreakerService,
-    MessagePersistenceService,
-    MessageDispatcherService,
   ],
 })
 export class ImModule {}
