@@ -666,7 +666,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `Session not found: ${sessionId}, attempting to recover`,
       );
-      await this.recoverSession(sessionId);
+      this.recoverSession(sessionId);
       sessionState = this.sessionState.getSession(sessionId);
 
       if (!sessionState) {
@@ -699,7 +699,8 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 获取会话
    */
-  getSession(sessionId: string): any | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  getSession(sessionId: string): unknown | undefined {
     return this.sessionState.getSession(sessionId);
   }
 
