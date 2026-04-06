@@ -531,32 +531,6 @@ export class MessagePersistenceService
   }
 
   /**
-   * 重置所有"sending"状态为"pending"（服务重启恢复时使用）
-   */
-  resetSendingMessages(): void {
-    if (!this.db) return;
-
-    const stmt = this.db.prepare(
-      `UPDATE messages SET status = 'pending' WHERE status = 'sending'`,
-    );
-    stmt.run();
-    stmt.free();
-    this.saveDatabase();
-  }
-
-  /**
-   * 标记消息发送中
-   */
-  markMessageSending(messageId: string): void {
-    if (!this.db) return;
-
-    this.db.run(`UPDATE messages SET status = 'sending' WHERE id = ?`, [
-      messageId,
-    ]);
-    this.saveDatabase();
-  }
-
-  /**
    * 标记消息发送成功
    */
   markMessageSent(messageId: string, sentAt?: number): void {
@@ -611,16 +585,12 @@ export class MessagePersistenceService
     if (!this.db) return new Map();
 
     // 重置所有"sending"状态为"pending"
-    this.resetSendingMessages();
-
-    // 重置所有未完成会话的状态
     this.db.run(
-      `UPDATE sessions SET status = 'active' WHERE status = 'active'`,
+      `UPDATE messages SET status = 'pending' WHERE status = 'sending'`,
     );
-
     this.saveDatabase();
 
-    return this.getPendingMessages(100); // 恢复时每会话最多 100 条
+    return this.getPendingMessages(100);
   }
 
   /**
