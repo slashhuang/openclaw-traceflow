@@ -302,3 +302,31 @@ LogsModule → imports: [ConfigModule]
 ## 维护者备忘（可选）
 
 TraceFlow 可与 **OpenClaw Gateway**、**agent-audit** 等技能配合使用；集成方自行决定目录布局。**开源文档与 README 中不要假设**读者拥有 `claw-brains`、`claw-commons` 等私有或并列仓库。
+
+---
+
+## 飞书 SDK 源码参考
+
+飞书官方 Node.js SDK 源码已保存在 `sourceCode/feishu-node-sdk/` 目录下，用于查阅 API 用法和参数说明。
+
+**飞书 IM 消息方式**: `openclaw-traceflow/sourceCode/feishu-node-sdk/code-gen/projects/im.ts`
+
+**回复消息 API（形成 thread）**：
+
+- 接口位置：`sourceCode/feishu-node-sdk/code-gen/projects/im.ts` (第 3744 行)
+- 调用方式：
+
+```typescript
+client.im.v1.message.reply({
+  data: {
+    content: string;
+    msg_type: string;
+    reply_in_thread?: boolean;  // 设置为 true 形成 thread
+    uuid?: string;
+  },
+  path: { message_id: string }  // 指定被回复的消息 ID
+}, options)
+```
+
+- 响应中包含 `thread_id`、`root_id`、`parent_id` 等字段
+- **单聊和群聊都支持 thread 聚合**

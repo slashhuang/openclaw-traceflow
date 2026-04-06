@@ -15,7 +15,7 @@
         "enabled": true,
         "appId": "cli_a36e0740c238d00e",
         "appSecret": "o7cFYeUjY3Y0ZzAD6dgXihqBwGpc3PYs",
-        "targetUserId": "ou_3ea312add9031b59971788b123de0dd8",
+        "targetUserId": "ou_f7de6b43842f634afd8728c6388b9e6d",
         "rateLimit": 10,
         "pushStrategy": {
           "sessionStart": false,

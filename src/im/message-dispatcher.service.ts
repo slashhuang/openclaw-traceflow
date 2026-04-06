@@ -65,6 +65,10 @@ class SessionWorker {
       const pending = this.persistence.getPendingMessages(1);
       const messages = pending.get(this.sessionId) || [];
 
+      this.logger.debug(
+        `Worker processing: sessionId=${this.sessionId}, messages=${messages.length}, pending.size=${pending.size}`,
+      );
+
       if (messages.length === 0) {
         // 检查会话是否已完成
         const session = this.persistence.getSession(this.sessionId);
@@ -102,16 +106,41 @@ class SessionWorker {
     const messageData = JSON.parse(message.message_data);
     const _im_meta = messageData._im_meta;
     const content = messageData as Omit<typeof messageData, '_im_meta'>;
+    const messageType = message.message_type;
 
-    // 获取 parent_id
-    const parentId = message.parent_id || _im_meta?.parentId;
+    // 获取 reply_id：用于飞书回复消息
+    // 对于 assistant/skill 消息，使用会话中第一条 user 消息作为回复目标
+    let replyId: string | undefined;
+
+    if (
+      messageType === 'assistant' ||
+      messageType === 'skill:start' ||
+      messageType === 'skill:end'
+    ) {
+      // 获取会话中第一条 user 消息作为回复目标
+      const firstUserMessage = this.persistence.getFirstMessageByType(
+        this.sessionId,
+        'user',
+      );
+      replyId = firstUserMessage?.sent_message_id;
+
+      if (!replyId) {
+        // 没有找到 user 消息，跳过发送（避免刷屏）
+        this.logger.warn(
+          `Skipping ${messageType} message: no user message found for reply in session ${this.sessionId}`,
+        );
+        // 标记消息为完成（跳过）
+        this.persistence.markMessageSent(message.id, undefined, 'skipped');
+        return;
+      }
+    }
 
     // 使用熔断器发送
     const result =
       await this.circuitBreaker.executeAndSuppress<SendResult | null>(
         async () =>
           this.channelManager.sendToChannel('feishu', content as never, {
-            reply_id: parentId || undefined,
+            reply_id: replyId || undefined,
           }),
         null,
       );
@@ -181,8 +210,8 @@ export class MessageDispatcherService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    // 恢复未完成消息并启动 worker
-    this.recoverAndStartWorkers();
+    // 不恢复历史消息，只处理启动后的新消息
+    // 如果数据库中没有第一条 user 消息，该会话将被跳过
 
     // 启动调度器（每 500ms 扫描新消息）
     this.schedulerInterval = setInterval(() => {
@@ -218,26 +247,14 @@ export class MessageDispatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 恢复未完成消息并启动 worker
-   */
-  private recoverAndStartWorkers(): void {
-    const pendingMessages = this.persistence.recoverPendingMessages();
-
-    const sessionIds = Array.from(pendingMessages.keys());
-    this.logger.log(
-      `Recovering ${sessionIds.length} sessions with pending messages`,
-    );
-
-    for (const sessionId of sessionIds) {
-      this.getOrCreateWorker(sessionId);
-    }
-  }
-
-  /**
    * 调度待发送消息
    */
   private schedulePendingMessages(): void {
     const pending = this.persistence.getPendingMessages(1);
+
+    this.logger.debug(
+      `Scheduler tick: ${pending.size} sessions with pending messages`,
+    );
 
     for (const sessionId of pending.keys()) {
       // 确保 worker 存在
@@ -274,10 +291,15 @@ export class MessageDispatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 通知 worker 有新消息（可选优化：避免等待轮询）
+   * 通知 worker 有新消息（避免等待轮询）
    */
   notifyNewMessage(sessionId: string): void {
-    this.getOrCreateWorker(sessionId);
+    const worker = this.getOrCreateWorker(sessionId);
+    // 如果 worker 存在但未在处理（可能在等待轮询），立即触发一次处理
+    setImmediate(() => {
+      // 通过调用 start() 触发立即检查，start() 会检查 processing 标志
+      void worker.start();
+    });
   }
 
   /**

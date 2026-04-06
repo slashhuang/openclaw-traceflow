@@ -1,0 +1,14 @@
+# for logs and certain task outputs
+.DS_Store
+*/.DS_Store
+
+node_modules
+
+# for tests
+local-tests
+.vscode
+
+# output assets
+**/es
+**/lib
+**/types

@@ -397,6 +397,55 @@ export class MessagePersistenceService
   }
 
   /**
+   * 获取会话中最后一条已发送成功的消息（任何类型）
+   */
+  getLastSentMessage(sessionId: string): MessageRecord | null {
+    if (!this.db) return null;
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM messages
+      WHERE session_id = ? AND sent_message_id IS NOT NULL
+      ORDER BY seq DESC
+      LIMIT 1
+    `);
+    stmt.bind([sessionId]);
+
+    let result: MessageRecord | null = null;
+    if (stmt.step()) {
+      result = stmt.getAsObject() as unknown as MessageRecord;
+    }
+    stmt.free();
+
+    return result;
+  }
+
+  /**
+   * 获取会话中指定类型的第一条已发送消息
+   */
+  getFirstMessageByType(
+    sessionId: string,
+    messageType: string,
+  ): MessageRecord | null {
+    if (!this.db) return null;
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM messages
+      WHERE session_id = ? AND message_type = ? AND sent_message_id IS NOT NULL
+      ORDER BY seq ASC
+      LIMIT 1
+    `);
+    stmt.bind([sessionId, messageType]);
+
+    let result: MessageRecord | null = null;
+    if (stmt.step()) {
+      result = stmt.getAsObject() as unknown as MessageRecord;
+    }
+    stmt.free();
+
+    return result;
+  }
+
+  /**
    * 设置会话的 thread（父消息）
    */
   setSessionThread(

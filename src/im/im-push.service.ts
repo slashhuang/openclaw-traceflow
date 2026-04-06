@@ -9,6 +9,7 @@ import { ConfigService } from '../config/config.service';
 import { MessagePersistenceService } from './message-persistence.service';
 import { MessageDispatcherService } from './message-dispatcher.service';
 import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
+import type { FormattedMessage } from './channel.interface';
 
 /**
  * IM 推送服务（事件驱动架构）
@@ -165,15 +166,10 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
    * 处理会话消息
    *
    * 流程：
-   * 1. 持久化消息到 SQLite（每条消息独立，不设置 parent_id）
+   * 1. 持久化消息到 SQLite
    * 2. 通知 dispatcher
    *
-   * 注意：每条用户消息是独立的母消息，AI 回复作为对应消息的子消息
-   *
-   * 并发保证：
-   * - OpenClaw 按顺序写入 .jsonl 文件
-   * - parseSessionFileUpdate 同步遍历新增行
-   * - 用户消息一定先于 AI 回复入队
+   * 注意：每条用户消息是独立的母消息，AI 回复在发送时会动态查找最后一条已发送消息作为父消息
    */
   private handleSessionMessage(data: {
     sessionId: string;
@@ -184,33 +180,12 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const message = data.message as { type?: string; [key: string]: unknown };
     const messageType = message.type as string;
 
-    // 用户消息：作为独立的母消息
-    // assistant 消息：作为最后一条用户消息的子消息
-    let parentId: string | undefined;
-
-    if (messageType === 'assistant') {
-      // 获取会话中最后一条已发送成功的用户消息的飞书 message_id 作为父消息
-      // 由于 OpenClaw 队列模式 + 同步遍历，用户消息肯定先于 AI 消息入队
-      const lastUserMessage = this.persistence.getLastMessageByType(
-        sessionId,
-        'user',
-      );
-      // 使用飞书返回的 message_id，而不是本地数据库 ID
-      parentId = lastUserMessage?.sent_message_id;
-
-      if (!parentId) {
-        // 最后一条用户消息未成功发送到飞书，作为独立消息发送
-        this.logger.debug(
-          `No sent_message_id found for assistant reply in session ${sessionId}, sending as independent message`,
-        );
-      }
-    }
-
-    this.enqueueMessageWithParent(sessionId, message, parentId, messageType);
+    // 所有消息入队时都不设置 parent_id，在发送时动态获取
+    this.enqueueMessageWithParent(sessionId, message, undefined, messageType);
   }
 
   /**
-   * 持久化消息（辅助方法）
+   * 持久化消息（辅助方法）- 先格式化再入队
    */
   private enqueueMessageWithParent(
     sessionId: string,
@@ -220,12 +195,66 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   ): void {
     const messageId = `${sessionId}-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+    // 根据消息类型格式化
+    let formattedMessage: FormattedMessage;
+    if (messageType === 'user') {
+      formattedMessage = this.formatter.formatUserMessage(
+        message as {
+          type: 'user';
+          content: { text: string } | string;
+          timestamp: number;
+          messageId?: string;
+          senderId?: string;
+          senderName?: string;
+        },
+      );
+    } else if (messageType === 'assistant') {
+      formattedMessage = this.formatter.formatAssistantMessage(
+        message as {
+          type: 'assistant';
+          content: { text: string } | string;
+          timestamp: number;
+          model?: string;
+          tokens?: { input: number; output: number };
+          durationMs?: number;
+          skillsUsed?: string[];
+        },
+      );
+    } else if (messageType === 'skill:start') {
+      formattedMessage = this.formatter.formatSkillStart(
+        message as {
+          type: 'skill:start';
+          skillName: string;
+          action: string;
+          input: any;
+          timestamp: number;
+        },
+      );
+    } else if (messageType === 'skill:end') {
+      formattedMessage = this.formatter.formatSkillEnd(
+        message as {
+          type: 'skill:end';
+          skillName: string;
+          status: 'success' | 'error';
+          output: any;
+          durationMs: number;
+          timestamp: number;
+        },
+      );
+    } else {
+      // 未知类型，使用文本格式
+      formattedMessage = {
+        msg_type: 'text',
+        content: { text: JSON.stringify(message) },
+      };
+    }
+
     this.persistence.enqueueMessage({
       id: messageId,
       session_id: sessionId,
       message_type: messageType || 'unknown',
       message_data: JSON.stringify({
-        ...message,
+        ...formattedMessage,
         _im_meta: { parentId, type: messageType },
       }),
       status: 'pending',

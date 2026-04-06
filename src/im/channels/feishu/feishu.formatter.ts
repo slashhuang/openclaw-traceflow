@@ -84,19 +84,12 @@ export class FeishuMessageFormatter {
         : '用户';
     }
 
-    // 使用 Markdown 格式
-    const text = `**📝 会话记录：${userDisplay}**`;
+    // 使用 text 格式
+    const text = `📝 会话记录：${userDisplay}`;
 
     return {
-      msg_type: 'post',
-      content: {
-        post: {
-          zh_cn: {
-            title: '',
-            content: [[{ tag: 'text', text: text }]],
-          },
-        },
-      },
+      msg_type: 'text',
+      content: { text },
     };
   }
 
@@ -117,19 +110,12 @@ export class FeishuMessageFormatter {
         ? message.content
         : message.content?.text || '[无内容]';
 
-    // 使用 Markdown 格式，引用样式
+    // 使用 text 格式
     const text = `👤 ${textContent}`;
 
     return {
-      msg_type: 'post',
-      content: {
-        post: {
-          zh_cn: {
-            title: '',
-            content: [[{ tag: 'text', text: text }]],
-          },
-        },
-      },
+      msg_type: 'text',
+      content: { text },
     };
   }
 
@@ -151,19 +137,12 @@ export class FeishuMessageFormatter {
         ? message.content
         : message.content?.text || '[无内容]';
 
-    // 使用 Markdown 格式
+    // 使用 text 格式
     const text = `🤖 ${textContent}`;
 
     return {
-      msg_type: 'post',
-      content: {
-        post: {
-          zh_cn: {
-            title: '',
-            content: [[{ tag: 'text', text: text }]],
-          },
-        },
-      },
+      msg_type: 'text',
+      content: { text },
     };
   }
 
@@ -171,23 +150,12 @@ export class FeishuMessageFormatter {
    * 格式化技能开始（审计关键信息：动作 + 输入）
    */
   formatSkillStart(message: SkillStartMessage): FormattedMessage {
-    const text = `🔧 **${message.skillName}**: ${message.action}
-
-**【输入参数】**
-\`\`\`json
-${this.truncateJson(message.input, 2000)}
-\`\`\``;
+    const text = `🔧 ${message.skillName}: ${message.action}
+输入：${JSON.stringify(message.input).substring(0, 500)}`;
 
     return {
-      msg_type: 'post',
-      content: {
-        post: {
-          zh_cn: {
-            title: '',
-            content: [[{ tag: 'text', text: text }]],
-          },
-        },
-      },
+      msg_type: 'text',
+      content: { text },
     };
   }
 
@@ -196,23 +164,12 @@ ${this.truncateJson(message.input, 2000)}
    */
   formatSkillEnd(message: SkillEndMessage): FormattedMessage {
     const statusIcon = message.status === 'success' ? '✅' : '❌';
-    const text = `${statusIcon} **${message.skillName}**: ${message.status} (${this.formatDuration(message.durationMs)})
-
-**【输出结果】**
-\`\`\`json
-${this.truncateJson(message.output, 2000)}
-\`\`\``;
+    const text = `${statusIcon} ${message.skillName}: ${message.status} (${this.formatDuration(message.durationMs)})
+输出：${JSON.stringify(message.output).substring(0, 500)}`;
 
     return {
-      msg_type: 'post',
-      content: {
-        post: {
-          zh_cn: {
-            title: '',
-            content: [[{ tag: 'text', text: text }]],
-          },
-        },
-      },
+      msg_type: 'text',
+      content: { text },
     };
   }
 
@@ -225,18 +182,11 @@ ${this.truncateJson(message.output, 2000)}
       session.endTime && session.startTime
         ? this.formatDuration(session.endTime - session.startTime)
         : '未知时长';
-    const text = `✅ **会话完成**：共 ${session.messageCount} 条消息，耗时 ${duration}`;
+    const text = `✅ 会话完成：共 ${session.messageCount} 条消息，耗时 ${duration}`;
 
     return {
-      msg_type: 'post',
-      content: {
-        post: {
-          zh_cn: {
-            title: '',
-            content: [[{ tag: 'text', text: text }]],
-          },
-        },
-      },
+      msg_type: 'text',
+      content: { text },
     };
   }
 
