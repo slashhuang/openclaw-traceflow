@@ -135,6 +135,7 @@ export class MessagePersistenceService
 
       this.createTables();
       this.createIndexes();
+      this.migrateDatabase(); // 运行迁移
       this.saveDatabase();
 
       this.logger.log('IM messages database initialized');
@@ -227,6 +228,29 @@ export class MessagePersistenceService
     `);
 
     this.logger.debug('Database indexes created');
+  }
+
+  /**
+   * 数据库迁移（添加新列）
+   */
+  private migrateDatabase(): void {
+    if (!this.db) return;
+
+    try {
+      // 检查 sent_message_id 列是否存在
+      const result = this.db.exec('PRAGMA table_info(messages)');
+      const columns = result[0]?.values?.map((row) => row[1] as string) || [];
+
+      if (!columns.includes('sent_message_id')) {
+        this.logger.log('Running migration: adding sent_message_id column');
+        this.db.run(`
+          ALTER TABLE messages ADD COLUMN sent_message_id TEXT
+        `);
+        this.logger.log('Migration completed: sent_message_id column added');
+      }
+    } catch (error) {
+      this.logger.error('Failed to run database migration:', error as Error);
+    }
   }
 
   private saveDatabase(): void {
