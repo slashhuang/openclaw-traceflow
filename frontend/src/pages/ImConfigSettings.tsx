@@ -44,6 +44,12 @@ const ImConfigSettings: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [imStatus, setImStatus] = useState<ImStatus | null>(null);
+  const [feishuEnabled, setFeishuEnabled] = useState(false);
+
+  // 监听飞书开关状态，实时更新输入框禁用状态
+  Form.useWatch('feishu_enabled', form, (value) => {
+    setFeishuEnabled(!!value);
+  });
 
   // 加载配置
   useEffect(() => {
@@ -181,7 +187,7 @@ const ImConfigSettings: React.FC = () => {
             rules={[{ required: true, message: '请输入 App ID' }]}
             extra="飞书开放平台应用的 App ID"
           >
-            <Input placeholder="cli_xxx" disabled={!form.getFieldValue('feishu_enabled')} />
+            <Input placeholder="cli_xxx" disabled={!feishuEnabled} />
           </Form.Item>
 
           <Form.Item
@@ -190,7 +196,7 @@ const ImConfigSettings: React.FC = () => {
             rules={[{ required: true, message: '请输入 App Secret' }]}
             extra="飞书开放平台应用的 App Secret"
           >
-            <Input.Password placeholder="xxx" disabled={!form.getFieldValue('feishu_enabled')} />
+            <Input.Password placeholder="xxx" disabled={!feishuEnabled} />
           </Form.Item>
 
           <Form.Item
@@ -199,7 +205,7 @@ const ImConfigSettings: React.FC = () => {
             rules={[{ required: true, message: '请输入目标用户 ID' }]}
             extra="接收消息的飞书用户 ID（open_id 或 user_id）"
           >
-            <Input placeholder="ou_xxx" disabled={!form.getFieldValue('feishu_enabled')} />
+            <Input placeholder="ou_xxx" disabled={!feishuEnabled} />
           </Form.Item>
 
           <Form.Item>
