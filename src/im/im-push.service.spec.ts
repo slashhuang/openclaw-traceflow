@@ -93,7 +93,9 @@ describe('ImPushService', () => {
       });
 
       // Verify first user message is stored
-      const latestMsg1 = (service as any).sessionLatestUserMessage.get(sessionId);
+      const latestMsg1 = (service as any).sessionLatestUserMessage.get(
+        sessionId,
+      );
       expect(latestMsg1?.message_id).toBe('msg_001');
 
       // Mock user message 2
@@ -107,7 +109,9 @@ describe('ImPushService', () => {
       });
 
       // Verify latest user message is updated (overwritten)
-      const latestMsg2 = (service as any).sessionLatestUserMessage.get(sessionId);
+      const latestMsg2 = (service as any).sessionLatestUserMessage.get(
+        sessionId,
+      );
       expect(latestMsg2?.message_id).toBe('msg_002');
     });
 
@@ -249,10 +253,7 @@ describe('ImPushService', () => {
       (service as any).sessionLatestUserMessage.set(sessionId, {
         message_id: 'old_msg',
       });
-      (service as any).sessionSendingLock.set(
-        sessionId,
-        Promise.resolve(),
-      );
+      (service as any).sessionSendingLock.set(sessionId, Promise.resolve());
 
       // Trigger session start
       (service as any).handleSessionStart({
@@ -263,12 +264,10 @@ describe('ImPushService', () => {
       });
 
       // Verify state is cleared
-      expect(
-        (service as any).sessionLatestUserMessage.has(sessionId),
-      ).toBe(false);
-      expect(
-        (service as any).sessionSendingLock.has(sessionId),
-      ).toBe(false);
+      expect((service as any).sessionLatestUserMessage.has(sessionId)).toBe(
+        false,
+      );
+      expect((service as any).sessionSendingLock.has(sessionId)).toBe(false);
     });
   });
 
@@ -280,21 +279,16 @@ describe('ImPushService', () => {
       (service as any).sessionLatestUserMessage.set(sessionId, {
         message_id: 'msg_xxx',
       });
-      (service as any).sessionSendingLock.set(
-        sessionId,
-        Promise.resolve(),
-      );
+      (service as any).sessionSendingLock.set(sessionId, Promise.resolve());
 
       // Trigger session end
       (service as any).handleSessionEnd({ sessionId });
 
       // Verify state is cleared
-      expect(
-        (service as any).sessionLatestUserMessage.has(sessionId),
-      ).toBe(false);
-      expect(
-        (service as any).sessionSendingLock.has(sessionId),
-      ).toBe(false);
+      expect((service as any).sessionLatestUserMessage.has(sessionId)).toBe(
+        false,
+      );
+      expect((service as any).sessionSendingLock.has(sessionId)).toBe(false);
       expect(mockMessageQueueService.cleanupSession).toHaveBeenCalledWith(
         sessionId,
       );
