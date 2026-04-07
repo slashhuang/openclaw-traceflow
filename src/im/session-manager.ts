@@ -56,7 +56,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   // 记录每个会话文件最后处理的位置（用于增量推送）
   private sessionFilePositions: Map<
     string,
-    { size: number; lastLine: string }
+    { size: number; lastLine: string; lineCount: number }
   > = new Map();
 
   constructor(
@@ -249,10 +249,38 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      // 检测文件压缩/重置（行数减少 = 压缩，因为 JSONL 是 append-only）
+      const filePosition = this.sessionFilePositions.get(sessionId);
+      const lastLineCount = filePosition?.lineCount || 0;
+      const currentLineCount = lines.length;
+
+      if (lastLineCount > 0 && currentLineCount < lastLineCount) {
+        // 行数减少，判定为文件压缩/重置（JSONL 文件只增不减）
+        const lineDrop = lastLineCount - currentLineCount;
+        const dropRate = ((lineDrop / lastLineCount) * 100).toFixed(1);
+
+        this.logger.warn(
+          `Session file compressed: ${sessionId} (${lastLineCount} → ${currentLineCount} lines, -${lineDrop} lines, -${dropRate}%)`,
+        );
+
+        // 发送告警事件
+        this.eventEmitter.emit('audit.session.alert', {
+          sessionId,
+          alert: {
+            type: 'file_reset',
+            message: `⚠️ 会话文件 ${sessionId}.jsonl 的行数从 ${lastLineCount} 行变成了 ${currentLineCount} 行（减少 ${lineDrop} 行，-${dropRate}%），可能有信息丢失，会话将重置`,
+          },
+        });
+
+        // Reset 会话：清空 position 记录
+        this.sessionFilePositions.delete(sessionId);
+        this.logger.log(`Session reset: ${sessionId}`);
+        return;
+      }
+
       // 获取上次处理的位置（优先使用 size，更可靠）
-      const position = this.sessionFilePositions.get(sessionId);
-      const lastProcessedSize = position?.size || 0;
-      const lastProcessedLine = position?.lastLine || '';
+      const lastProcessedSize = filePosition?.size || 0;
+      const lastProcessedLine = filePosition?.lastLine || '';
 
       // 使用 size 进行增量检测（更可靠）
       const currentStats = fs.statSync(filePath);
@@ -277,7 +305,10 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         // 验证：如果有 lastProcessedLine，检查是否匹配
         if (lastProcessedLine) {
           const expectedLineIndex = startIndex - 1;
-          if (expectedLineIndex >= 0 && previousLines[expectedLineIndex] !== lastProcessedLine) {
+          if (
+            expectedLineIndex >= 0 &&
+            previousLines[expectedLineIndex] !== lastProcessedLine
+          ) {
             // 如果不匹配，使用 lastIndexOf 回退
             const lastIdx = lines.lastIndexOf(lastProcessedLine);
             if (lastIdx >= 0) {
@@ -319,6 +350,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       this.sessionFilePositions.set(sessionId, {
         size: currentSize,
         lastLine: newLastLine,
+        lineCount: lines.length,
       });
 
       // 计算消息时间阈值（跳过超过 1 小时的旧消息）
@@ -486,10 +518,11 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
               this.sessionFilePositions.set(data.sessionId, {
                 size: stats.size,
                 lastLine,
+                lineCount: lines.length,
               });
 
               this.logger.debug(
-                `Recorded initial position for ${data.sessionId}: ${stats.size} bytes`,
+                `Recorded initial position for ${data.sessionId}: ${stats.size} bytes, ${lines.length} lines`,
               );
             }
           }
@@ -534,10 +567,11 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         this.sessionFilePositions.set(sessionId, {
           size: stats.size,
           lastLine,
+          lineCount: lines.length,
         });
 
         this.logger.debug(
-          `Recorded initial position for new session ${sessionId}: ${stats.size} bytes`,
+          `Recorded initial position for new session ${sessionId}: ${stats.size} bytes, ${lines.length} lines`,
         );
 
         // 读取文件获取会话信息（但不推送历史消息）
@@ -617,7 +651,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       }
 
       // 触发会话开始事件
-      await this.onSessionStart({
+      this.onSessionStart({
         sessionId,
         sessionKey,
         user: { id: userId, name: userName },
@@ -712,7 +746,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 获取会话
    */
-  getSession(sessionId: string): any | undefined {
+  getSession(sessionId: string): unknown {
     return this.sessionState.getSession(sessionId);
   }
 

@@ -26,8 +26,11 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   private formatter: FeishuMessageFormatter;
   private eventListenersRegistered = false;
 
-  // 每会话正在处理的消息（用于回复链）
-  private sessionFirstUserMessage = new Map<string, { message_id: string }>();
+  // 每会话最新一条 user 消息的 message_id（用于回复链）
+  private sessionLatestUserMessage = new Map<string, { message_id: string }>();
+
+  // 每会话发送锁，保证消息串行发送
+  private sessionSendingLock = new Map<string, Promise<void>>();
 
   constructor(
     private eventEmitter: EventEmitter2,
@@ -97,7 +100,8 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Session started: ${sessionId}`);
 
     // 清空该会话的状态
-    this.sessionFirstUserMessage.delete(sessionId);
+    this.sessionLatestUserMessage.delete(sessionId);
+    this.sessionSendingLock.delete(sessionId);
   }
 
   /**
@@ -127,7 +131,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 处理消息队列
+   * 处理消息队列（串行发送）
    */
   private async processQueue(sessionId: string): Promise<void> {
     const queue = this.queueService.getQueue(sessionId);
@@ -140,7 +144,17 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         const queuedMsg = queue.getOldestMessage();
         if (!queuedMsg) break;
 
-        await this.sendMessage(sessionId, queuedMsg);
+        // 等待前一条消息发送完成（串行锁）
+        const lock = this.sessionSendingLock.get(sessionId);
+        if (lock) {
+          await lock;
+        }
+
+        // 创建新的发送 Promise
+        const sendPromise = this.sendMessage(sessionId, queuedMsg);
+        this.sessionSendingLock.set(sessionId, sendPromise);
+        await sendPromise;
+        this.sessionSendingLock.delete(sessionId);
       }
     } finally {
       this.queueService.setProcessing(sessionId, false);
@@ -186,9 +200,9 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       messageType === 'skill:start' ||
       messageType === 'skill:end'
     ) {
-      // Assistant/Skill 消息需要回复到第一条 user 消息
-      const firstUserMsg = this.sessionFirstUserMessage.get(sessionId);
-      replyId = firstUserMsg?.message_id;
+      // Assistant/Skill 消息需要回复到最新一条 user 消息
+      const latestUserMsg = this.sessionLatestUserMessage.get(sessionId);
+      replyId = latestUserMsg?.message_id;
 
       if (!replyId) {
         this.logger.warn(
@@ -214,9 +228,9 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
           `Message sent: sessionId=${sessionId}, type=${messageType}, message_id=${result.message_id}`,
         );
 
-        // 如果是 user 消息，保存 message_id 用于后续回复
+        // 如果是 user 消息，更新最新 message_id（覆盖旧值）
         if (messageType === 'user') {
-          this.sessionFirstUserMessage.set(sessionId, {
+          this.sessionLatestUserMessage.set(sessionId, {
             message_id: result.message_id,
           });
         }
@@ -260,7 +274,8 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Session ended: ${sessionId}`);
 
     // 清理会话状态
-    this.sessionFirstUserMessage.delete(sessionId);
+    this.sessionLatestUserMessage.delete(sessionId);
+    this.sessionSendingLock.delete(sessionId);
     this.queueService.cleanupSession(sessionId);
   }
 
