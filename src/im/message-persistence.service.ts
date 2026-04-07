@@ -81,6 +81,8 @@ export class MessagePersistenceService
 
   async onModuleInit(): Promise<void> {
     await this.initDatabase();
+    // 重启时丢弃所有 pending 消息，不补推历史
+    this.clearPendingMessages();
     await this.rebuildSequenceCache(); // 重建序列号缓存
   }
 
@@ -659,6 +661,7 @@ export class MessagePersistenceService
 
   /**
    * 恢复未完成消息（服务重启时调用）
+   * 注：当前版本不再使用，重启时直接清空 pending 消息
    */
   recoverPendingMessages(): Map<string, MessageRecord[]> {
     if (!this.db) return new Map();
@@ -670,6 +673,30 @@ export class MessagePersistenceService
     this.saveDatabase();
 
     return this.getPendingMessages(100);
+  }
+
+  /**
+   * 清空所有 pending/sending 消息（重启时调用，不补推历史）
+   */
+  private clearPendingMessages(): void {
+    if (!this.db) return;
+
+    const stmt = this.db.prepare(
+      `SELECT COUNT(*) FROM messages WHERE status IN ('pending', 'sending')`,
+    );
+    let count = 0;
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as { 'COUNT(*)': number };
+      count = row['COUNT(*)'] || 0;
+    }
+    stmt.free();
+
+    this.db.run(`DELETE FROM messages WHERE status IN ('pending', 'sending')`);
+    this.saveDatabase();
+
+    this.logger.log(
+      `Cleared ${count} pending/sending messages on restart (no backfill)`,
+    );
   }
 
   /**
