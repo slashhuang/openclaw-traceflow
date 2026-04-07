@@ -3,10 +3,10 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { WinstonLoggerService } from '../logger/logger.service';
 
 /**
  * 性能日志拦截器 — 统一拦截所有 HTTP REST API
@@ -20,7 +20,7 @@ import { WinstonLoggerService } from '../logger/logger.service';
  */
 @Injectable()
 export class PerformanceLoggingInterceptor implements NestInterceptor {
-  private readonly logger = new WinstonLoggerService();
+  private readonly logger = new Logger('PerformanceLogger');
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
@@ -41,7 +41,6 @@ export class PerformanceLoggingInterceptor implements NestInterceptor {
         ip: request.ip,
         userAgent: request.headers['user-agent'],
       }),
-      'PerformanceLoggingInterceptor',
     );
 
     return next.handle().pipe(
@@ -67,14 +66,10 @@ export class PerformanceLoggingInterceptor implements NestInterceptor {
         if (durationMs > 1000) {
           this.logger.warn(
             `Slow API: ${request.method} ${request.url} - ${durationMs}ms (status: ${statusCode})`,
-            'PerformanceLoggingInterceptor',
           );
         }
 
-        this.logger.debug(
-          JSON.stringify(logData),
-          'PerformanceLoggingInterceptor',
-        );
+        this.logger.debug(JSON.stringify(logData));
       }),
       // 错误处理
       tap({
@@ -92,11 +87,7 @@ export class PerformanceLoggingInterceptor implements NestInterceptor {
             error: error.message,
             stack: error.stack,
           };
-          this.logger.error(
-            JSON.stringify(logData),
-            error.stack,
-            'PerformanceLoggingInterceptor',
-          );
+          this.logger.error(JSON.stringify(logData));
         },
       }),
     );

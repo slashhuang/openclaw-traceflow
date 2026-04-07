@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
 import { LogsService } from './logs/logs.service';
 import { PerformanceLoggingInterceptor } from './common/performance-logging.interceptor';
+import { WinstonLoggerService } from './logger/logger.service';
 import * as express from 'express';
 import * as path from 'path';
 
@@ -56,7 +57,17 @@ async function listenWithDevRetry(
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // 创建 Winston logger 实例
+  const logger = new WinstonLoggerService({
+    dataDir: './data',
+    maxFiles: '7d',
+    level: 'info',
+    enableConsole: true,
+  });
+
+  const app = await NestFactory.create(AppModule, {
+    logger: logger,
+  });
   app.enableShutdownHooks();
 
   // ========== 性能日志拦截器（100% 覆盖所有 HTTP API）==========
