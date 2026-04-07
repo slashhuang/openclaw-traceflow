@@ -244,25 +244,9 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (error) {
       this.logger.error(`Failed to send message: ${(error as Error).message}`);
-      this.queueService.markMessageFailed(
-        sessionId,
-        queuedMsg.id,
-        (error as Error).message,
-      );
-
-      // 如果重试次数过多，放弃并删除消息
-      const queue = this.queueService.getQueue(sessionId);
-      if (queue) {
-        const msg = (queue as any).messages?.find(
-          (m: any) => m.id === queuedMsg.id,
-        );
-        if (msg && msg.retryCount >= 10) {
-          this.logger.warn(
-            `Message ${queuedMsg.id} exceeded max retries, dropping`,
-          );
-          this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
-        }
-      }
+      // 发送失败直接丢弃，不重试
+      // 如果是频率限制等错误，重试只会让情况更糟
+      this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
     }
   }
 
