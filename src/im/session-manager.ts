@@ -651,7 +651,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       }
 
       // 触发会话开始事件
-      await this.onSessionStart({
+      this.onSessionStart({
         sessionId,
         sessionKey,
         user: { id: userId, name: userName },
@@ -746,7 +746,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
   /**
    * 获取会话
    */
-  getSession(sessionId: string): any | undefined {
+  getSession(sessionId: string): unknown {
     return this.sessionState.getSession(sessionId);
   }
 
