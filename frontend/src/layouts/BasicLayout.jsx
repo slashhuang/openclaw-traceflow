@@ -23,6 +23,22 @@ import { healthApi, watchSessionApi } from '../api';
 import { SETTINGS_GATEWAY_PATH } from '../constants/settingsPaths';
 import { APP_BUILD_TIME_ISO, APP_GIT_SHA } from '../buildInfo';
 
+/** 格式化构建时间为北京时间显示 */
+function formatBuildTimeDisplay(iso) {
+  if (!iso || typeof iso !== 'string') return '';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString('zh-CN', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'Asia/Shanghai',
+    });
+  } catch {
+    return iso;
+  }
+}
+
 const HEADER_HEALTH_POLL_INTERVAL_MS = 10000;
 const WATCH_SESSION_POLL_INTERVAL_MS = 5000;
 
@@ -328,7 +344,7 @@ export default function BasicLayout() {
           </Dropdown>,
           <Tooltip key="build-info" title={APP_GIT_SHA ? `Git SHA: ${APP_GIT_SHA}` : undefined}>
             <Tag style={{ fontSize: 11, cursor: 'default' }}>
-              Build: {APP_BUILD_TIME_ISO || 'dev'}
+              Build: {formatBuildTimeDisplay(APP_BUILD_TIME_ISO) || 'dev'}
             </Tag>
           </Tooltip>,
         ].filter(Boolean)
