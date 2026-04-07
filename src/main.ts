@@ -56,67 +56,7 @@ async function listenWithDevRetry(
 }
 
 async function bootstrap() {
-  // 创建 TraceFlow 日志文件输出流
-  const configForLogger = new ConfigService();
-  const configData = configForLogger.getConfig();
-  const traceflowLogPath = path.join(configData.dataDir, 'traceflow.log');
-  const { createWriteStream } = await import('fs');
-  const logStream = createWriteStream(traceflowLogPath, { flags: 'a' });
-
-  // 自定义 Logger：同时输出到控制台和文件
-  class FileConsoleLogger {
-    // 格式化为北京时间 (Asia/Shanghai)
-    private formatTime(date: Date): string {
-      return date.toLocaleString('zh-CN', {
-        timeZone: 'Asia/Shanghai',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      });
-    }
-
-    log(message: string, context?: string) {
-      const timestamp = this.formatTime(new Date());
-      const formatted = `[${timestamp}] [INFO] ${context ? `[${context}] ` : ''}${message}\n`;
-      console.log(message, context ? `[${context}]` : '');
-      logStream.write(formatted);
-    }
-    error(message: string, trace?: string, context?: string) {
-      const timestamp = this.formatTime(new Date());
-      const formatted = `[${timestamp}] [ERROR] ${context ? `[${context}] ` : ''}${message}${trace ? `\n${trace}` : ''}\n`;
-      console.error(
-        message,
-        trace ? `\n${trace}` : '',
-        context ? `[${context}]` : '',
-      );
-      logStream.write(formatted);
-    }
-    warn(message: string, context?: string) {
-      const timestamp = this.formatTime(new Date());
-      const formatted = `[${timestamp}] [WARN] ${context ? `[${context}] ` : ''}${message}\n`;
-      console.warn(message, context ? `[${context}]` : '');
-      logStream.write(formatted);
-    }
-    debug(message: string, context?: string) {
-      const timestamp = this.formatTime(new Date());
-      const formatted = `[${timestamp}] [DEBUG] ${context ? `[${context}] ` : ''}${message}\n`;
-      console.debug(message, context ? `[${context}]` : '');
-      logStream.write(formatted);
-    }
-    verbose(message: string, context?: string) {
-      const timestamp = this.formatTime(new Date());
-      const formatted = `[${timestamp}] [VERBOSE] ${context ? `[${context}] ` : ''}${message}\n`;
-      logStream.write(formatted);
-    }
-  }
-
-  const app = await NestFactory.create(AppModule, {
-    logger: new FileConsoleLogger(),
-  });
+  const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
 
   // ========== 性能日志拦截器（100% 覆盖所有 HTTP API）==========

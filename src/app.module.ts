@@ -29,6 +29,8 @@ import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.c
 import { ImModule } from './im/im.module';
 // 设置模块
 import { SettingsModule } from './settings/settings.module';
+// Logger 模块
+import { LoggerModule } from './logger/logger.module';
 
 @Module({
   imports: [
@@ -42,6 +44,13 @@ import { SettingsModule } from './settings/settings.module';
       maxListeners: 20,
       // 是否显示事件追踪日志
       verboseMemoryLeak: true,
+    }),
+    // Logger 模块（使用 winston，支持日志轮转和自动清理）
+    LoggerModule.forRoot({
+      dataDir: './data',
+      maxFiles: '7d', // 保留 7 天的日志
+      level: 'info', // 日志级别：error, warn, info, http, verbose, debug, silly
+      enableConsole: true, // 是否输出到控制台
     }),
     OnboardingModule,
     ConfigModule,
