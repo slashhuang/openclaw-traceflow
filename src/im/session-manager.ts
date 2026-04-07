@@ -219,14 +219,12 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         );
         void this.parseNewSessionFile(filePath, sessionId, agentId);
 
-        // 如果是启动时已存在的会话，需要同时处理现有消息
+        // 如果是启动时已存在的会话，仅记录文件位置，不推送历史消息
+        // 用户只关心启动后的新消息
         if (hasFilePosition) {
-          // 清除文件位置记录，让 parseSessionFileUpdate 处理所有消息
-          this.sessionFilePositions.delete(sessionId);
-          // 立即处理现有消息
-          setImmediate(() => {
-            void this.parseSessionFileUpdate(filePath, sessionId);
-          });
+          this.logger.debug(
+            `Existing session ${sessionId} loaded, skipping historical messages`,
+          );
         }
         return;
       }
@@ -251,16 +249,51 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      // 获取上次处理的位置
+      // 获取上次处理的位置（优先使用 size，更可靠）
       const position = this.sessionFilePositions.get(sessionId);
+      const lastProcessedSize = position?.size || 0;
       const lastProcessedLine = position?.lastLine || '';
 
-      // 找到上次处理的行索引
+      // 使用 size 进行增量检测（更可靠）
+      const currentStats = fs.statSync(filePath);
+      const currentSize = currentStats.size;
+
+      // 如果文件大小没有变化，说明没有新内容
+      if (lastProcessedSize > 0 && currentSize <= lastProcessedSize) {
+        this.logger.debug(
+          `Session file unchanged: ${sessionId} (${currentSize} bytes)`,
+        );
+        return;
+      }
+
+      // 找到上次处理的行索引（使用 size 作为主要判断）
       let startIndex = 0;
-      if (lastProcessedLine) {
-        const lastIdx = lines.lastIndexOf(lastProcessedLine);
-        if (lastIdx >= 0) {
-          startIndex = lastIdx + 1;
+      if (lastProcessedSize > 0) {
+        // 从文件开头读取到 lastProcessedSize 位置，计算已处理的行数
+        const previousContent = content.substring(0, lastProcessedSize);
+        const previousLines = previousContent.trim().split('\n');
+        startIndex = previousLines.length;
+
+        // 验证：如果有 lastProcessedLine，检查是否匹配
+        if (lastProcessedLine) {
+          const expectedLineIndex = startIndex - 1;
+          if (expectedLineIndex >= 0 && previousLines[expectedLineIndex] !== lastProcessedLine) {
+            // 如果不匹配，使用 lastIndexOf 回退
+            const lastIdx = lines.lastIndexOf(lastProcessedLine);
+            if (lastIdx >= 0) {
+              startIndex = lastIdx + 1;
+            } else {
+              // 完全找不到，可能是文件被截断，从当前 size 位置开始
+              this.logger.warn(
+                `Could not find last processed line for ${sessionId}, using size-based position: ${startIndex}`,
+              );
+            }
+          }
+        } else {
+          // 没有 lastProcessedLine，使用 size 计算的位置（新逻辑）
+          this.logger.debug(
+            `No lastProcessedLine for ${sessionId}, using size-based position: ${startIndex}`,
+          );
         }
       }
 
@@ -270,17 +303,28 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      // 警告：如果新增行数过多，可能是文件位置记录错误
+      if (newLines.length > 100) {
+        this.logger.warn(
+          `Large batch detected: ${newLines.length} lines for ${sessionId} (startIndex=${startIndex}, total=${lines.length}). This may indicate a position tracking error.`,
+        );
+      }
+
       this.logger.debug(
-        `Processing ${newLines.length} new lines for session ${sessionId}`,
+        `Processing ${newLines.length} new lines for session ${sessionId} (${startIndex}/${lines.length})`,
       );
 
       // 更新最后处理的位置
       const newLastLine = lines[lines.length - 1];
-      const stats = fs.statSync(filePath);
       this.sessionFilePositions.set(sessionId, {
-        size: stats.size,
+        size: currentSize,
         lastLine: newLastLine,
       });
+
+      // 计算消息时间阈值（跳过超过 1 小时的旧消息）
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const now = Date.now();
+      const maxAgeMs = 24 * ONE_HOUR_MS; // 24 小时内的消息才处理
 
       // 处理每一行新增消息
       for (const line of newLines) {
@@ -288,6 +332,15 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           const entry = JSON.parse(line);
 
           if (entry.type !== 'message') {
+            continue;
+          }
+
+          // 检查消息时间戳，跳过过旧的消息
+          const messageTimestamp = entry.timestamp;
+          if (messageTimestamp && now - messageTimestamp > maxAgeMs) {
+            this.logger.debug(
+              `Skipping old message: ${sessionId}, timestamp: ${new Date(messageTimestamp).toISOString()}`,
+            );
             continue;
           }
 

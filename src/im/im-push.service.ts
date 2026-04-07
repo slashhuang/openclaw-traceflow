@@ -186,6 +186,8 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 持久化消息（辅助方法）- 先格式化再入队
+   *
+   * 去重逻辑：基于消息类型和内容哈希，防止重复消息被推送
    */
   private enqueueMessageWithParent(
     sessionId: string,
@@ -194,6 +196,24 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     messageType: string,
   ): void {
     const messageId = `${sessionId}-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // 去重检查：获取会话中最后一条已发送消息，如果内容相同则跳过
+    const lastSentMessage = this.persistence.getLastSentMessage(sessionId);
+    if (lastSentMessage) {
+      const lastMessageData = JSON.parse(lastSentMessage.message_data);
+      const lastType = lastMessageData._im_meta?.type || lastSentMessage.message_type;
+
+      // 如果消息类型相同，且内容哈希相同（或内容字符串相同），则跳过
+      const currentContent = JSON.stringify(message.content || message);
+      const lastContent = JSON.stringify(lastMessageData.content || lastMessageData);
+
+      if (lastType === messageType && currentContent === lastContent) {
+        this.logger.debug(
+          `Duplicate message detected: ${sessionId} (${messageType}), skipping`,
+        );
+        return;
+      }
+    }
 
     // 根据消息类型格式化
     let formattedMessage: FormattedMessage;

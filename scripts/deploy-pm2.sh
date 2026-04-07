@@ -74,6 +74,14 @@ wait_health() {
 target_port="${DEFAULT_PORT}"
 service_alive=false
 
+# 清理 stray 进程（不在 PM2 管理下的 nest.js watch 或 tail 进程）
+echo "[deploy:pm2] Cleaning up stray processes..."
+pkill -f "nest.js start --watch" 2>/dev/null || true
+pkill -f "tail -f /tmp/traceflow" 2>/dev/null || true
+# 清理可能的旧版 SessionManager tail 进程
+pkill -f "tail -f.*sessions.*\.jsonl" 2>/dev/null || true
+echo "[deploy:pm2] Stray processes cleaned."
+
 # 检查服务是否存活
 if pm2_is_online; then
   service_alive=true
