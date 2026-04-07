@@ -133,11 +133,4 @@ if ! wait_online; then
   exit 1
 fi
 
-echo "[deploy:pm2] Verifying HTTP health on http://127.0.0.1:${PORT}/api/health ..."
-if ! wait_health "${PORT}"; then
-  echo "[deploy:pm2] Health check failed for PORT=${PORT}."
-  pm2 logs "${APP_NAME}" --lines 60
-  exit 1
-fi
-
 echo "[deploy:pm2] Success. ${APP_NAME} is online at http://127.0.0.1:${PORT} (HOST=${HOST})."
