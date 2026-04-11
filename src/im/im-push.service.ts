@@ -116,10 +116,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const message = data.message;
     const messageType = message.type;
 
-    this.logger.warn(
-      `handleSessionMessage: sessionId=${sessionId}, type=${messageType}`,
-    );
-
     // 加入队列
     const queuedMsg = this.queueService.enqueueMessage(sessionId, {
       type: messageType,
@@ -163,6 +159,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 发送单条消息
+   * 弱依赖：发送失败直接丢弃，不重试
    */
   private async sendMessage(
     sessionId: string,
@@ -170,10 +167,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const messageType = queuedMsg.message.type;
     const messageData = queuedMsg.message.data;
-
-    this.logger.warn(
-      `Sending message: sessionId=${sessionId}, type=${messageType}`,
-    );
 
     // 格式化消息
     let formattedMessage: FormattedMessage;
@@ -194,26 +187,21 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
     // 获取 reply_id
     let replyId: string | undefined;
-
     if (
       messageType === 'assistant' ||
       messageType === 'skill:start' ||
       messageType === 'skill:end'
     ) {
-      // Assistant/Skill 消息需要回复到最新一条 user 消息
       const latestUserMsg = this.sessionLatestUserMessage.get(sessionId);
       replyId = latestUserMsg?.message_id;
 
       if (!replyId) {
-        this.logger.warn(
-          `Skipping ${messageType} message: no user message found for reply in session ${sessionId}`,
-        );
         this.queueService.markMessageSent(sessionId, queuedMsg.id);
         return;
       }
     }
 
-    // 发送消息
+    // 发送，失败直接丢弃
     try {
       const result = await this.channelManager.sendToChannel(
         'feishu',
@@ -224,28 +212,18 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       );
 
       if (result?.message_id) {
-        this.logger.warn(
-          `Message sent: sessionId=${sessionId}, type=${messageType}, message_id=${result.message_id}`,
-        );
-
-        // 如果是 user 消息，更新最新 message_id（覆盖旧值）
         if (messageType === 'user') {
           this.sessionLatestUserMessage.set(sessionId, {
             message_id: result.message_id,
           });
         }
-
         this.queueService.markMessageSent(sessionId, queuedMsg.id);
       } else {
-        this.logger.warn(
-          `Message sent but no message_id returned: ${sessionId}`,
-        );
-        this.queueService.markMessageSent(sessionId, queuedMsg.id);
+        // 发送失败，直接丢弃
+        this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
       }
-    } catch (error) {
-      this.logger.error(`Failed to send message: ${(error as Error).message}`);
+    } catch {
       // 发送失败直接丢弃，不重试
-      // 如果是频率限制等错误，重试只会让情况更糟
       this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
     }
   }

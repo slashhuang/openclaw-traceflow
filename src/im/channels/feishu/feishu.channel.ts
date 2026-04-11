@@ -36,6 +36,10 @@ export class FeishuChannel implements ImChannel {
   private refillRate: number;
   private lastRefill = Date.now();
 
+  // 发送失败计数（用于快速熔断，避免日志雪崩）
+  private consecutiveFailures = 0;
+  private static readonly MAX_CONSECUTIVE_FAILURES = 10;
+
   constructor() {
     // 默认配置，实际配置在 initialize 时传入
     this.maxTokens = 20;
@@ -62,10 +66,86 @@ export class FeishuChannel implements ImChannel {
     }
   }
 
+  /**
+   * 检查熔断器状态
+   * @returns 如果连续失败过多，返回 false 表示应停止发送
+   */
+  isCircuitOpen(): boolean {
+    return this.consecutiveFailures >= FeishuChannel.MAX_CONSECUTIVE_FAILURES;
+  }
+
+  /**
+   * 重置熔断器（成功发送后调用）
+   */
+  resetCircuit(): void {
+    this.consecutiveFailures = 0;
+  }
+
+  /**
+   * 记录发送失败
+   */
+  recordFailure(): void {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures === FeishuChannel.MAX_CONSECUTIVE_FAILURES) {
+      this.logger.error(
+        `Circuit breaker OPEN: ${this.consecutiveFailures} consecutive failures, stopping Feishu sends until next successful send`,
+      );
+    }
+  }
+
+  /**
+   * 验证飞书消息内容格式
+   * 飞书 API 对 content 字段有严格要求，提前校验避免无效请求
+   */
+  private validateContent(content: FormattedMessage): string | null {
+    if (!content.msg_type) {
+      return 'msg_type is required';
+    }
+
+    if (!content.content) {
+      return 'content is required';
+    }
+
+    // text 类型：content 必须是 { text: string } 格式
+    if (content.msg_type === 'text') {
+      const textContent =
+        typeof content.content === 'string'
+          ? content.content
+          : content.content?.text;
+
+      if (!textContent || textContent.trim().length === 0) {
+        return 'text content is empty';
+      }
+
+      // 飞书文本消息最大 150KB
+      if (textContent.length > 150_000) {
+        this.logger.warn(
+          `Text content too large (${textContent.length} chars), truncating to 150KB`,
+        );
+      }
+    }
+
+    return null; // 验证通过
+  }
+
   async send(
     content: FormattedMessage,
     options?: SendMessageOptions,
   ): Promise<SendResult> {
+    // 检查熔断器
+    if (this.isCircuitOpen()) {
+      throw new Error(
+        `Feishu circuit breaker OPEN (${this.consecutiveFailures} consecutive failures)`,
+      );
+    }
+
+    // 验证内容格式（验证失败不记录为发送失败）
+    const validationError = this.validateContent(content);
+    if (validationError) {
+      this.logger.error(`Invalid message content: ${validationError}`);
+      throw new Error(`Invalid message content: ${validationError}`);
+    }
+
     await this.acquireToken();
 
     if (!this.config || !this.client) {
@@ -80,9 +160,14 @@ export class FeishuChannel implements ImChannel {
         return await this.sendReply(options.reply_id, content);
       }
 
-      // 使用官方 SDK 发送消息
+      // 构建消息内容
+      const contentStr =
+        typeof content.content === 'string'
+          ? content.content
+          : JSON.stringify(content.content);
+
       this.logger.debug(
-        `Sending message: msg_type=${content.msg_type}, receive_id=${this.config.targetUserId}`,
+        `Sending message: msg_type=${content.msg_type}, receive_id=${this.config.targetUserId}, content_length=${contentStr.length}`,
       );
 
       const response = await this.client.im.message.create(
@@ -98,27 +183,24 @@ export class FeishuChannel implements ImChannel {
           data: {
             receive_id: this.config.targetUserId,
             msg_type: content.msg_type,
-            content:
-              typeof content.content === 'string'
-                ? content.content
-                : JSON.stringify(content.content),
+            content: contentStr,
           },
         },
         {},
       );
 
       if (response.code !== 0) {
+        this.recordFailure();
         this.logger.error(
-          `Feishu API error: ${response.msg} (code: ${response.code}), data: ${JSON.stringify(response.data)}`,
+          `Feishu API error: ${response.msg} (code: ${response.code})`,
         );
         throw new Error(
           `Feishu API error: ${response.msg} (code: ${response.code})`,
         );
       }
 
-      this.logger.warn(
-        `Feishu API returned: message_id=${response.data?.message_id}, chat_id=${response.data?.chat_id}, code=${response.code}`,
-      );
+      // 成功后重置熔断器
+      this.resetCircuit();
 
       // 保存 chat_id 用于后续回复消息
       if (response.data?.chat_id && !this.config.chatId) {
@@ -131,68 +213,75 @@ export class FeishuChannel implements ImChannel {
         chat_id: response.data?.chat_id,
       };
     } catch (error) {
-      const errorData = error;
-      this.logger.error(
-        `Failed to send message: ${errorData?.message || errorData?.toString()}`,
-      );
-      if (errorData?.response?.data) {
-        this.logger.error(
-          `Feishu API response: ${JSON.stringify(errorData.response.data)}`,
-        );
+      const errorData = error as {
+        message?: string;
+        response?: { data?: unknown };
+      };
+      // 只对非熔断器、非验证错误记录失败
+      const msg = errorData?.message || '';
+      if (
+        !msg.includes('circuit breaker') &&
+        !msg.includes('Invalid message content')
+      ) {
+        this.recordFailure();
       }
+      this.logger.error(
+        `Failed to send Feishu message: ${msg || (error as Error).toString()}`,
+      );
       throw error;
     }
   }
 
   /**
    * 回复消息（使用飞书官方 SDK 的 reply 接口，形成话题聚合）
-   *
-   * 飞书 Thread 机制说明：
-   * - 使用 reply API 并设置 reply_in_thread: true 即可形成 thread
-   * - path.message_id 指定被回复的消息，SDK 会自动处理 thread 关系
-   * - thread_id: 响应中返回的线程标识
-   *
-   * 要将多条消息聚合到同一个 thread 下，所有消息都必须回复同一条 root 消息
    */
   private async sendReply(
-    rootMessageId: string, // 根消息 ID（第一条 user 消息）
+    rootMessageId: string,
     content: FormattedMessage,
   ): Promise<SendResult> {
     if (!this.client) {
       throw new Error('Feishu client not initialized');
     }
 
-    this.logger.warn(
-      `Sending reply to thread with root message: ${rootMessageId}`,
+    // 构建消息内容
+    const contentStr =
+      typeof content.content === 'string'
+        ? content.content
+        : JSON.stringify(content.content);
+
+    this.logger.debug(
+      `Sending reply: msg_type=${content.msg_type}, root_message_id=${rootMessageId}, content_length=${contentStr.length}`,
     );
 
-    // 使用 im.v1.message.reply API
-    // 关键：reply_in_thread=true 形成 thread，所有消息都回复同一条 root 消息即可聚合
     const response = await this.client.im.v1.message.reply(
       {
         data: {
-          content:
-            typeof content.content === 'string'
-              ? content.content
-              : JSON.stringify(content.content),
+          content: contentStr,
           msg_type: content.msg_type,
-          reply_in_thread: true, // 以话题形式回复
+          reply_in_thread: true,
         },
         path: {
-          message_id: rootMessageId, // 指定被回复的消息（根消息）
+          message_id: rootMessageId,
         },
       },
       {},
     );
 
     if (response.code !== 0) {
+      this.recordFailure();
+      this.logger.error(
+        `Feishu reply API error: ${response.msg} (code: ${response.code})`,
+      );
       throw new Error(
         `Feishu API error: ${response.msg} (code: ${response.code})`,
       );
     }
 
-    this.logger.warn(
-      `Reply sent: ${response.data?.message_id}, thread_id: ${response.data?.thread_id}`,
+    // 成功后重置熔断器
+    this.resetCircuit();
+
+    this.logger.debug(
+      `Reply sent: message_id=${response.data?.message_id}, thread_id=${response.data?.thread_id}`,
     );
 
     return {
@@ -208,25 +297,34 @@ export class FeishuChannel implements ImChannel {
       throw new Error('Feishu client not initialized');
     }
 
+    const validationError = this.validateContent(content);
+    if (validationError) {
+      throw new Error(`Invalid message content for update: ${validationError}`);
+    }
+
+    const contentStr =
+      typeof content.content === 'string'
+        ? content.content
+        : JSON.stringify(content.content);
+
     const response = await this.client.im.message.update({
       path: {
         message_id: messageId,
       },
       data: {
-        content:
-          typeof content.content === 'string'
-            ? content.content
-            : JSON.stringify(content.content),
+        content: contentStr,
         msg_type: content.msg_type,
       },
     });
 
     if (response.code !== 0) {
+      this.recordFailure();
       throw new Error(
-        `Feishu API error: ${response.msg} (code: ${response.code})`,
+        `Feishu update API error: ${response.msg} (code: ${response.code})`,
       );
     }
 
+    this.resetCircuit();
     this.logger.debug(`Message updated: ${messageId}`);
   }
 

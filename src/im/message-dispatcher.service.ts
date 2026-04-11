@@ -25,8 +25,6 @@ class SessionWorker {
   private readonly logger = new Logger(SessionWorker.name);
   private processing = false;
   private stopped = false;
-  private currentRetry = 0;
-  private maxRetries = 5;
 
   constructor(
     private readonly sessionId: string,
@@ -61,16 +59,10 @@ class SessionWorker {
     this.processing = true;
 
     try {
-      // 获取待发送消息
       const pending = this.persistence.getPendingMessages(1);
       const messages = pending.get(this.sessionId) || [];
 
-      this.logger.warn(
-        `Worker processing: sessionId=${this.sessionId}, messages=${messages.length}, pending.size=${pending.size}`,
-      );
-
       if (messages.length === 0) {
-        // 检查会话是否已完成
         const session = this.persistence.getSession(this.sessionId);
         if (session?.status === 'completed') {
           this.stopped = true;
@@ -83,7 +75,6 @@ class SessionWorker {
 
       for (const message of messages) {
         if (this.stopped) break;
-
         await this.sendMessage(message);
       }
     } catch (error) {
@@ -92,54 +83,49 @@ class SessionWorker {
       this.processing = false;
     }
 
-    // 继续处理下一条
     if (!this.stopped) {
-      // eslint-disable-next-line @typescript-eslint/no-misused-promises
-      setTimeout(() => this.process(), 500);
+      setTimeout(() => {
+        void this.process();
+      }, 500);
     }
   }
 
   /**
    * 发送单条消息
+   * 弱依赖：发送失败直接丢弃，不重试
    */
   private async sendMessage(message: MessageRecord): Promise<void> {
-    const messageData = JSON.parse(message.message_data);
-    const _im_meta = messageData._im_meta;
+    let messageData: any;
+    try {
+      messageData = JSON.parse(message.message_data);
+    } catch {
+      this.persistence.removeSentMessage(message.id);
+      return;
+    }
+
     const content = messageData as Omit<typeof messageData, '_im_meta'>;
     const messageType = message.message_type;
 
-    // 获取 reply_id：用于飞书回复消息
-    // 对于 assistant/skill 消息，使用会话中第一条 user 消息作为回复目标
+    // 获取 reply_id
     let replyId: string | undefined;
-
     if (
       messageType === 'assistant' ||
       messageType === 'skill:start' ||
       messageType === 'skill:end'
     ) {
-      // 获取会话中第一条 user 消息作为回复目标
       const firstUserMessage = this.persistence.getFirstMessageByType(
         this.sessionId,
         'user',
       );
       replyId = firstUserMessage?.sent_message_id;
 
-      this.logger.warn(
-        `Looking for user message: sessionId=${this.sessionId}, firstUserMessage=${firstUserMessage ? 'found' : 'not found'}, sent_message_id=${firstUserMessage?.sent_message_id || 'N/A'}`,
-      );
-
       if (!replyId) {
-        // 没有找到 user 消息，跳过发送（避免刷屏）
-        this.logger.warn(
-          `Skipping ${messageType} message: no user message found for reply in session ${this.sessionId}`,
-        );
-        // 标记消息为完成（跳过）
         this.persistence.markMessageSent(message.id, undefined, 'skipped');
         return;
       }
     }
 
-    // 使用熔断器发送
+    // 发送（熔断器打开或异常时返回 null，直接丢弃）
     const result =
       await this.circuitBreaker.executeAndSuppress<SendResult | null>(
         async () =>
@@ -149,37 +135,19 @@ class SessionWorker {
         null,
       );
 
-    if (result) {
+    if (result?.message_id) {
       this.persistence.markMessageSent(
         message.id,
         undefined,
         result.message_id,
       );
-      this.currentRetry = 0;
-
-      // 清理已发送消息
+      // 异步清理已发送消息
       void setTimeout(() => {
         this.persistence.removeSentMessage(message.id);
       }, 60000);
-
-      this.logger.debug(
-        `Message sent: ${this.sessionId} -> ${result.message_id}`,
-      );
     } else {
-      this.persistence.markMessageFailed(
-        message.id,
-        'Send failed or circuit breaker open',
-      );
-      this.currentRetry++;
-
-      if (this.currentRetry >= this.maxRetries) {
-        this.logger.error(
-          `Message ${message.id} exceeded max retries, dropping`,
-        );
-        // 从数据库中删除失败消息，防止无限重试
-        this.persistence.removeSentMessage(message.id);
-        return;
-      }
+      // 失败直接丢弃，不重试
+      this.persistence.removeSentMessage(message.id);
     }
   }
 }
@@ -256,9 +224,11 @@ export class MessageDispatcherService implements OnModuleInit, OnModuleDestroy {
   private schedulePendingMessages(): void {
     const pending = this.persistence.getPendingMessages(1);
 
-    this.logger.debug(
-      `Scheduler tick: ${pending.size} sessions with pending messages`,
-    );
+    if (pending.size > 0) {
+      this.logger.debug(
+        `Scheduler tick: ${pending.size} sessions with pending messages`,
+      );
+    }
 
     for (const sessionId of pending.keys()) {
       // 确保 worker 存在

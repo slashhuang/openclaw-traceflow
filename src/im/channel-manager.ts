@@ -14,6 +14,7 @@ import {
   HealthStatus,
 } from './channel.interface';
 import { FeishuChannel } from './channels/feishu/feishu.channel';
+import { CircuitBreakerService } from './circuit-breaker.service';
 
 /**
  * IM Channel 管理器
@@ -32,6 +33,7 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
   constructor(
     private configService: ConfigService,
     @Inject('CHANNEL_PLUGINS') private channelPlugins: ImChannel[],
+    private circuitBreakerService: CircuitBreakerService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -76,14 +78,21 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
       return null;
     }
 
-    try {
+    // 检查 channel 自带的熔断状态（如 FeishuChannel 的连续失败计数）
+    if ('isCircuitOpen' in channel && (channel as any).isCircuitOpen()) {
+      this.logger.warn(
+        `Channel "${channelType}" circuit breaker is OPEN, dropping message`,
+      );
+      return null;
+    }
+
+    const breaker = this.circuitBreakerService.get(`channel:${channelType}`);
+
+    return breaker.execute(async () => {
       const result = await channel.send(content, options);
       this.logger.debug(`Message sent to ${channelType}: ${result.message_id}`);
       return result;
-    } catch (error) {
-      this.logger.error(`Failed to send to ${channelType}:`, error as Error);
-      throw error;
-    }
+    });
   }
 
   /**
@@ -96,8 +105,19 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
     const results = new Map<string, SendResult | Error>();
 
     for (const [channelType, channel] of this.channels.entries()) {
+      // 检查熔断状态
+      if ('isCircuitOpen' in channel && (channel as any).isCircuitOpen()) {
+        this.logger.warn(`Channel "${channelType}" circuit OPEN, skipping`);
+        results.set(channelType, new Error('Circuit breaker OPEN'));
+        continue;
+      }
+
+      const breaker = this.circuitBreakerService.get(`channel:${channelType}`);
+
       try {
-        const result = await channel.send(content, options);
+        const result = await breaker.execute(() =>
+          channel.send(content, options),
+        );
         results.set(channelType, result);
       } catch (error) {
         results.set(channelType, error as Error);
