@@ -294,4 +294,148 @@ describe('ImPushService', () => {
       );
     });
   });
+
+  describe('debounce', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should debounce rapid messages and only process once after window expires', async () => {
+      const sessionId = 'test-debounce-1';
+
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        getOldestMessage: () => null,
+        size: () => 5,
+      });
+
+      // Emit 5 rapid messages
+      for (let i = 0; i < 5; i++) {
+        await (service as any).handleSessionMessage({
+          sessionId,
+          message: { type: 'user', data: { text: `msg ${i}` } },
+          session: {},
+        });
+      }
+
+      // Messages should be queued, not processed yet
+      expect(mockMessageQueueService.enqueueMessage).toHaveBeenCalledTimes(5);
+      expect(mockMessageQueueService.setProcessing).not.toHaveBeenCalled();
+
+      // Advance time by debounce window
+      jest.advanceTimersByTime(3000);
+
+      // Now processQueue should have been called
+      expect(mockMessageQueueService.setProcessing).toHaveBeenCalledWith(
+        sessionId,
+        true,
+      );
+    });
+
+    it('should reset debounce timer on each new message', async () => {
+      const sessionId = 'test-debounce-2';
+
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        getOldestMessage: () => null,
+        size: () => 2,
+      });
+
+      // Send first message
+      await (service as any).handleSessionMessage({
+        sessionId,
+        message: { type: 'user', data: {} },
+        session: {},
+      });
+
+      // Advance 2 seconds (less than debounce window)
+      jest.advanceTimersByTime(2000);
+
+      // Send another message, resetting the timer
+      await (service as any).handleSessionMessage({
+        sessionId,
+        message: { type: 'assistant', data: {} },
+        session: {},
+      });
+
+      // Should still not be processed (timer was reset)
+      expect(mockMessageQueueService.setProcessing).not.toHaveBeenCalled();
+
+      // Advance 2 more seconds (total 4s from first message, but only 2s from second)
+      jest.advanceTimersByTime(2000);
+
+      // Still not processed (only 2s since last message)
+      expect(mockMessageQueueService.setProcessing).not.toHaveBeenCalled();
+
+      // Advance 1 more second (3s since last message)
+      jest.advanceTimersByTime(1000);
+
+      // Now it should be processed
+      expect(mockMessageQueueService.setProcessing).toHaveBeenCalledWith(
+        sessionId,
+        true,
+      );
+    });
+
+    it('should flush pending queue immediately on session end', async () => {
+      const sessionId = 'test-debounce-3';
+
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        getOldestMessage: () => null,
+        size: () => 1,
+      });
+
+      // Send a message (starts debounce timer)
+      await (service as any).handleSessionMessage({
+        sessionId,
+        message: { type: 'user', data: {} },
+        session: {},
+      });
+
+      // End session immediately (before debounce expires)
+      (service as any).handleSessionEnd({ sessionId });
+
+      // Should flush immediately, not wait for debounce
+      expect(mockMessageQueueService.setProcessing).toHaveBeenCalledWith(
+        sessionId,
+        true,
+      );
+    });
+
+    it('should clear debounce timer on session start', async () => {
+      const sessionId = 'test-debounce-4';
+
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        getOldestMessage: () => null,
+        size: () => 0,
+      });
+
+      // Send a message (starts debounce timer)
+      await (service as any).handleSessionMessage({
+        sessionId,
+        message: { type: 'user', data: {} },
+        session: {},
+      });
+
+      // Session starts again (e.g., reconnect)
+      (service as any).handleSessionStart({
+        sessionId,
+        sessionKey: 'agent:main:main',
+        user: { id: 'ou_xxx', name: 'Test User' },
+        account: 'feishu',
+      });
+
+      // Advance debounce window
+      jest.advanceTimersByTime(3000);
+
+      // Should NOT process queue because timer was cleared
+      expect(mockMessageQueueService.setProcessing).not.toHaveBeenCalled();
+    });
+  });
 });

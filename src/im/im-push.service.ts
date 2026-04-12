@@ -32,6 +32,10 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   // 每会话发送锁，保证消息串行发送
   private sessionSendingLock = new Map<string, Promise<void>>();
 
+  // 每会话防抖计时器（避免每次 JSONL append 都触发独立发送）
+  private sessionDebounceTimers = new Map<string, NodeJS.Timeout>();
+  private readonly DEBOUNCE_MS = 3000; // 3 秒无新消息才发送
+
   constructor(
     private eventEmitter: EventEmitter2,
     private configService: ConfigService,
@@ -102,10 +106,19 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     // 清空该会话的状态
     this.sessionLatestUserMessage.delete(sessionId);
     this.sessionSendingLock.delete(sessionId);
+
+    // 清除防抖计时器
+    const existingTimer = this.sessionDebounceTimers.get(sessionId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.sessionDebounceTimers.delete(sessionId);
+    }
   }
 
   /**
    * 处理会话消息
+   * 使用防抖机制：同一会话 3 秒内无新消息才触发发送
+   * 避免 OpenClaw 流式写入 JSONL 时每次 append 都触发独立飞书调用
    */
   private async handleSessionMessage(data: {
     sessionId: string;
@@ -116,14 +129,31 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const message = data.message;
     const messageType = message.type;
 
+    this.logger.debug(
+      `Queuing message: ${sessionId} (${messageType}), debouncing ${this.DEBOUNCE_MS}ms`,
+    );
+
     // 加入队列
     const queuedMsg = this.queueService.enqueueMessage(sessionId, {
       type: messageType,
       data: message,
     });
 
-    // 启动 worker 处理队列
-    void this.processQueue(sessionId);
+    // 重置防抖计时器
+    const existingTimer = this.sessionDebounceTimers.get(sessionId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      this.sessionDebounceTimers.delete(sessionId);
+      this.logger.log(
+        `Debounce window expired for ${sessionId}, processing ${this.queueService.getQueue(sessionId)?.size() || 0} queued messages`,
+      );
+      void this.processQueue(sessionId);
+    }, this.DEBOUNCE_MS);
+
+    this.sessionDebounceTimers.set(sessionId, timer);
   }
 
   /**
@@ -185,6 +215,12 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
+    const contentText =
+      typeof formattedMessage.content === 'string'
+        ? formattedMessage.content
+        : (formattedMessage.content as any)?.text || '';
+    const contentLength = contentText.length;
+
     // 获取 reply_id
     let replyId: string | undefined;
     if (
@@ -196,10 +232,17 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       replyId = latestUserMsg?.message_id;
 
       if (!replyId) {
+        this.logger.log(
+          `Skipping ${messageType} for ${sessionId}: no user message to reply to`,
+        );
         this.queueService.markMessageSent(sessionId, queuedMsg.id);
         return;
       }
     }
+
+    this.logger.log(
+      `Sending ${messageType} to Feishu: session=${sessionId.slice(0, 8)}..., type=${formattedMessage.msg_type}, content_length=${contentLength}, reply_to=${replyId?.slice(0, 12) || 'none'}`,
+    );
 
     // 发送，失败直接丢弃
     try {
@@ -218,12 +261,21 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
           });
         }
         this.queueService.markMessageSent(sessionId, queuedMsg.id);
+        this.logger.log(
+          `Feishu send OK: ${messageType} -> ${result.message_id.slice(0, 16)}...`,
+        );
       } else {
         // 发送失败，直接丢弃
+        this.logger.warn(
+          `Feishu send failed (no message_id): ${messageType} for ${sessionId.slice(0, 8)}..., dropping`,
+        );
         this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
       }
-    } catch {
+    } catch (error) {
       // 发送失败直接丢弃，不重试
+      this.logger.error(
+        `Feishu send error: ${messageType} for ${sessionId.slice(0, 8)}... - ${(error as Error).message}, dropping`,
+      );
       this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
     }
   }
@@ -239,6 +291,15 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     this.sessionLatestUserMessage.delete(sessionId);
     this.sessionSendingLock.delete(sessionId);
     this.queueService.cleanupSession(sessionId);
+
+    // 清除防抖计时器（如果有待处理的消息，立即处理）
+    const pendingTimer = this.sessionDebounceTimers.get(sessionId);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.sessionDebounceTimers.delete(sessionId);
+      this.logger.log(`Session ended, flushing pending queue for ${sessionId}`);
+      void this.processQueue(sessionId);
+    }
   }
 
   /**

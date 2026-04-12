@@ -333,7 +333,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
         );
       }
 
-      this.logger.debug(
+      this.logger.log(
         `Processing ${newLines.length} new lines for session ${sessionId} (${startIndex}/${lines.length})`,
       );
 

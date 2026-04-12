@@ -166,7 +166,7 @@ export class FeishuChannel implements ImChannel {
           ? content.content
           : JSON.stringify(content.content);
 
-      this.logger.debug(
+      this.logger.log(
         `Sending message: msg_type=${content.msg_type}, receive_id=${this.config.targetUserId}, content_length=${contentStr.length}`,
       );
 
@@ -249,7 +249,7 @@ export class FeishuChannel implements ImChannel {
         ? content.content
         : JSON.stringify(content.content);
 
-    this.logger.debug(
+    this.logger.log(
       `Sending reply: msg_type=${content.msg_type}, root_message_id=${rootMessageId}, content_length=${contentStr.length}`,
     );
 
@@ -280,7 +280,7 @@ export class FeishuChannel implements ImChannel {
     // 成功后重置熔断器
     this.resetCircuit();
 
-    this.logger.debug(
+    this.logger.log(
       `Reply sent: message_id=${response.data?.message_id}, thread_id=${response.data?.thread_id}`,
     );
 

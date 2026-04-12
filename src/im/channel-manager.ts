@@ -90,7 +90,7 @@ export class ChannelManager implements OnModuleInit, OnModuleDestroy {
 
     return breaker.execute(async () => {
       const result = await channel.send(content, options);
-      this.logger.debug(`Message sent to ${channelType}: ${result.message_id}`);
+      this.logger.log(`Message sent to ${channelType}: ${result.message_id}`);
       return result;
     });
   }
