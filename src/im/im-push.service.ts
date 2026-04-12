@@ -139,6 +139,13 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       data: message,
     });
 
+    // 立即记录 user 消息的发送结果占位，确保后续 assistant 消息能找到 reply_id
+    if (messageType === 'user') {
+      this.sessionLatestUserMessage.set(sessionId, {
+        message_id: '__pending__',
+      });
+    }
+
     // 重置防抖计时器
     const existingTimer = this.sessionDebounceTimers.get(sessionId);
     if (existingTimer) {
@@ -229,15 +236,15 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       messageType === 'skill:end'
     ) {
       const latestUserMsg = this.sessionLatestUserMessage.get(sessionId);
-      replyId = latestUserMsg?.message_id;
-
-      if (!replyId) {
+      // 跳过还在防抖等待中的 user 消息（占位符）
+      if (!latestUserMsg || latestUserMsg.message_id === '__pending__') {
         this.logger.log(
-          `Skipping ${messageType} for ${sessionId}: no user message to reply to`,
+          `Skipping ${messageType} for ${sessionId}: no confirmed user message to reply to yet`,
         );
         this.queueService.markMessageSent(sessionId, queuedMsg.id);
         return;
       }
+      replyId = latestUserMsg.message_id;
     }
 
     this.logger.log(
@@ -256,6 +263,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
       if (result?.message_id) {
         if (messageType === 'user') {
+          // 将占位符替换为真实的 message_id
           this.sessionLatestUserMessage.set(sessionId, {
             message_id: result.message_id,
           });
@@ -270,6 +278,10 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
           `Feishu send failed (no message_id): ${messageType} for ${sessionId.slice(0, 8)}..., dropping`,
         );
         this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
+        // user 消息发送失败时清除占位，避免后续 assistant 消息永久跳过
+        if (messageType === 'user') {
+          this.sessionLatestUserMessage.delete(sessionId);
+        }
       }
     } catch (error) {
       // 发送失败直接丢弃，不重试
@@ -277,6 +289,10 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         `Feishu send error: ${messageType} for ${sessionId.slice(0, 8)}... - ${(error as Error).message}, dropping`,
       );
       this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
+      // user 消息发送异常时清除占位
+      if (messageType === 'user') {
+        this.sessionLatestUserMessage.delete(sessionId);
+      }
     }
   }
 
