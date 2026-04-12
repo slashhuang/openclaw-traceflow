@@ -491,49 +491,169 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     agentId: string = 'default',
   ): void {
     try {
+      // 1. 从 sessions.json 读取已知会话
       const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
       if (fs.existsSync(sessionsJsonPath)) {
-        const content = fs.readFileSync(sessionsJsonPath, 'utf-8');
-        const sessions = JSON.parse(content);
+        try {
+          const content = fs.readFileSync(sessionsJsonPath, 'utf-8');
+          const sessions = JSON.parse(content);
 
-        for (const [sessionKey, sessionData] of Object.entries(sessions)) {
-          const data = sessionData as any;
-          if (data.sessionId) {
-            this.knownSessionFiles.add(data.sessionId);
+          for (const [sessionKey, sessionData] of Object.entries(sessions)) {
+            const data = sessionData as any;
+            if (data.sessionId) {
+              this.knownSessionFiles.add(data.sessionId);
 
-            // 记录初始文件位置，用于增量推送
-            const sessionFile = data.sessionFile || data.sessionId + '.jsonl';
-            const filePath = path.isAbsolute(sessionFile)
-              ? sessionFile
-              : path.join(sessionsDir, sessionFile);
-            if (fs.existsSync(filePath)) {
-              const stats = fs.statSync(filePath);
-              const fileContent = fs.readFileSync(filePath, 'utf-8');
-              const lines = fileContent
-                .trim()
-                .split('\n')
-                .filter((line) => line.trim());
-              const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
+              const sessionFile = data.sessionFile || data.sessionId + '.jsonl';
+              const filePath = path.isAbsolute(sessionFile)
+                ? sessionFile
+                : path.join(sessionsDir, sessionFile);
+              if (fs.existsSync(filePath)) {
+                this.recordSessionPosition(filePath, data.sessionId, agentId);
+              }
+            }
+          }
+        } catch (parseError) {
+          this.logger.warn(`Failed to parse sessions.json: ${parseError}`);
+        }
+      }
 
-              this.sessionFilePositions.set(data.sessionId, {
-                size: stats.size,
-                lastLine,
-                lineCount: lines.length,
-              });
-
-              this.logger.debug(
-                `Recorded initial position for ${data.sessionId}: ${stats.size} bytes, ${lines.length} lines`,
-              );
+      // 2. 额外扫描目录中所有 .jsonl 文件，补漏 sessions.json 未记录的会话
+      try {
+        const jsonlFiles = fs
+          .readdirSync(sessionsDir)
+          .filter((f) => f.endsWith('.jsonl') && !f.includes('.reset.'));
+        for (const jsonlFile of jsonlFiles) {
+          const sessionId = path.basename(jsonlFile, '.jsonl');
+          if (!this.knownSessionFiles.has(sessionId)) {
+            this.knownSessionFiles.add(sessionId);
+            const filePath = path.join(sessionsDir, jsonlFile);
+            try {
+              this.recordSessionPosition(filePath, sessionId, agentId);
+              this.logger.debug(`Discovered orphaned session ${sessionId}`);
+            } catch {
+              // 文件可能正在写入，跳过
             }
           }
         }
-
-        this.logger.log(
-          `Scanned ${this.knownSessionFiles.size} existing sessions for agent ${agentId}`,
-        );
+      } catch (dirError) {
+        this.logger.warn(`Failed to read sessions directory: ${dirError}`);
       }
+
+      this.logger.log(
+        `Scanned ${this.knownSessionFiles.size} existing sessions for agent ${agentId}`,
+      );
     } catch (error) {
       this.logger.error('Error scanning existing sessions:', error as Error);
+    }
+  }
+
+  /**
+   * 记录会话文件的初始位置，并建立 session state
+   * 不重放历史消息，仅让后续 watcher 增量推送正常工作
+   */
+  private recordSessionPosition(
+    filePath: string,
+    sessionId: string,
+    agentId: string,
+  ): void {
+    const stats = fs.statSync(filePath);
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content
+      .trim()
+      .split('\n')
+      .filter((line) => line.trim());
+    const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
+
+    this.sessionFilePositions.set(sessionId, {
+      size: stats.size,
+      lastLine,
+      lineCount: lines.length,
+    });
+
+    this.logger.debug(
+      `Recorded initial position for ${sessionId}: ${stats.size} bytes, ${lines.length} lines`,
+    );
+
+    // 解析文件元数据并建立 session state（同步执行）
+    this.registerSessionStart(filePath, sessionId, agentId);
+  }
+
+  /**
+   * 注册会话开始（同步版本，用于启动时扫描）
+   * 与 parseNewSessionFile 逻辑一致，但不使用 async
+   */
+  private registerSessionStart(
+    filePath: string,
+    sessionId: string,
+    agentId: string,
+  ): void {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.trim().split('\n');
+      if (lines.length === 0) return;
+
+      // 从 sessions.json 中查找 sessionKey
+      const sessionsDir = path.dirname(filePath);
+      const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
+      let sessionKey = `unknown:${sessionId}`;
+
+      if (fs.existsSync(sessionsJsonPath)) {
+        try {
+          const sessionsData = JSON.parse(
+            fs.readFileSync(sessionsJsonPath, 'utf-8'),
+          );
+          for (const [key, value] of Object.entries(sessionsData)) {
+            if ((value as any).sessionId === sessionId) {
+              sessionKey = key;
+              break;
+            }
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
+
+      // 提取用户信息
+      let userId = 'unknown';
+      let userName = 'Unknown User';
+
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          if (entry.type === 'message' && entry.message?.role === 'user') {
+            const msgContent = entry.message.content;
+            if (
+              typeof msgContent === 'string' &&
+              msgContent.includes('System:')
+            ) {
+              const match = msgContent.match(/\[(.*?)\]/);
+              if (match) {
+                const parts = match[1].split('|');
+                if (parts.length > 1) {
+                  const userInfo = parts[1].trim();
+                  const userMatch = userInfo.match(/\((ou_[a-f0-9]+)\)/);
+                  if (userMatch) {
+                    userId = userMatch[1];
+                    userName = userInfo.split('(')[0].trim();
+                  }
+                }
+              }
+            }
+            break;
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
+
+      this.onSessionStart({
+        sessionId,
+        sessionKey,
+        user: { id: userId, name: userName },
+        account: `${agentId}:${this.extractAccount(sessionKey)}`,
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to register session ${sessionId}: ${error}`);
     }
   }
 
@@ -555,27 +675,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           `New session file detected: ${sessionId} (agent: ${agentId})`,
         );
 
-        // 记录初始文件位置，不推送历史消息
-        const stats = fs.statSync(filePath);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content
-          .trim()
-          .split('\n')
-          .filter((line) => line.trim());
-        const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
-
-        this.sessionFilePositions.set(sessionId, {
-          size: stats.size,
-          lastLine,
-          lineCount: lines.length,
-        });
-
-        this.logger.debug(
-          `Recorded initial position for new session ${sessionId}: ${stats.size} bytes, ${lines.length} lines`,
-        );
-
-        // 读取文件获取会话信息（但不推送历史消息）
-        this.parseNewSessionFile(filePath, sessionId, agentId);
+        this.recordSessionPosition(filePath, sessionId, agentId);
       }
     } catch (error) {
       this.logger.error('Error handling new session file:', error as Error);
