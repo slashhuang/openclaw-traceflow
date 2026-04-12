@@ -117,13 +117,17 @@ export class PathConfigController {
       );
       console.log('[PathConfigController] Config saved successfully');
 
-      // 清除缓存，使新配置生效
+      // 同步更新 ConfigService 内存中的路径配置（使 getConfig() 立即返回新值）
+      this.configService.reloadPaths();
+      console.log('[PathConfigController] ConfigService paths reloaded');
+
+      // 清除 OpenClawService 路径缓存，触发重新解析
       this.openClawService.clearPathsCache();
       console.log('[PathConfigController] Cache cleared');
 
       return {
         success: true,
-        message: '配置已保存，将在下次请求时生效',
+        message: '配置已保存并生效',
       };
     } catch {
       console.error('[PathConfigController] Failed to save config');

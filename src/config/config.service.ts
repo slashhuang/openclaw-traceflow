@@ -271,6 +271,43 @@ export class ConfigService implements ConfigReader, OnModuleInit {
     return this.config;
   }
 
+  /**
+   * 重新加载路径相关配置（含 ~ 展开），使 PathConfigController 保存的文件配置
+   * 立即反映到内存中，避免 getConfig() 仍返回启动时的旧值。
+   */
+  reloadPaths(): Config {
+    const configPath = path.join(
+      process.cwd(),
+      'config',
+      'openclaw.runtime.json',
+    );
+    if (!fs.existsSync(configPath)) {
+      return this.config;
+    }
+    try {
+      const fileConfig = JSON.parse(
+        fs.readFileSync(configPath, 'utf-8'),
+      ) as Partial<Config>;
+      const pathFields: (keyof Config)[] = [
+        'openclawStateDir',
+        'openclawWorkspaceDir',
+        'openclawConfigPath',
+        'openclawLogPath',
+      ];
+      for (const field of pathFields) {
+        const val = fileConfig[field];
+        if (typeof val === 'string') {
+          (this.config as unknown as Record<string, unknown>)[field] =
+            val.startsWith('~/') ? path.join(os.homedir(), val.slice(2)) : val;
+        }
+      }
+      return this.config;
+    } catch (error) {
+      console.warn('[ConfigService.reloadPaths] Failed to reload:', error);
+      return this.config;
+    }
+  }
+
   validateToken(token?: string): boolean {
     // 如果是 local-only 模式，不需要 token
     if (this.config.accessMode === 'local-only') {
