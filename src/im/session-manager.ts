@@ -218,14 +218,6 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
           `Detected ${hasFilePosition ? 'existing' : 'new'} session, parsing file: ${sessionId}`,
         );
         void this.parseNewSessionFile(filePath, sessionId, agentId);
-
-        // 如果是启动时已存在的会话，仅记录文件位置，不推送历史消息
-        // 用户只关心启动后的新消息
-        if (hasFilePosition) {
-          this.logger.debug(
-            `Existing session ${sessionId} loaded, skipping historical messages`,
-          );
-        }
         return;
       }
 
@@ -574,7 +566,18 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       `Recorded initial position for ${sessionId}: ${stats.size} bytes, ${lines.length} lines`,
     );
 
-    // 解析文件元数据并建立 session state（同步执行）
+    // 检查是否为历史会话（修改时间超过超时阈值）
+    const fileAge = Date.now() - stats.mtimeMs;
+    if (fileAge > this.SESSION_END_TIMEOUT_MS) {
+      // 历史会话，只记录文件位置用于 watcher 跟踪新消息
+      // 不触发 onSessionStart，避免对已完成会话重复推送和定时器事件
+      this.logger.debug(
+        `Historical session ${sessionId} (age: ${Math.floor(fileAge / 60000)}min), skipping start event`,
+      );
+      return;
+    }
+
+    // 新会话，解析文件元数据并建立 session state
     this.registerSessionStart(filePath, sessionId, agentId);
   }
 
