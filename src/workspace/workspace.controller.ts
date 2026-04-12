@@ -4,7 +4,6 @@ import {
   Param,
   Query,
   Res,
-  HttpStatus,
   Put,
   Delete,
   Body,
@@ -12,36 +11,24 @@ import {
 import type { Response } from 'express';
 import * as path from 'path';
 import * as os from 'os';
-import { OpenClawService } from '../openclaw/openclaw.service';
 import { FileTreeService } from '../common/file-tree.service';
 import type {
   FileWriteRequest,
   FileWriteResponse,
 } from '../common/file-tree.service';
+import { ConfigService } from '../config/config.service';
 
 @Controller('api/workspace')
 export class WorkspaceController {
   constructor(
-    private readonly openClawService: OpenClawService,
+    private readonly configService: ConfigService,
     private readonly fileTreeService: FileTreeService,
   ) {}
 
-  /**
-   * 从 OpenClawService 获取 workspace 根目录（与 SystemPrompt / Setup 等模块保持一致）。
-   * 降级：若 getResolvedPaths() 未解析到 workspaceDir，退化为 ~/.openclaw/workspace。
-   */
-  private async getWorkspaceRoot(): Promise<string> {
-    try {
-      const paths = await this.openClawService.getResolvedPaths();
-      if (paths.workspaceDir?.trim()) {
-        return paths.workspaceDir.trim();
-      }
-    } catch (err) {
-      console.warn(
-        '[WorkspaceController] getResolvedPaths failed, falling back to default:',
-        err instanceof Error ? err.message : err,
-      );
-    }
+  private getWorkspaceRoot(): string {
+    const cfg = this.configService.getConfig();
+    const dir = cfg.openclawWorkspaceDir?.trim();
+    if (dir) return dir;
     return path.join(os.homedir(), '.openclaw', 'workspace');
   }
 
@@ -50,7 +37,7 @@ export class WorkspaceController {
    */
   @Get('tree')
   async getTree(@Query('path') queryPath?: string) {
-    const workspaceRoot = await this.getWorkspaceRoot();
+    const workspaceRoot = this.getWorkspaceRoot();
     return this.fileTreeService.getTree(workspaceRoot, queryPath);
   }
 
@@ -62,7 +49,7 @@ export class WorkspaceController {
     @Param('path') filePath: string | string[],
     @Res() res: Response,
   ) {
-    const workspaceRoot = await this.getWorkspaceRoot();
+    const workspaceRoot = this.getWorkspaceRoot();
     return this.fileTreeService.getFile(workspaceRoot, filePath, res);
   }
 
@@ -74,7 +61,7 @@ export class WorkspaceController {
     @Param('path') filePath: string | string[],
     @Body() body: FileWriteRequest,
   ): Promise<FileWriteResponse> {
-    const workspaceRoot = await this.getWorkspaceRoot();
+    const workspaceRoot = this.getWorkspaceRoot();
     return this.fileTreeService.writeFile(workspaceRoot, filePath, body);
   }
 
@@ -83,7 +70,7 @@ export class WorkspaceController {
    */
   @Delete('file/*path')
   async deleteFile(@Param('path') filePath: string | string[]) {
-    const workspaceRoot = await this.getWorkspaceRoot();
+    const workspaceRoot = this.getWorkspaceRoot();
     return this.fileTreeService.deleteFile(workspaceRoot, filePath);
   }
 }

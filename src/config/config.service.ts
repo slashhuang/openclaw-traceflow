@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, Optional, Inject } from '@nestjs/common';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { OnboardingStorageService } from '../onboarding/onboarding-storage.service';
 
@@ -192,6 +193,26 @@ export class ConfigService implements ConfigReader, OnModuleInit {
       ),
     } as Config;
 
+    // 5. 展开路径中的 ~
+    if (merged.openclawStateDir?.startsWith('~/')) {
+      merged.openclawStateDir = path.join(
+        os.homedir(),
+        merged.openclawStateDir.slice(2),
+      );
+    }
+    if (merged.openclawWorkspaceDir?.startsWith('~/')) {
+      merged.openclawWorkspaceDir = path.join(
+        os.homedir(),
+        merged.openclawWorkspaceDir.slice(2),
+      );
+    }
+    if (merged.openclawConfigPath?.startsWith('~/')) {
+      merged.openclawConfigPath = path.join(
+        os.homedir(),
+        merged.openclawConfigPath.slice(2),
+      );
+    }
+
     if (
       typeof merged.tokenEstimateBytesDivisor !== 'number' ||
       !Number.isFinite(merged.tokenEstimateBytesDivisor) ||
@@ -204,7 +225,7 @@ export class ConfigService implements ConfigReader, OnModuleInit {
       merged.workspaceWriteWhenAccessNoneEnabled = false;
     }
 
-    // 5. 确保数据目录存在（dataDir 由 cwd + 配置文件 + DATA_DIR 等合并决定，不写死）
+    // 6. 确保数据目录存在（dataDir 由 cwd + 配置文件 + DATA_DIR 等合并决定，不写死）
     if (!fs.existsSync(merged.dataDir)) {
       fs.mkdirSync(merged.dataDir, { recursive: true });
     }

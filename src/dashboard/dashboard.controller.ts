@@ -1,5 +1,4 @@
 import { Controller, Get } from '@nestjs/common';
-import { HealthService } from '../health/health.service';
 import { OpenClawService } from '../openclaw/openclaw.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { MetricsService } from '../metrics/metrics.service';
@@ -7,7 +6,6 @@ import { MetricsService } from '../metrics/metrics.service';
 @Controller('api/dashboard')
 export class DashboardController {
   constructor(
-    private readonly healthService: HealthService,
     private readonly openclawService: OpenClawService,
     private readonly sessionsService: SessionsService,
     private readonly metricsService: MetricsService,
@@ -16,7 +14,6 @@ export class DashboardController {
   @Get('overview')
   async getOverview() {
     const [
-      health,
       paths,
       sessions,
       latency,
@@ -24,7 +21,6 @@ export class DashboardController {
       archivedSessions,
       agentSessionOverview,
     ] = await Promise.all([
-      this.healthService.getHealthStatus().catch(() => null),
       this.openclawService.getResolvedPaths().catch(() => null),
       this.sessionsService.listSessions().catch(() => []),
       this.metricsService
@@ -57,7 +53,6 @@ export class DashboardController {
     }
 
     return {
-      health,
       openclawPaths: paths,
       sessions,
       /** PRD：按 agent 分区的会话概览（总/活跃/空闲/归档，磁盘） */

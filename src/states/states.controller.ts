@@ -10,35 +10,21 @@ import type { Response } from 'express';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { OpenClawService } from '../openclaw/openclaw.service';
 import { FileTreeService } from '../common/file-tree.service';
+import { ConfigService } from '../config/config.service';
 
 @Controller('api/states')
 export class StatesController {
   constructor(
-    private readonly openClawService: OpenClawService,
+    private readonly configService: ConfigService,
     private readonly fileTreeService: FileTreeService,
   ) {}
 
-  /**
-   * 从 OpenClawService 获取 state 根目录（与 SystemPrompt / Setup 等模块保持一致）。
-   * 降级：若 getResolvedPaths() 未解析到 stateDir，退化为 ~/.openclaw/state。
-   */
-  private async getStateRoot(): Promise<string> {
-    try {
-      const paths = await this.openClawService.getResolvedPaths();
-      if (paths.stateDir?.trim()) {
-        return paths.stateDir.trim();
-      }
-    } catch (err) {
-      console.warn(
-        '[StatesController] getResolvedPaths failed, falling back to default:',
-        err instanceof Error ? err.message : err,
-      );
-    }
-    // 回退到默认路径
-    const defaultStateDir = path.join(os.homedir(), '.openclaw', 'state');
-    return defaultStateDir;
+  private getStateRoot(): string {
+    const cfg = this.configService.getConfig();
+    const dir = cfg.openclawStateDir?.trim();
+    if (dir) return dir;
+    return path.join(os.homedir(), '.openclaw');
   }
 
   /**
@@ -46,9 +32,8 @@ export class StatesController {
    */
   @Get('tree')
   async getTree(@Query('path') queryPath?: string) {
-    const stateRoot = await this.getStateRoot();
+    const stateRoot = this.getStateRoot();
 
-    // 检查目录是否存在
     if (!fs.existsSync(stateRoot)) {
       throw new BadRequestException(
         `OpenClaw state 目录不存在：${stateRoot}\n\n` +
@@ -71,7 +56,7 @@ export class StatesController {
     @Param('path') filePath: string | string[],
     @Res() res: Response,
   ) {
-    const stateRoot = await this.getStateRoot();
+    const stateRoot = this.getStateRoot();
     return this.fileTreeService.getFile(stateRoot, filePath, res);
   }
 }
