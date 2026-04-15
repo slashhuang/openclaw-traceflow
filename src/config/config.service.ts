@@ -184,13 +184,13 @@ export class ConfigService implements ConfigReader, OnModuleInit {
         process.env.OPENCLAW_WORKSPACE_WRITE === 'true',
     };
 
-    // 4. 合并配置
+    // 4. 合并配置（fileConfig 优先级最高，用户手动编辑的 > 环境变量）
     const merged = {
       ...defaultConfig,
-      ...fileConfig,
       ...Object.fromEntries(
         Object.entries(envConfig).filter(([_, v]) => v !== undefined),
       ),
+      ...fileConfig,
     } as Config;
 
     // 5. 展开路径中的 ~
