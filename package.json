@@ -35,13 +35,14 @@
     "deploy:pm2": "bash ./scripts/deploy-pm2.sh",
     "release": "pnpm run build:all && pnpm pack",
     "perf:p0:verify": "node scripts/p0-verify.mjs",
-    "sync:bundled-skills": "node scripts/sync-bundled-skills.mjs",
-    "sync:agent-audit-skill": "node scripts/sync-bundled-skills.mjs",
     "clean": "rm -rf dist frontend/dist public/app",
     "reset": "pnpm run clean && rm -rf node_modules && pnpm install",
     "prepare": "husky"
   },
   "lint-staged": {
+    "frontend/src/**/*.{ts,tsx,js,jsx}": [
+      "eslint --fix --config frontend/eslint.config.js"
+    ],
     "*.{ts,tsx}": [
       "eslint --fix",
       "prettier --write"

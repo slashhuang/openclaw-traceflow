@@ -2,7 +2,8 @@
 export default {
   'app.title': 'OpenClaw TraceFlow',
   'app.loading': 'Loading…',
-  'app.initStatusError': 'Failed to load initial status. Please ensure the `openclaw-traceflow` backend is running.',
+  'app.initStatusError':
+    'Failed to load initial status. Please ensure the `openclaw-traceflow` backend is running.',
   'theme.light': 'Light',
   'theme.dark': 'Dark',
   'theme.system': 'System',
@@ -17,49 +18,17 @@ export default {
   'menu.pricing': 'Pricing',
   'menu.logs': 'Logs',
   'menu.settings': 'Settings',
-  'menu.traceflowSkills': 'TraceFlow skills',
   'menu.audit': 'Contribution Audit',
-  'traceflowSkills.pageTitle': 'TraceFlow companion skills',
-  'traceflowSkills.intro':
-    'OpenClaw companion skills shipped with this open-source TraceFlow repository. Copy them into your OpenClaw skills layout as needed—TraceFlow does not install or run them for you.',
-  'traceflowSkills.loading': 'Loading companion skills…',
-  'traceflowSkills.loadErrorTitle': 'Failed to load companion skills',
-  'traceflowSkills.loadError': 'Could not load companion skills',
-  'traceflowSkills.copyFile': 'Copy this file',
-  'traceflowSkills.copyAll': 'Copy all files',
-  'traceflowSkills.copySuccess': 'Copied: {label}',
-  'traceflowSkills.copyFailed': 'Copy failed (check browser permissions)',
-  'traceflowSkills.skill.agent_audit.title': 'agent-audit (contribution audit)',
-  'traceflowSkills.skill.agent_audit.desc':
-    'Scans session JSONL and builds audit snapshots; after install, tell your Agent phrases like “run the audit” (or your locale equivalent) to generate data.',
-  'traceflowSkills.skill.self_improvement.title': 'self-improvement (live reflections)',
-  'traceflowSkills.skill.self_improvement.desc':
-    'Detects corrections, failures, and insights during sessions and appends reflections.jsonl for this page (requires the skill installed and active in OpenClaw).',
-  'traceflowSkills.backToAudit': 'Back to contribution audit',
   'audit.loadingSnapshot': 'Loading audit data…',
   'audit.onboarding.title': 'No audit snapshot yet',
   'audit.onboarding.lead':
-    'Contribution audit needs the agent-audit skill on the OpenClaw side: copy it from TraceFlow companion skills, install it, then trigger a scan from OpenClaw.',
-  'audit.onboarding.step1':
-    'Open TraceFlow companion skills in the sidebar and install agent-audit into your OpenClaw skills directory.',
+    'Contribution audit needs the agent-audit skill on the OpenClaw side: install it, then trigger a scan from OpenClaw.',
+  'audit.onboarding.step1': 'Install agent-audit into your OpenClaw skills directory.',
   'audit.onboarding.step2':
     'In OpenClaw chat, ask the Agent to run the audit (e.g. phrases like “run the audit” / contribution report—see the skill text).',
   'audit.onboarding.step3': 'Return here and click Retry or refresh.',
-  'audit.onboarding.openSkills': 'Open TraceFlow companion skills',
   'audit.error.title': 'Failed to load audit data',
   'audit.error.unknown': 'Unknown error',
-  'reflections.onboarding.title': 'No reflections data file yet',
-  'reflections.onboarding.lead':
-    'This page reads reflections.jsonl under your OpenClaw state directory, usually written by the self-improvement runtime.',
-  'reflections.onboarding.step1':
-    'Open TraceFlow companion skills in the sidebar and install self-improvement into your OpenClaw skills layout (requires git and python3 on the machine; see the SKILL text).',
-  'reflections.onboarding.step2':
-    'Use OpenClaw normally; corrections, fix requests, tool failures, etc. can be recorded into reflections.jsonl.',
-  'reflections.onboarding.step3': 'Return here and click Refresh.',
-  'reflections.onboarding.openSkills': 'Open TraceFlow companion skills',
-  'reflections.loadError': 'Failed to load reflections',
-  'reflections.emptyHint':
-    'No rows for the current filters. Trigger correction/fix-style interactions in OpenClaw to generate entries, or read the self-improvement skill on the companion skills page.',
   'gateway.banner.title': 'Gateway disconnected',
   'gateway.banner.settings': 'Open settings',
   'gateway.connected': 'Gateway connected',
@@ -72,8 +41,7 @@ export default {
   'header.github': 'GitHub',
   'setup.wizard.title': 'OpenClaw TraceFlow',
   'setup.wizard.subtitle': 'First-time Configuration',
-  'setup.wizardScopeDesc':
-    'Configure OpenClaw data paths so TraceFlow can read sessions and logs.',
+  'setup.wizardScopeDesc': 'Configure OpenClaw data paths so TraceFlow can read sessions and logs.',
   'setup.simple.desc': 'Please fill in the OpenClaw paths to start using TraceFlow.',
   'setup.next': 'Next',
   'setup.prev': 'Back',
@@ -115,9 +83,11 @@ export default {
   'settings.contactCardScopeDesc': 'Author and repository links (not metrics).',
   'settings.gateway': 'Gateway',
   'settings.access': 'Access control',
-  'settings.access.scope': 'These modes only protect configuration APIs (save settings, test connection, generate token). They do not affect dashboard/session/log viewing.',
+  'settings.access.scope':
+    'These modes only protect configuration APIs (save settings, test connection, generate token). They do not affect dashboard/session/log viewing.',
   'settings.access.tokenHelpTitle': 'How to use Token mode?',
-  'settings.access.tokenHelpDesc': 'When calling configuration APIs, include this header: Authorization: Bearer <your token>',
+  'settings.access.tokenHelpDesc':
+    'When calling configuration APIs, include this header: Authorization: Bearer <your token>',
   'settings.quick': 'Quick actions',
   'settings.restart': 'Restart Gateway',
   'settings.restartHint':
@@ -183,7 +153,8 @@ export default {
   'sessionEvaluation.submittedAsync':
     'Submitted. Refresh this page or switch tabs and back; or click “Refresh result”.',
   'sessionEvaluation.submitFailed': 'Failed to submit evaluation',
-  'sessionEvaluation.pendingBanner': 'Session quality evaluation running. Refresh or click “Refresh result” when done.',
+  'sessionEvaluation.pendingBanner':
+    'Session quality evaluation running. Refresh or click “Refresh result” when done.',
   'sessionEvaluation.fetchResult': 'Refresh result',
   'sessionEvaluation.notReadyYet': 'No new result yet. Try again in a moment.',
   'sessionEvaluation.fetchFailed': 'Failed to fetch evaluation result',
@@ -202,13 +173,15 @@ export default {
   'dashboard.systemStatus': 'Status',
   'dashboard.systemStatusDesc': 'Overall OpenClaw service status',
   'dashboard.totalSessions': 'Current session count',
-  'dashboard.totalSessionsDesc': 'Number of sessions in the system (active + idle + ended), excluding archived',
+  'dashboard.totalSessionsDesc':
+    'Number of sessions in the system (active + idle + ended), excluding archived',
   'dashboard.active': 'Active',
   'dashboard.activeDesc': 'Sessions with recent message activity (e.g. within 5 minutes)',
   'dashboard.idle': 'Idle',
   'dashboard.idleDesc': 'Sessions with no messages for over 5 minutes',
   'dashboard.archived': 'Archived',
-  'dashboard.archivedDesc': 'When a user starts a new conversation, the previous one is archived; each archive = one new conversation started',
+  'dashboard.archivedDesc':
+    'When a user starts a new conversation, the previous one is archived; each archive = one new conversation started',
   'dashboard.completed': 'Ended',
   'dashboard.completedDesc': 'Last message is agent:final (this turn has ended)',
   'dashboard.latency': 'Latency (1h)',
@@ -247,7 +220,7 @@ export default {
   'dashboard.tokenSummaryChartDesc':
     'Time window = all rows in local metrics (same as GET /dashboard/overview with a very large timeRangeMs). X-axis: “Active” = SUM of latest token-% rows per session; “Archived” = SUM of archived-% rows from *.jsonl.reset.*. When archived is often zero, see the banner below and the second ℹ. Grouped bars: recorded total, In, Out, est.(log). Not a per-minute history chart.',
   'dashboard.tokenMetricsTraceDoc':
-    '[Active]\nRecorded: token_usage rows with id LIKE \'token-%\', latest per session_id in the window, then SUM.\nCollection: ~30s snapshots for sessions from listSessions() that have tokenUsage.\n\n[Archived]\nRecorded: id LIKE \'archived-%\', parsed from reset JSONL (prior turn), SUM in window.\nIf you rarely /new, reset files lack usage lines, or no snapshot in the window, archived recorded = 0 and the right group looks empty.\n\n[Est.(log)]\nOnly sessions with totalTokensFresh:false; log-byte heuristic bucketed by token-usage-by-session-key active vs archived.\n\nWorked example + JSON: openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json.',
+    "[Active]\nRecorded: token_usage rows with id LIKE 'token-%', latest per session_id in the window, then SUM.\nCollection: ~30s snapshots for sessions from listSessions() that have tokenUsage.\n\n[Archived]\nRecorded: id LIKE 'archived-%', parsed from reset JSONL (prior turn), SUM in window.\nIf you rarely /new, reset files lack usage lines, or no snapshot in the window, archived recorded = 0 and the right group looks empty.\n\n[Est.(log)]\nOnly sessions with totalTokensFresh:false; log-byte heuristic bucketed by token-usage-by-session-key active vs archived.\n\nWorked example + JSON: openclaw-traceflow/docs/token-metrics-dual-track-example.md · docs/fixtures/token-metrics-dual-track.example.json.",
   'dashboard.tokenArchivedZeroBannerTitle': 'Archived recorded totals are zero',
   'dashboard.tokenArchivedZeroBannerDesc':
     'Archived numbers come from archived-* rows fed by *.jsonl.reset.* (prior turn before a new chat), with snapshots in the time window. If you rarely start a new chat, reset files have no usage lines, or collection has not run, recorded archived stays 0 and the right-hand bars look empty.\n\nCurrent-turn usage is in “Active” on the left.\n\nArchived-side log estimate sum in this environment: {estArchived} (stale-index sessions only, bucketed per key); est.(log) bars can still be near zero.',
@@ -289,7 +262,8 @@ export default {
   'dashboard.tokenTopArchived': 'Archived token top 10',
   'dashboard.tokenTopArchivedDesc': 'Top 10 archived sessions by token usage in 24h',
   'dashboard.colType': 'Type',
-  'dashboard.colTypeDesc': 'Session type: user, main bucket (agent:*:main), heartbeat, cron, Wave, …',
+  'dashboard.colTypeDesc':
+    'Session type: user, main bucket (agent:*:main), heartbeat, cron, Wave, …',
   'dashboard.colUser': 'User',
   'dashboard.colUserDesc': 'Session owner or identifier',
   'dashboard.colTotal': 'Total',
@@ -306,7 +280,8 @@ export default {
   'dashboard.colToken': 'Token',
   'dashboard.colTokenDesc': 'Total tokens in archived part of this session',
   'dashboard.colArchivedCount': 'Count',
-  'dashboard.colArchivedCountDesc': 'Times this session was archived (user started new conversation)',
+  'dashboard.colArchivedCountDesc':
+    'Times this session was archived (user started new conversation)',
   'dashboard.colStatus': 'Status',
   'dashboard.colStatusDesc': 'active, idle, completed (ended turn — agent:final)',
   'dashboard.colLast': 'Last',
@@ -445,7 +420,8 @@ export default {
   'sessions.column.recordedTokensTooltip':
     'Merged totalTokens and utilization vs context limit; * when totalTokensFresh:false.',
   'sessions.column.estimatedLog': 'Est.(log)',
-  'sessions.column.estimatedLogTooltip': 'Heuristic from live log bytes—not billing; only when stale index and estimate is shown.',
+  'sessions.column.estimatedLogTooltip':
+    'Heuristic from live log bytes—not billing; only when stale index and estimate is shown.',
   'sessions.tokensTotalUnreliableHint':
     'This figure comes from transcript sums or partial fields; it is **not** OpenClaw’s confirmed “current context window” total when the index may be stale (totalTokensFresh:false).',
   'sessions.utilUnreliableHint':
@@ -511,7 +487,8 @@ export default {
     'This session log is about {size} and exceeds the server full-parse threshold. Only the first {head} and last {tail} non-empty JSONL lines were parsed; the middle was not loaded—lists are not the full history.',
   'session.loadFullTranscript': 'Load full transcript',
   'session.loadFullTranscriptTitle': 'Load full transcript?',
-  'session.loadFullTranscriptContent': 'This session log is about {size}. Loading the full content may take a while.',
+  'session.loadFullTranscriptContent':
+    'This session log is about {size}. Loading the full content may take a while.',
   'common.loadFull': 'Load full',
   'session.loadingFull': 'Loading full transcript...',
   'session.loadedFull': 'Loaded. Reloading page.',
@@ -559,7 +536,8 @@ export default {
   'skills.tabAnalysis': 'Skills token use',
   'skills.tabAnalysisHint':
     'Estimates tokens from Skills-related sections in the current system prompt (active vs zombie vs duplicate), plus savings tips. This is not the same as the full System Prompt page in the sidebar.',
-  'skills.callTrackingHint': 'Calls column: inferred from read tool path (path containing skills/xxx/SKILL.md). See session detail for per-session invoked skills.',
+  'skills.callTrackingHint':
+    'Calls column: inferred from read tool path (path containing skills/xxx/SKILL.md). See session detail for per-session invoked skills.',
   'skills.tabSkillTool': 'Skill × Tool',
   'skills.skillToolHint':
     'Skill usage is inferred from read paths to skills/<name>/SKILL.md. Tool calls are attributed in transcript order: after each read of a skill’s SKILL.md, subsequent tools count toward that skill until the next read of any SKILL.md; tools before the first SKILL.md read are not attributed. Totals accumulate across sessions.',
@@ -567,7 +545,8 @@ export default {
     'Tools column: names are tool names (e.g. exec=commands, read=files, write/edit=files, message=messages). Numbers are calls attributed to that skill. Total = sum of those tools for the row (across sessions). This differs from the Calls column in the list tab (read-to-SKILL.md count only)—do not compare them directly.',
   'skills.skillToolTableNote':
     'This table is the attributed tool breakdown; differing from Calls is expected.',
-  'skills.toolColumnTooltip': 'Tool name and attributed call count; see the notes above for attribution rules.',
+  'skills.toolColumnTooltip':
+    'Tool name and attributed call count; see the notes above for attribution rules.',
   'skills.skillToolChartTitle': 'Skill × Tool distribution',
   'skills.skillToolTableTitle': 'Skill tool breakdown',
   'skills.toolBreakdown': 'Tools',
@@ -594,7 +573,8 @@ export default {
   'token.overviewStaleWithActiveDesc':
     'Stale-index sessions that also appear in metrics with activeTokens>0 (matched by sessionKey).',
   'token.overviewRecorded24h': 'Recorded · active (24h)',
-  'token.overviewRecorded24hDesc': 'activeTokens from GET /api/metrics/token-summary for the time window.',
+  'token.overviewRecorded24hDesc':
+    'activeTokens from GET /api/metrics/token-summary for the time window.',
   'token.overviewRecordedArchived24h': 'Recorded · archived (24h)',
   'token.overviewRecordedArchived24hDesc': 'archivedTokens from token-summary.',
   'token.overviewEstimatedSum': 'Estimated sum (stale + zero usage)',
@@ -637,7 +617,8 @@ export default {
   'token.tableArchived': 'Archived sessions',
   'token.tableArchivedDesc':
     'Archived usage from *.jsonl.reset.* within 24h, grouped by session. Use the icon next to numbers for the data-source note.',
-  'token.costHint': 'Cost estimate: Priority given to actual usage.cost from API; fallback to configured pricing when missing.',
+  'token.costHint':
+    'Cost estimate: Priority given to actual usage.cost from API; fallback to configured pricing when missing.',
   'token.chartTopRate': 'Top 10 by total tokens',
   'token.chartTopRateDualLine': 'Top 10 — recorded vs log estimate',
   'token.chartTopRateDualLineDesc':
@@ -648,26 +629,35 @@ export default {
     'Sorted by total token usage in the current snapshot (GET /api/sessions/token-usage). Each totalTokens is merged live transcript usage and excludes archived reset-epoch totals. Covers all listSessions rows, not only active. Differs from the metrics active/archived tables on this page. Axis shows a sessionKey suffix in parens to disambiguate.',
   'token.chartTopUnit': 'tok',
   'session.tokenZeroTitle': 'Tokens showing 0 — Explanation and verification',
-  'session.tokenZeroExpandLabel': 'Expand to read the explanation and verification steps; collapse again to save space',
+  'session.tokenZeroExpandLabel':
+    'Expand to read the explanation and verification steps; collapse again to save space',
   'session.tokenZeroPoint1Title': '1) Where do the numbers come from',
-  'session.tokenZeroPoint1Desc': 'TraceFlow reads <strong>session logs</strong> (each session is a <code>.jsonl</code> file) under <code>agents</code> in the OpenClaw <strong>state directory</strong>. Each assistant reply includes <code>usage</code> (including input/output/totalTokens, etc.), and this page summarizes based on these fields. It is not related to <code>usage.cost</code>.',
+  'session.tokenZeroPoint1Desc':
+    'TraceFlow reads <strong>session logs</strong> (each session is a <code>.jsonl</code> file) under <code>agents</code> in the OpenClaw <strong>state directory</strong>. Each assistant reply includes <code>usage</code> (including input/output/totalTokens, etc.), and this page summarizes based on these fields. It is not related to <code>usage.cost</code>.',
   'session.tokenZeroPoint2Title': '2) Why is it 0',
-  'session.tokenZeroPoint2Desc': 'In this session log, the <code>usage</code> values read are all 0, so we can only display 0.',
+  'session.tokenZeroPoint2Desc':
+    'In this session log, the <code>usage</code> values read are all 0, so we can only display 0.',
   'session.tokenZeroPoint2FreshHint':
     'Also, if the index has <code>totalTokensFresh: false</code>, OpenClaw is telling you the <code>totalTokens</code> field in sessions.json is **not** a reliable snapshot of the current context; this page will show “context utilization unconfirmed” and will not treat utilization as exact.',
   'session.tokenContextUnreliableTitle': 'Context utilization unconfirmed',
   'session.tokenContextUnreliableDesc':
     'OpenClaw marked <code>totalTokensFresh</code> as <code>false</code>: do not read “used / limit” here as an accurate context-window fill level. The In/Out bar below shows **composition** (input vs output share), not percent of the limit.',
   'session.estimatedTokensFromLogLine': 'Log-size estimate: ≈ {n} tok (heuristic, not billing)',
-  'session.tokenZeroPoint3Title': '3) How to verify locally (consistent with what the service reads)',
-  'session.tokenZeroStateRootLabel': 'State root directory (current parsing result of this service, generally corresponds to environment variable <code>OPENCLAW_STATE_DIR</code> or the state path in settings):',
-  'session.tokenZeroStateRootFallback': 'The state root directory is obtained from this service\'s OpenClaw path parsing (environment variable <code>OPENCLAW_STATE_DIR</code> or CLI/configuration inference); if there is no absolute path below, please confirm in \'Settings\' that the Gateway/state directory is consistent with the machine running OpenClaw.',
-  'session.tokenZeroLogFileLabel': 'This session log file (open with editor, search for <code>"usage"</code> or <code>totalTokens</code>):',
+  'session.tokenZeroPoint3Title':
+    '3) How to verify locally (consistent with what the service reads)',
+  'session.tokenZeroStateRootLabel':
+    'State root directory (current parsing result of this service, generally corresponds to environment variable <code>OPENCLAW_STATE_DIR</code> or the state path in settings):',
+  'session.tokenZeroStateRootFallback':
+    "The state root directory is obtained from this service's OpenClaw path parsing (environment variable <code>OPENCLAW_STATE_DIR</code> or CLI/configuration inference); if there is no absolute path below, please confirm in 'Settings' that the Gateway/state directory is consistent with the machine running OpenClaw.",
+  'session.tokenZeroLogFileLabel':
+    'This session log file (open with editor, search for <code>"usage"</code> or <code>totalTokens</code>):',
   'session.tokenZeroRelativePathLabel': 'Path relative to state root:',
-  'session.tokenZeroIndexFileLabel': 'Index file in the same directory (you can search for sessionId on this page to see if there is <code>totalTokens</code> / <code>inputTokens</code>):',
+  'session.tokenZeroIndexFileLabel':
+    'Index file in the same directory (you can search for sessionId on this page to see if there is <code>totalTokens</code> / <code>inputTokens</code>):',
   'session.tokenZeroIndexPathHint': '(Full path = state root + the above relative path)',
   'session.tokenZeroPoint4Title': '4) Conclusion',
-  'session.tokenZeroPoint4Desc': 'If you see different numbers here than what TraceFlow displays, the session log/index may not have been refreshed yet. Try re-running the session or restarting the service and check again.',
+  'session.tokenZeroPoint4Desc':
+    'If you see different numbers here than what TraceFlow displays, the session log/index may not have been refreshed yet. Try re-running the session or restarting the service and check again.',
   'systemPrompt.harnessIntro':
     'Check your harness against OpenClaw docs: workspace bootstrap files and system prompt Structure (Tooling, Safety, Project Context, …)—missing md files, oversized Project Context, Skills (available_skills) vs Tooling.',
   'systemPrompt.bootstrapHeaderTitle':
@@ -675,9 +665,11 @@ export default {
   'systemPrompt.bootstrapHeaderHint':
     'These Markdown files capture how your agent should work in this repo—your workspace norms and guardrails. Names follow OpenClaw “Workspace bootstrap injection”.',
   'systemPrompt.harness.tierPrimaryTitle': 'Core bootstrap (AGENTS / SOUL / IDENTITY / USER)',
-  'systemPrompt.harness.tierSecondaryTitle': 'Other bootstrap (TOOLS / HEARTBEAT / BOOTSTRAP / MEMORY)',
+  'systemPrompt.harness.tierSecondaryTitle':
+    'Other bootstrap (TOOLS / HEARTBEAT / BOOTSTRAP / MEMORY)',
   'systemPrompt.harness.otherFilesTitle': 'Other workspace Markdown',
-  'systemPrompt.harness.projectContextCollapseTitle': '# Project Context block (aggregated in system prompt)',
+  'systemPrompt.harness.projectContextCollapseTitle':
+    '# Project Context block (aggregated in system prompt)',
   'systemPrompt.harness.skillsCollapseTitle': 'Skills snapshot (available)',
   'systemPrompt.bootstrapGoldenRulesTitle': 'Best practices for length and editing',
   'systemPrompt.bootstrapGoldenRules':
@@ -699,29 +691,41 @@ export default {
   'systemPrompt.bootstrap.saveOk': 'Saved to workspace',
   'systemPrompt.bootstrap.saveFail': 'Save failed',
   'systemPrompt.bootstrap.noChanges': 'No changes made',
-  'systemPrompt.bootstrap.conflict': 'File has been modified by others, please refresh and try again',
+  'systemPrompt.bootstrap.conflict':
+    'File has been modified by others, please refresh and try again',
   'systemPrompt.bootstrap.noWorkspaceHint':
     'Probe did not report a workspace path; saving may fail until OPENCLAW_WORKSPACE_DIR (or Gateway workspace) is available to TraceFlow.',
   'systemPrompt.bootstrap.lengthWarning':
     'Content exceeds the usual OpenClaw per-file bootstrap limit (~{count} chars); injection may truncate at runtime.',
 
-  'systemPrompt.bootstrap.agents.role': 'Operating instructions and memory contract: rules, priorities, how the agent should work.',
+  'systemPrompt.bootstrap.agents.role':
+    'Operating instructions and memory contract: rules, priorities, how the agent should work.',
   'systemPrompt.bootstrap.agents.tip':
     'Put goals, guardrails, and recurring workflows here; user profile lives in USER.md, tone in SOUL.md. Keep it lean—everything here is re-injected every turn.',
-  'systemPrompt.bootstrap.soul.role': 'Persona, tone, and boundaries—how the agent sounds and when it refuses.',
-  'systemPrompt.bootstrap.soul.tip': 'Good for “do not” rules and tone examples; step-by-step tasks stay in AGENTS.md. Tell the user when you change SOUL.',
-  'systemPrompt.bootstrap.tools.role': 'Notes about local tools and conventions (aliases, team habits).',
-  'systemPrompt.bootstrap.tools.tip': 'OpenClaw states TOOLS.md does not control tool availability—policy/Gateway/tool list does.',
+  'systemPrompt.bootstrap.soul.role':
+    'Persona, tone, and boundaries—how the agent sounds and when it refuses.',
+  'systemPrompt.bootstrap.soul.tip':
+    'Good for “do not” rules and tone examples; step-by-step tasks stay in AGENTS.md. Tell the user when you change SOUL.',
+  'systemPrompt.bootstrap.tools.role':
+    'Notes about local tools and conventions (aliases, team habits).',
+  'systemPrompt.bootstrap.tools.tip':
+    'OpenClaw states TOOLS.md does not control tool availability—policy/Gateway/tool list does.',
   'systemPrompt.bootstrap.identity.role': 'Lightweight identity: name, vibe, emoji.',
   'systemPrompt.bootstrap.identity.tip': 'Keep tiny; complements SOUL (business card vs behavior).',
   'systemPrompt.bootstrap.user.role': 'Who the user is and how to address them.',
-  'systemPrompt.bootstrap.user.tip': 'Do not put secrets here; use secret management and tool policy.',
+  'systemPrompt.bootstrap.user.tip':
+    'Do not put secrets here; use secret management and tool policy.',
   'systemPrompt.bootstrap.heartbeat.role': 'Tiny checklist for heartbeat runs (if used).',
-  'systemPrompt.bootstrap.heartbeat.tip': 'Official guidance: keep very short to avoid token burn every turn.',
-  'systemPrompt.bootstrap.bootstrap.role': 'One-time first-run ritual for a brand-new workspace; delete after done.',
-  'systemPrompt.bootstrap.bootstrap.tip': 'Only created for brand-new workspaces; should not stay in context long term.',
-  'systemPrompt.bootstrap.memory.role': 'Curated long-term memory; MEMORY.md preferred, else lowercase memory.md fallback.',
-  'systemPrompt.bootstrap.memory.tip': 'Most likely to bloat—keep only facts you need across sessions; use memory/*.md or on-demand tools for the rest.',
+  'systemPrompt.bootstrap.heartbeat.tip':
+    'Official guidance: keep very short to avoid token burn every turn.',
+  'systemPrompt.bootstrap.bootstrap.role':
+    'One-time first-run ritual for a brand-new workspace; delete after done.',
+  'systemPrompt.bootstrap.bootstrap.tip':
+    'Only created for brand-new workspaces; should not stay in context long term.',
+  'systemPrompt.bootstrap.memory.role':
+    'Curated long-term memory; MEMORY.md preferred, else lowercase memory.md fallback.',
+  'systemPrompt.bootstrap.memory.tip':
+    'Most likely to bloat—keep only facts you need across sessions; use memory/*.md or on-demand tools for the rest.',
   'systemPrompt.pageScopeDesc':
     'This page pulls together what TraceFlow can see from your connected Gateway and local session/workspace: system prompt structure, token breakdown, bootstrap files, and more. Each section’s ℹ explains what that block shows and what it covers.',
   'systemPrompt.pageAboutCollapse': 'About this page',
@@ -739,10 +743,14 @@ export default {
   'systemPrompt.zombieDuplicateCardScopeDesc':
     'Zombie/duplicate lists filtered from the current skills usage array (30d unused / duplicateWith set).',
   'systemPrompt.fullTitle': 'Full system prompt (Markdown · advanced)',
-  'systemPrompt.fromTranscript': 'Below is the actual system prompt sent to the model for this request (from session transcript).',
-  'systemPrompt.fromModelReveal': 'Below is the system prompt returned by the model probe (used when transcript system text is missing).',
-  'systemPrompt.fromRebuild': 'Due to OpenClaw security restrictions, the system prompt cannot be probed; below is a simulated rebuild that approximates the OpenClaw assembly logic as closely as possible.',
-  'systemPrompt.noRealPrompt': 'No actual system prompt is available: the session transcript has no or very short system message. Ensure the Agent has run successfully and that the Gateway stores system messages in the session. The breakdown below is from the report for reference only.',
+  'systemPrompt.fromTranscript':
+    'Below is the actual system prompt sent to the model for this request (from session transcript).',
+  'systemPrompt.fromModelReveal':
+    'Below is the system prompt returned by the model probe (used when transcript system text is missing).',
+  'systemPrompt.fromRebuild':
+    'Due to OpenClaw security restrictions, the system prompt cannot be probed; below is a simulated rebuild that approximates the OpenClaw assembly logic as closely as possible.',
+  'systemPrompt.noRealPrompt':
+    'No actual system prompt is available: the session transcript has no or very short system message. Ensure the Agent has run successfully and that the Gateway stores system messages in the session. The breakdown below is from the report for reference only.',
   'systemPrompt.noContent': 'Unable to fetch a system prompt to display.',
   'systemPrompt.copy': 'Copy full text',
   'systemPrompt.copied': 'Copied',
@@ -754,23 +762,29 @@ export default {
   'systemPrompt.expandHint': 'Click to expand',
   'systemPrompt.assemblyToc': 'Assembly order (click to scroll)',
   'systemPrompt.skillsSnapshotTitle': 'Skills snapshot (available)',
-  'systemPrompt.skillsSnapshotDesc': 'From sessions.json skillsSnapshot, injected by OpenClaw when the session is created. List = available skills; prompt = XML from formatSkillsForPrompt, merged into system prompt for the model to read SKILL.md on demand.',
+  'systemPrompt.skillsSnapshotDesc':
+    'From sessions.json skillsSnapshot, injected by OpenClaw when the session is created. List = available skills; prompt = XML from formatSkillsForPrompt, merged into system prompt for the model to read SKILL.md on demand.',
   'systemPrompt.skillsList': 'Skills list',
   'systemPrompt.skillsPrompt': 'Skills prompt',
   'systemPrompt.toolsSchemaHintTitle': 'Why no schema here?',
-  'systemPrompt.toolsSchemaHint': "Tool JSON Schemas are sent via the API's tools parameter (e.g. OpenAI function calling), not in system prompt text. The model receives full schema from the API request to call tools correctly. This page only parses system prompt text, so schema cannot be displayed. The table below shows per-tool stats from the Gateway report (schema chars, properties count).",
+  'systemPrompt.toolsSchemaHint':
+    "Tool JSON Schemas are sent via the API's tools parameter (e.g. OpenAI function calling), not in system prompt text. The model receives full schema from the API request to call tools correctly. This page only parses system prompt text, so schema cannot be displayed. The table below shows per-tool stats from the Gateway report (schema chars, properties count).",
   'systemPrompt.workspaceProjectTitle': 'Project Context & workspace bootstrap files',
   'systemPrompt.workspaceProjectCardScopeDesc':
     'Aligned with OpenClaw docs: bootstrap files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, HEARTBEAT.md, BOOTSTRAP.md, MEMORY.md or memory.md) are trimmed and injected under Project Context; this view is a projection from disk + session report.',
-  'systemPrompt.projectContextHint': 'The # Project Context block in system prompt (aggregated bootstrap content)',
+  'systemPrompt.projectContextHint':
+    'The # Project Context block in system prompt (aggregated bootstrap content)',
   'systemPrompt.tabProjectContext': 'Project Context',
   'systemPrompt.tabWorkspaceFiles': 'Workspace Files (injected)',
-  'systemPrompt.noProjectFiles': 'No local files matched for Project Context; if only the excerpt above exists, it may still come from transcript.',
+  'systemPrompt.noProjectFiles':
+    'No local files matched for Project Context; if only the excerpt above exists, it may still come from transcript.',
   'systemPrompt.noWorkspaceFiles': 'No other workspace inject file rows found.',
-  'systemPrompt.injectedMergeHint': '{count} injectedWorkspaceFiles merged into the list below (📌)',
+  'systemPrompt.injectedMergeHint':
+    '{count} injectedWorkspaceFiles merged into the list below (📌)',
   'systemPrompt.sessionsJsonTitle': 'sessions.json summary (debug)',
   'systemPrompt.emptyFileHint': 'Empty file',
-  'systemPrompt.evaluationCardTitle': '💡 OpenClaw workspace conventions & bootstrap file evaluation',
+  'systemPrompt.evaluationCardTitle':
+    '💡 OpenClaw workspace conventions & bootstrap file evaluation',
   'systemPrompt.evaluationSubsectionTitle': 'Evaluation & improvement suggestions',
   'systemPrompt.evaluationConfirmTitle': 'Start evaluation?',
   'systemPrompt.evaluationConfirmDesc':
@@ -778,7 +792,8 @@ export default {
   'systemPrompt.evaluationButtonRun': 'Run evaluation',
   'systemPrompt.evaluationButtonSubmitting': 'Submitting…',
   'systemPrompt.evaluationButtonRunning': 'Running…',
-  'systemPrompt.evaluationRunningBanner': 'Queued or analyzing workspace bootstrap content. Results will appear below when ready.',
+  'systemPrompt.evaluationRunningBanner':
+    'Queued or analyzing workspace bootstrap content. Results will appear below when ready.',
   'systemPrompt.evaluationSubmittedAsync':
     'Evaluation submitted and running in the background. Refresh this page, or switch away and back to this tab; you can also click “Refresh result” below.',
   'systemPrompt.evaluationPendingBanner':
@@ -789,7 +804,8 @@ export default {
   'systemPrompt.evaluationMessageSubmitted': 'Evaluation task submitted',
   'systemPrompt.evaluationMessageDone': 'Evaluation finished',
   'systemPrompt.evaluationSubmitFailed': 'Failed to submit evaluation',
-  'systemPrompt.evaluationPollTimeout': 'Timed out waiting for evaluation. Retry later or check server logs.',
+  'systemPrompt.evaluationPollTimeout':
+    'Timed out waiting for evaluation. Retry later or check server logs.',
   'systemPrompt.evaluationWaitTimeout':
     'Evaluation wait timed out (request aborted). Retry later or reduce evaluation duration.',
   'systemPrompt.evaluationPollHttpError':
@@ -806,7 +822,8 @@ export default {
   'pricing.title': 'Model Pricing Configuration',
   'pricing.pageScopeDesc':
     'Prices from GET /api/pricing and local config; “In use” merges session models with configured models. Values are $ per 1M tokens for estimates.',
-  'pricing.filtersCardScopeDesc': 'Search and “custom only” filter client-side; they do not change the loaded price map.',
+  'pricing.filtersCardScopeDesc':
+    'Search and “custom only” filter client-side; they do not change the loaded price map.',
   'pricing.tableCardScopeDesc':
     'Table respects the current tab (in-use/domestic/foreign/all) and filters; pagination is client-side.',
   'pricing.filtersCardTitle': 'Filters',

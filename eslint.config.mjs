@@ -9,6 +9,7 @@ export default tseslint.config(
     ignores: [
       'eslint.config.mjs',
       'sourceCode/**',
+      'frontend/**',
     ],
   },
   eslint.configs.recommended,

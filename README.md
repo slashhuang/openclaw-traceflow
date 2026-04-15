@@ -457,7 +457,6 @@ Useful for scripts and monitoring. Full list lives in `src/**/*controller.ts`.
 | `/api/im/channels/health`                    | GET             | IM channel health status                                |
 | `/api/im/channels/:type/test`                | POST            | Send IM test message                                    |
 | `/api/audit/snapshot`                        | GET             | Contribution audit snapshot                             |
-| `/api/traceflow-skills`                      | GET             | Built-in companion skills files                         |
 
 ---
 

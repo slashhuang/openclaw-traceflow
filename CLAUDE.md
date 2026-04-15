@@ -74,7 +74,6 @@ src/
 ├── adapters/openclaw/                # OpenClaw 数据源适配
 ├── dashboard/, sessions/, logs/, metrics/, health/
 ├── audit/                            # 贡献审计
-├── traceflow-skills/                 # 内置 skills API
 ├── evaluators/                       # 评估模板
 ├── workspace/                        # 工作区文件管理
 ├── settings/                         # 设置管理
@@ -85,7 +84,7 @@ src/
 ├── stores/                           # 数据存储
 └── types/, utils/                    # 类型与工具函数
 
-resources/bundled-skills/             # 配套 skills（agent-audit 等）
+resources/                                  # 静态资源
 sourceCode/feishu-node-sdk/           # 飞书 SDK 源码参考
 frontend/src/                         # 前端 React 应用
 ```
@@ -144,20 +143,19 @@ IM 推送配置示例见 `config/openclaw.runtime.example.json`。
 
 ## API（以 controller 为准）
 
-| 端点                                               | 说明                       |
-| -------------------------------------------------- | -------------------------- |
-| `GET /api/health`                                  | 健康（含 Gateway 摘要）    |
-| `GET /api/dashboard/overview`                      | 仪表盘聚合（前端主入口）   |
-| `GET /api/sessions` · `GET /api/sessions/:id`      | 会话列表 / 详情            |
-| `POST /api/sessions/:id/kill`                      | 终止会话                   |
-| `GET /api/logs`                                    | 最近日志                   |
-| `GET /api/metrics/*`                               | 延迟 / 工具 / Token 汇总   |
-| `GET /api/audit/snapshot` · `POST /api/audit/scan` | 贡献审计                   |
-| `GET /api/traceflow-skills`                        | 内置 skills 文件列表与正文 |
-| `GET /api/im/channels`                             | 已启用的 IM Channel 列表   |
-| `GET /api/im/channels/health`                      | IM Channel 健康状态        |
-| `POST /api/im/channels/:type/test`                 | 发送 IM 测试消息           |
-| `GET /api/workspace/*`                             | 工作区文件读写             |
+| 端点                                               | 说明                     |
+| -------------------------------------------------- | ------------------------ |
+| `GET /api/health`                                  | 健康（含 Gateway 摘要）  |
+| `GET /api/dashboard/overview`                      | 仪表盘聚合（前端主入口） |
+| `GET /api/sessions` · `GET /api/sessions/:id`      | 会话列表 / 详情          |
+| `POST /api/sessions/:id/kill`                      | 终止会话                 |
+| `GET /api/logs`                                    | 最近日志                 |
+| `GET /api/metrics/*`                               | 延迟 / 工具 / Token 汇总 |
+| `GET /api/audit/snapshot` · `POST /api/audit/scan` | 贡献审计                 |
+| `GET /api/im/channels`                             | 已启用的 IM Channel 列表 |
+| `GET /api/im/channels/health`                      | IM Channel 健康状态      |
+| `POST /api/im/channels/:type/test`                 | 发送 IM 测试消息         |
+| `GET /api/workspace/*`                             | 工作区文件读写           |
 
 完整列表见 README；新增端点后同步 README 与本表。
 

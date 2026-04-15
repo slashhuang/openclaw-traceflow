@@ -15,9 +15,7 @@ import PathConfigSettings from './pages/PathConfigSettings';
 import Pricing from './pages/Pricing';
 import Workspace from './pages/Workspace';
 import States from './pages/States';
-import Reflections from './pages/Reflections';
 import Audit from './pages/Audit';
-import TraceflowSkills from './pages/TraceflowSkills';
 import './styles/workspace.css';
 import CodeDeliveryList from './pages/audit/CodeDeliveryList';
 import QaServiceList from './pages/audit/QaServiceList';
@@ -42,7 +40,14 @@ function AppInner() {
 
   if (isSetup === null) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+        }}
+      >
         <Spin size="large" tip={intl.formatMessage({ id: 'app.loading' })} />
       </div>
     );
@@ -68,8 +73,6 @@ function AppInner() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/workspace" element={<Workspace />} />
           <Route path="/states" element={<States />} />
-          <Route path="/reflections" element={<Reflections />} />
-          <Route path="/traceflow-skills" element={<TraceflowSkills />} />
           <Route path="/audit" element={<Audit />} />
           <Route path="/audit/code" element={<CodeDeliveryList />} />
           <Route path="/audit/qa" element={<QaServiceList />} />

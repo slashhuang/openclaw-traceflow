@@ -20,11 +20,9 @@ import { EvaluationPromptController } from './evaluators/evaluation-prompt.contr
 import { WorkspaceBootstrapEvaluationPromptController } from './evaluators/workspace-bootstrap-evaluation-prompt.controller';
 import { EvaluationPromptConfigService } from './evaluators/evaluation-prompt-config.service';
 import { StatesController } from './states/states.controller';
-import { ReflectionsController } from './reflections/reflections.controller';
 import { FileTreeService } from './common/file-tree.service';
 import { WorkspaceController } from './workspace/workspace.controller';
 import { AuditController } from './audit/audit.controller';
-import { TraceflowSkillsController } from './traceflow-skills/traceflow-skills.controller';
 // IM Push 模块
 import { ImModule } from './im/im.module';
 // 设置模块
@@ -76,10 +74,8 @@ import { LoggerModule } from './logger/logger.module';
     EvaluationPromptController,
     WorkspaceBootstrapEvaluationPromptController,
     StatesController,
-    ReflectionsController,
     WorkspaceController,
     AuditController,
-    TraceflowSkillsController,
   ],
   providers: [AppService, EvaluationPromptConfigService, FileTreeService],
 })

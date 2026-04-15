@@ -17,47 +17,17 @@ export default {
   'menu.pricing': '价格',
   'menu.logs': '日志',
   'menu.settings': '设置',
-  'menu.traceflowSkills': 'TraceFlow 配套 Skills',
   'menu.audit': '贡献审计',
-  'traceflowSkills.pageTitle': 'TraceFlow 配套 Skills',
-  'traceflowSkills.intro':
-    '以下为本开源仓库随 TraceFlow 一并提供的 OpenClaw 配套 skill；请按你环境中的约定复制到 OpenClaw 的 skill 目录并自行安装。TraceFlow 不会代你安装或执行这些 skill。',
-  'traceflowSkills.loading': '加载配套 Skills…',
-  'traceflowSkills.loadErrorTitle': '配套 Skills 加载失败',
-  'traceflowSkills.loadError': '无法加载配套 Skills',
-  'traceflowSkills.copyFile': '复制本文件',
-  'traceflowSkills.copyAll': '复制全部文件',
-  'traceflowSkills.copySuccess': '已复制：{label}',
-  'traceflowSkills.copyFailed': '复制失败，请检查浏览器权限',
-  'traceflowSkills.skill.agent_audit.title': 'agent-audit（贡献审计）',
-  'traceflowSkills.skill.agent_audit.desc':
-    '扫描会话 JSONL，生成贡献审计快照；安装后在 OpenClaw 中对 Agent 说「跑一下审计」等触发词即可生成数据。',
-  'traceflowSkills.skill.self_improvement.title': 'self-improvement（实时反思）',
-  'traceflowSkills.skill.self_improvement.desc':
-    '在会话中检测纠正、错误与洞察，并写入 reflections.jsonl，供本页列表展示（需 OpenClaw 侧安装并启用该机制）。',
-  'traceflowSkills.backToAudit': '返回贡献审计',
   'audit.loadingSnapshot': '加载审计数据…',
   'audit.onboarding.title': '还没有审计快照',
   'audit.onboarding.lead':
-    '贡献审计依赖 OpenClaw 侧的 agent-audit skill：请先到「TraceFlow 配套 Skills」复制并自行安装，再在 OpenClaw 里触发扫描。',
-  'audit.onboarding.step1': '打开侧栏「TraceFlow 配套 Skills」，将 agent-audit 按你的 OpenClaw 约定放入 skills 目录。',
-  'audit.onboarding.step2': '在 OpenClaw 对话中对 Agent 说「跑一下审计」（或「审计报告」「贡献统计」等同类说法）以生成快照。',
+    '贡献审计依赖 OpenClaw 侧的 agent-audit skill：请在 OpenClaw 侧安装该 skill，再触发扫描。',
+  'audit.onboarding.step1': '将 agent-audit skill 按你的 OpenClaw 约定放入 skills 目录。',
+  'audit.onboarding.step2':
+    '在 OpenClaw 对话中对 Agent 说「跑一下审计」（或「审计报告」「贡献统计」等同类说法）以生成快照。',
   'audit.onboarding.step3': '完成后回到本页点击「重试」或刷新。',
-  'audit.onboarding.openSkills': '前往 TraceFlow 配套 Skills',
   'audit.error.title': '审计数据加载失败',
   'audit.error.unknown': '未知错误',
-  'reflections.onboarding.title': '还没有反思数据源',
-  'reflections.onboarding.lead':
-    '本页从 OpenClaw state 目录下的 reflections.jsonl 读取数据，通常由 self-improvement 技能在运行时写入。',
-  'reflections.onboarding.step1':
-    '打开侧栏「TraceFlow 配套 Skills」，将 self-improvement 按你的 OpenClaw 约定放入 skills 目录（该技能依赖本机 git、python3，详见 SKILL 正文）。',
-  'reflections.onboarding.step2':
-    '在 OpenClaw 中正常使用 Agent；当出现用户纠正、修复请求或工具失败等场景时，机制会将记录写入 reflections.jsonl。',
-  'reflections.onboarding.step3': '回到本页点击「刷新」。',
-  'reflections.onboarding.openSkills': '前往 TraceFlow 配套 Skills',
-  'reflections.loadError': '加载反思列表失败',
-  'reflections.emptyHint':
-    '当前筛选下暂无记录。可在 OpenClaw 对话中触发纠正、修复等场景以产生反思；也可在配套 Skills 页查看 self-improvement 说明。',
   'gateway.banner.title': 'Gateway 连接失败',
   'gateway.banner.settings': '去设置恢复连接',
   'gateway.connected': 'Gateway 已连接',
@@ -70,8 +40,7 @@ export default {
   'header.github': 'GitHub',
   'setup.wizard.title': 'OpenClaw TraceFlow',
   'setup.wizard.subtitle': '首次启动配置',
-  'setup.wizardScopeDesc':
-    '配置 OpenClaw 数据路径，使 TraceFlow 能够读取会话和日志数据。',
+  'setup.wizardScopeDesc': '配置 OpenClaw 数据路径，使 TraceFlow 能够读取会话和日志数据。',
   'setup.simple.desc': '请填写 OpenClaw 的路径配置，完成后即可开始使用 TraceFlow。',
   'setup.next': '下一步',
   'setup.prev': '上一步',
@@ -113,9 +82,11 @@ export default {
   'settings.contactCardScopeDesc': '项目作者与仓库链接（非指标数据）。',
   'settings.gateway': 'Gateway 配置',
   'settings.access': '访问保护',
-  'settings.access.scope': '这三种模式只影响“配置相关接口”（保存配置、测试连接、生成 Token），不会影响仪表盘、会话列表、日志等查看页面。',
+  'settings.access.scope':
+    '这三种模式只影响“配置相关接口”（保存配置、测试连接、生成 Token），不会影响仪表盘、会话列表、日志等查看页面。',
   'settings.access.tokenHelpTitle': 'Token 模式怎么用？',
-  'settings.access.tokenHelpDesc': '当你调用“配置相关接口”时，在请求头里带上：Authorization: Bearer 你设置的口令',
+  'settings.access.tokenHelpDesc':
+    '当你调用“配置相关接口”时，在请求头里带上：Authorization: Bearer 你设置的口令',
   'settings.quick': '快速操作',
   'settings.restart': '重启 Gateway',
   'settings.restartHint':
@@ -205,7 +176,8 @@ export default {
   'dashboard.idle': '空闲',
   'dashboard.idleDesc': '超过 5 分钟无消息的会话',
   'dashboard.archived': '归档',
-  'dashboard.archivedDesc': '用户开始新对话时，上一轮对话会被归档保存；每次归档 = 用户开启了一轮新对话',
+  'dashboard.archivedDesc':
+    '用户开始新对话时，上一轮对话会被归档保存；每次归档 = 用户开启了一轮新对话',
   'dashboard.completed': '已结束',
   'dashboard.completedDesc': '最后一条为 Agent 最终回复（agent:final），本轮对话已结束',
   'dashboard.latency': '响应延迟（近 1 小时）',
@@ -286,7 +258,8 @@ export default {
   'dashboard.tokenTopArchived': '归档 Token Top 10',
   'dashboard.tokenTopArchivedDesc': '近 24h 归档会话中 token 消耗最多的前 10',
   'dashboard.colType': 'Type',
-  'dashboard.colTypeDesc': '会话类型：用户、主会话（DM 默认桶 agent:*:main）、heartbeat 心跳、cron 定时、Wave 等',
+  'dashboard.colTypeDesc':
+    '会话类型：用户、主会话（DM 默认桶 agent:*:main）、heartbeat 心跳、cron 定时、Wave 等',
   'dashboard.colUser': 'User',
   'dashboard.colUserDesc': '会话所属用户或标识',
   'dashboard.colTotal': 'Total',
@@ -296,7 +269,8 @@ export default {
   'dashboard.colOut': 'Out',
   'dashboard.colOutDesc': '输出 token（模型生成）',
   'dashboard.colPct': '%',
-  'dashboard.colPctDesc': '上下文利用率（已用 / 上下文上限）；索引标记 totalTokensFresh:false 时 TraceFlow 不展示可信利用率',
+  'dashboard.colPctDesc':
+    '上下文利用率（已用 / 上下文上限）；索引标记 totalTokensFresh:false 时 TraceFlow 不展示可信利用率',
   'dashboard.colSession': 'Session',
   'dashboard.colSessionDesc': '会话 key',
   'dashboard.colToken': 'Token',
@@ -308,7 +282,8 @@ export default {
   'dashboard.colLast': 'Last',
   'dashboard.colLastDesc': '最后活动时间',
   'dashboard.gatewayContext': 'Context',
-  'dashboard.gatewayContextDesc': 'Gateway 报告的已用 token / 上下文上限（与 TraceFlow 会话列表的「利用率」口径可能不同；后者在索引不可靠时会隐藏百分比）',
+  'dashboard.gatewayContextDesc':
+    'Gateway 报告的已用 token / 上下文上限（与 TraceFlow 会话列表的「利用率」口径可能不同；后者在索引不可靠时会隐藏百分比）',
   'dashboard.gatewayCompactions': 'Compactions',
   'dashboard.gatewayCompactionsDesc': '上下文压缩次数（超出上限时自动压缩历史）',
   'dashboard.gatewayQueueDepth': 'Queue depth',
@@ -389,7 +364,8 @@ export default {
   'sessions.chatKind.group': '群聊',
   'sessions.chatKind.channel': '频道',
   'sessions.chatKind.direct': '单聊',
-  'sessions.chatKind.tooltip': '根据 sessionKey 中的 :group: / :channel: / 私聊路由推断，便于与「飞书/心跳」等通道标签区分。',
+  'sessions.chatKind.tooltip':
+    '根据 sessionKey 中的 :group: / :channel: / 私聊路由推断，便于与「飞书/心跳」等通道标签区分。',
   'sessions.column.status': '状态',
   'sessions.column.statusTooltip':
     '根据 transcript 推断：活跃 / 空闲 / 已结束 / 失败。其中「已结束」表示最后一条为 Agent 最终回复（agent:final），本轮对话已结束。注意：这与右侧「归档」列不是同一概念——「归档」列统计的是该会话下用户开启新对话（写入 *.jsonl.reset.*）的次数。',
@@ -438,7 +414,8 @@ export default {
   'sessions.column.recordedTokensTooltip':
     '合并后的 totalTokens 与利用率；索引 totalTokensFresh:false 时数字可能带 *，利用率弱化显示。',
   'sessions.column.estimatedLog': '估算(log)',
-  'sessions.column.estimatedLogTooltip': '由 live 日志字节数换算（启发式），非官方计费；仅当索引不可信且展示估算时有值。',
+  'sessions.column.estimatedLogTooltip':
+    '由 live 日志字节数换算（启发式），非官方计费；仅当索引不可信且展示估算时有值。',
   'sessions.tokensTotalUnreliableHint':
     '此数字来自 transcript 累加或部分字段，**不**代表 OpenClaw 已确认的「当前上下文窗口总量」（索引可能 totalTokensFresh:false）。',
   'sessions.utilUnreliableHint':
@@ -496,7 +473,8 @@ export default {
   'session.transcriptParseScope': '解析范围',
   'session.transcriptParseFullDetail':
     '全量解析，共 {lines} 条 JSONL（非空行）。「消息条数」仅含对话 message 行，一般小于上述行数（差值多为元数据行）。',
-  'session.transcriptParseHeadTailDetail': '首尾分片：首部 {head} 条 + 尾部 {tail} 条 JSONL；消息与工具列表仅反映尾部内容',
+  'session.transcriptParseHeadTailDetail':
+    '首尾分片：首部 {head} 条 + 尾部 {tail} 条 JSONL；消息与工具列表仅反映尾部内容',
   'session.transcriptHeadTailAlertTitle': '大文件已按首尾策略加载',
   'session.transcriptHeadTailAlertDesc':
     '当前会话日志约 {size}，超过服务端单文件全量解析阈值。仅解析首部 {head} 条与尾部 {tail} 条 JSONL 记录（非空行）；中间区段未载入，列表展示不代表完整历史。',
@@ -539,7 +517,8 @@ export default {
     '按 getUsageByUser 结果：每 skill 一行，堆叠为 Top5 用户 + 其他用户的 read 次数。',
   'skills.skillListTableScopeDesc':
     '全量 skills 数组；Calls 等为后端聚合字段。详见页顶「Calls 列」灰字说明。',
-  'skills.skillToolChartScopeDesc': '取最多 15 个 skill、最多 8 个工具列的堆叠分布（与 Tab 上方归因说明一致）。',
+  'skills.skillToolChartScopeDesc':
+    '取最多 15 个 skill、最多 8 个工具列的堆叠分布（与 Tab 上方归因说明一致）。',
   'skills.analysisChartsScopeDesc':
     '与「Skills 占用分析」说明一致：基于 system-prompt 分析接口估算活跃/僵尸/重复占用 Token 与建议。',
   'skills.analysisTokenPieTitle': 'Token 分布',
@@ -549,7 +528,8 @@ export default {
   'skills.tabAnalysis': 'Skills 占用分析',
   'skills.tabAnalysisHint':
     '依据当前 System 提示词里与 Skills 相关的段落估算 Token（活跃 / 僵尸 / 重复），并给出可节省空间与优化建议；与侧栏「System Prompt」页的完整正文展示不是同一入口。',
-  'skills.callTrackingHint': 'Calls 列：基于 read 工具调用的 path 反推（path 含 skills/xxx/SKILL.md 即视为触发该 skill）。会话详情页可查看单会话触发的 skills。',
+  'skills.callTrackingHint':
+    'Calls 列：基于 read 工具调用的 path 反推（path 含 skills/xxx/SKILL.md 即视为触发该 skill）。会话详情页可查看单会话触发的 skills。',
   'skills.tabSkillTool': 'Skill × Tool',
   'skills.skillToolHint':
     'Skill 是否被使用由 read 到 skills/<名称>/SKILL.md 的路径反推。工具次数按会话 transcript 顺序归因：每次读到某 skill 的 SKILL.md 之后，直到下一次读到任意 skill 的 SKILL.md 之前，期间工具调用计入当前 skill；此前尚未读到任何 SKILL.md 的调用不计入。跨会话累计。',
@@ -609,8 +589,7 @@ export default {
   'token.kpiRowDesc':
     '与下方饼图同源：当前页拉取的 token-usage 列表中，按每条会话记录的 threshold 字段计数（normal / warning / serious / critical / limit）。「Serious/Crit」为 serious 与 critical 之和。',
   'token.thresholdPieTitle': '阈值分布',
-  'token.thresholdPieDesc':
-    '饼图数据与上方 KPI 一致：同一批会话在各 threshold 档位上的数量分布。',
+  'token.thresholdPieDesc': '饼图数据与上方 KPI 一致：同一批会话在各 threshold 档位上的数量分布。',
   'token.alertsTitle': '告警',
   'token.alertsDesc':
     '来自 GET /api/sessions/token-alerts/history；本区域展示最近若干条（时间新→旧）。',
@@ -640,9 +619,11 @@ export default {
   'session.tokenZeroTitle': 'tokens 显示为 0 — 说明与核对方式',
   'session.tokenZeroExpandLabel': '点击展开查看说明与核对步骤；展开后可再收起以节省版面',
   'session.tokenZeroPoint1Title': '1）数字从哪来',
-  'session.tokenZeroPoint1Desc': 'TraceFlow 读取的是 OpenClaw <strong>状态目录</strong>里、<code>agents</code> 下的<strong>会话日志</strong>（每个会话一个 <code>.jsonl</code> 文件）。助手每条回复里会带 <code>usage</code>（含 input/output/totalTokens 等），本页按这些字段汇总。与 <code>usage.cost</code>（费用）无关。',
+  'session.tokenZeroPoint1Desc':
+    'TraceFlow 读取的是 OpenClaw <strong>状态目录</strong>里、<code>agents</code> 下的<strong>会话日志</strong>（每个会话一个 <code>.jsonl</code> 文件）。助手每条回复里会带 <code>usage</code>（含 input/output/totalTokens 等），本页按这些字段汇总。与 <code>usage.cost</code>（费用）无关。',
   'session.tokenZeroPoint2Title': '2）为什么是 0',
-  'session.tokenZeroPoint2Desc': '当前这份会话日志里，已读到的 <code>usage</code> 用量均为 0，所以这里只能显示 0。',
+  'session.tokenZeroPoint2Desc':
+    '当前这份会话日志里，已读到的 <code>usage</code> 用量均为 0，所以这里只能显示 0。',
   'session.tokenZeroPoint2FreshHint':
     '另外，若索引里为 <code>totalTokensFresh: false</code>，表示 OpenClaw 认为 sessions.json 中的 <code>totalTokens</code> **不是**当前轮的可靠上下文快照；详情页会提示「上下文占用未确认」，且不会把利用率当作准确值。',
   'session.tokenContextUnreliableTitle': '上下文占用未确认',
@@ -650,14 +631,19 @@ export default {
     'OpenClaw 在索引中将 <code>totalTokensFresh</code> 标为 <code>false</code>：此时不宜把「已用量 / 上限」当作准确的上下文窗口占用。下方 In/Out 条带仅表示输入与输出的**构成比例**，不表示占满上限的百分比。',
   'session.estimatedTokensFromLogLine': '由日志大小估算：≈ {n} tok（启发式，非计费）',
   'session.tokenZeroPoint3Title': '3）本机怎么核对（与服务读的是否一致）',
-  'session.tokenZeroStateRootLabel': '状态根目录（本服务当前解析结果，一般对应环境变量 <code>OPENCLAW_STATE_DIR</code> 或设置里的状态路径）：',
-  'session.tokenZeroStateRootFallback': '状态根目录由本服务的 OpenClaw 路径解析得到（环境变量 <code>OPENCLAW_STATE_DIR</code> 或 CLI/配置推断）；若下方无绝对路径，请到「设置」里确认 Gateway/状态目录与运行 OpenClaw 的机器一致。',
-  'session.tokenZeroLogFileLabel': '本会话日志文件（用编辑器打开，搜 <code>"usage"</code> 或 <code>totalTokens</code>）：',
+  'session.tokenZeroStateRootLabel':
+    '状态根目录（本服务当前解析结果，一般对应环境变量 <code>OPENCLAW_STATE_DIR</code> 或设置里的状态路径）：',
+  'session.tokenZeroStateRootFallback':
+    '状态根目录由本服务的 OpenClaw 路径解析得到（环境变量 <code>OPENCLAW_STATE_DIR</code> 或 CLI/配置推断）；若下方无绝对路径，请到「设置」里确认 Gateway/状态目录与运行 OpenClaw 的机器一致。',
+  'session.tokenZeroLogFileLabel':
+    '本会话日志文件（用编辑器打开，搜 <code>"usage"</code> 或 <code>totalTokens</code>）：',
   'session.tokenZeroRelativePathLabel': '相对状态根的路径：',
-  'session.tokenZeroIndexFileLabel': '同目录索引文件（可搜本页的 sessionId，看是否有 <code>totalTokens</code> / <code>inputTokens</code>）：',
+  'session.tokenZeroIndexFileLabel':
+    '同目录索引文件（可搜本页的 sessionId，看是否有 <code>totalTokens</code> / <code>inputTokens</code>）：',
   'session.tokenZeroIndexPathHint': '（完整路径 = 状态根 + 上述相对路径）',
   'session.tokenZeroPoint4Title': '4）结论',
-  'session.tokenZeroPoint4Desc': '若你在此处看到的数字与 TraceFlow 展示不一致，可能是会话日志/索引尚未刷新。可尝试重新运行会话或重启服务后再次查看。',
+  'session.tokenZeroPoint4Desc':
+    '若你在此处看到的数字与 TraceFlow 展示不一致，可能是会话日志/索引尚未刷新。可尝试重新运行会话或重启服务后再次查看。',
   'systemPrompt.harnessIntro':
     '对照 OpenClaw 文档中的 Workspace 引导文件与 Structure（Tooling、Safety、Project Context 等），快速自检 harness：引导 md 是否齐、Project Context 是否过重、Skills（available_skills）与 Tooling 是否合理。',
   'systemPrompt.bootstrapHeaderTitle':
@@ -698,20 +684,27 @@ export default {
   'systemPrompt.bootstrap.agents.role': '操作指令与记忆约定：规则、优先级、会话里「该怎么做事」。',
   'systemPrompt.bootstrap.agents.tip':
     '把「要达成什么、禁止什么、常用工作流」写清楚；用户画像与称呼交给 USER.md，语气边界交给 SOUL.md。控制篇幅，否则每轮都会重复计费进上下文。',
-  'systemPrompt.bootstrap.soul.role': '人设、语气与边界：Agent 听起来像谁、何时拒绝、群聊里如何自持。',
-  'systemPrompt.bootstrap.soul.tip': '适合写「不做什么」与语气示例；具体任务步骤仍放在 AGENTS。变更后建议在对话里告知用户你已更新 SOUL。',
+  'systemPrompt.bootstrap.soul.role':
+    '人设、语气与边界：Agent 听起来像谁、何时拒绝、群聊里如何自持。',
+  'systemPrompt.bootstrap.soul.tip':
+    '适合写「不做什么」与语气示例；具体任务步骤仍放在 AGENTS。变更后建议在对话里告知用户你已更新 SOUL。',
   'systemPrompt.bootstrap.tools.role': '本地工具与约定说明：例如常用命令别名、团队习惯写法。',
-  'systemPrompt.bootstrap.tools.tip': 'OpenClaw 明确：TOOLS.md 不控制工具是否可用，只帮助模型正确理解你的环境；真正权限在策略 / Gateway / 工具列表。',
+  'systemPrompt.bootstrap.tools.tip':
+    'OpenClaw 明确：TOOLS.md 不控制工具是否可用，只帮助模型正确理解你的环境；真正权限在策略 / Gateway / 工具列表。',
   'systemPrompt.bootstrap.identity.role': 'Agent 对外的名字、风格、emoji 等轻量身份标签。',
-  'systemPrompt.bootstrap.identity.tip': '保持简短；与 SOUL 互补——IDENTITY 偏「名片」，SOUL 偏「行为边界」。',
+  'systemPrompt.bootstrap.identity.tip':
+    '保持简短；与 SOUL 互补——IDENTITY 偏「名片」，SOUL 偏「行为边界」。',
   'systemPrompt.bootstrap.user.role': '用户档案与称呼偏好：你是谁、希望被怎么称呼。',
   'systemPrompt.bootstrap.user.tip': '避免把敏感密钥写进此文件；敏感内容用密钥管理与工具策略。',
   'systemPrompt.bootstrap.heartbeat.role': '心跳任务时的极简清单（若使用 heartbeat）。',
   'systemPrompt.bootstrap.heartbeat.tip': '官方建议保持极短，否则会随每轮注入持续消耗 token。',
   'systemPrompt.bootstrap.bootstrap.role': '全新工作区的一次性入门仪式说明；完成后通常应删除。',
-  'systemPrompt.bootstrap.bootstrap.tip': '仅在 brand-new workspace 由 OpenClaw 创建；不应长期留在上下文中。',
-  'systemPrompt.bootstrap.memory.role': '精选长期记忆；存在 MEMORY.md 时优先，否则可回退小写 memory.md。',
-  'systemPrompt.bootstrap.memory.tip': '最易膨胀的文件之一：只保留跨会话仍需要的结论，其它用 memory/*.md 或按需检索工具。',
+  'systemPrompt.bootstrap.bootstrap.tip':
+    '仅在 brand-new workspace 由 OpenClaw 创建；不应长期留在上下文中。',
+  'systemPrompt.bootstrap.memory.role':
+    '精选长期记忆；存在 MEMORY.md 时优先，否则可回退小写 memory.md。',
+  'systemPrompt.bootstrap.memory.tip':
+    '最易膨胀的文件之一：只保留跨会话仍需要的结论，其它用 memory/*.md 或按需检索工具。',
   'systemPrompt.pageScopeDesc':
     '本页汇总已连接的 Gateway 与本地会话、工作区中的可见信息，便于查看 system prompt 结构、Token 占比与引导文件等。各区块标题旁的 ℹ 说明该块「展示什么、覆盖范围」。',
   'systemPrompt.pageAboutCollapse': '关于本页',
@@ -729,10 +722,14 @@ export default {
   'systemPrompt.zombieDuplicateCardScopeDesc':
     '僵尸/重复列表来自当前 skills usage 列表过滤（30 天未使用 / duplicateWith 非空）。',
   'systemPrompt.fullTitle': '完整 System Prompt（Markdown · 高级全文）',
-  'systemPrompt.fromTranscript': '以下为本次请求时真实发给大模型的 system 正文（来自会话 transcript）。',
-  'systemPrompt.fromModelReveal': '以下为模型探测并回传的 system 正文（当 transcript 缺失时用于替代）。',
-  'systemPrompt.fromRebuild': '因 openclaw 安全限制无法通过嗅探获取，以下为模拟重建的 system 正文，尽量接近 openclaw 拼装逻辑。',
-  'systemPrompt.noRealPrompt': '未获取到本次请求时发给大模型的 system 正文：当前会话 transcript 中无或过短的 system 消息。请确保 Agent 已成功运行过，且 Gateway 在会话中保存了 system 消息。下方为基于 report 的 Token 占比与分块，仅供参考。',
+  'systemPrompt.fromTranscript':
+    '以下为本次请求时真实发给大模型的 system 正文（来自会话 transcript）。',
+  'systemPrompt.fromModelReveal':
+    '以下为模型探测并回传的 system 正文（当 transcript 缺失时用于替代）。',
+  'systemPrompt.fromRebuild':
+    '因 openclaw 安全限制无法通过嗅探获取，以下为模拟重建的 system 正文，尽量接近 openclaw 拼装逻辑。',
+  'systemPrompt.noRealPrompt':
+    '未获取到本次请求时发给大模型的 system 正文：当前会话 transcript 中无或过短的 system 消息。请确保 Agent 已成功运行过，且 Gateway 在会话中保存了 system 消息。下方为基于 report 的 Token 占比与分块，仅供参考。',
   'systemPrompt.noContent': '未获取到可展示的 system 正文。',
   'systemPrompt.copy': '复制全文',
   'systemPrompt.copied': '已复制',
@@ -744,18 +741,22 @@ export default {
   'systemPrompt.expandHint': '点击展开',
   'systemPrompt.assemblyToc': '组装顺序（点击定位）',
   'systemPrompt.skillsSnapshotTitle': 'Skills 快照（可用）',
-  'systemPrompt.skillsSnapshotDesc': '来自 sessions.json 的 skillsSnapshot，会话创建时由 OpenClaw 注入。列表为当前可用 skills；提示词为 formatSkillsForPrompt 生成的 XML，会拼入 system prompt 供模型按需 read 加载 SKILL.md。',
+  'systemPrompt.skillsSnapshotDesc':
+    '来自 sessions.json 的 skillsSnapshot，会话创建时由 OpenClaw 注入。列表为当前可用 skills；提示词为 formatSkillsForPrompt 生成的 XML，会拼入 system prompt 供模型按需 read 加载 SKILL.md。',
   'systemPrompt.skillsList': 'Skills 列表',
   'systemPrompt.skillsPrompt': 'Skills 提示词',
   'systemPrompt.toolsSchemaHintTitle': '为何此处无 schema 定义？',
-  'systemPrompt.toolsSchemaHint': '工具 JSON Schema 通过 API 的 tools 参数发送（如 OpenAI function calling），不在 system prompt 文本中。大模型从 API 请求体获取完整 schema 来正确传参，本页仅解析 system prompt 文本，故无法展示 schema。下表为 Gateway report 的 per-tool 统计（schema 字符数、属性数）。',
+  'systemPrompt.toolsSchemaHint':
+    '工具 JSON Schema 通过 API 的 tools 参数发送（如 OpenAI function calling），不在 system prompt 文本中。大模型从 API 请求体获取完整 schema 来正确传参，本页仅解析 system prompt 文本，故无法展示 schema。下表为 Gateway report 的 per-tool 统计（schema 字符数、属性数）。',
   'systemPrompt.workspaceProjectTitle': 'Project Context 与工作区引导文件',
   'systemPrompt.workspaceProjectCardScopeDesc':
     '与 OpenClaw 文档一致：引导文件（`AGENTS.md`、`SOUL.md`、`TOOLS.md`、`IDENTITY.md`、`USER.md`、`HEARTBEAT.md`、`BOOTSTRAP.md`、`MEMORY.md`/`memory.md`）trim 后注入 **Project Context**；此处为磁盘与会话 report 的投影。',
-  'systemPrompt.projectContextHint': 'System Prompt 中的 **# Project Context** 区块（上述引导文件内容汇总呈现）',
+  'systemPrompt.projectContextHint':
+    'System Prompt 中的 **# Project Context** 区块（上述引导文件内容汇总呈现）',
   'systemPrompt.tabProjectContext': 'Project Context',
   'systemPrompt.tabWorkspaceFiles': 'Workspace Files (injected)',
-  'systemPrompt.noProjectFiles': '未发现可归入 Project Context 的本地文件；若仅有上文中的汇总正文，仍可能来自 transcript。',
+  'systemPrompt.noProjectFiles':
+    '未发现可归入 Project Context 的本地文件；若仅有上文中的汇总正文，仍可能来自 transcript。',
   'systemPrompt.noWorkspaceFiles': '未发现其他工作区注入文件条目。',
   'systemPrompt.injectedMergeHint': '{count} 条 injectedWorkspaceFiles 已合并到下列列表（📌 标记）',
   'systemPrompt.sessionsJsonTitle': 'sessions.json 摘要（调试）',
@@ -768,7 +769,8 @@ export default {
   'systemPrompt.evaluationButtonRun': '开始评估',
   'systemPrompt.evaluationButtonSubmitting': '提交中…',
   'systemPrompt.evaluationButtonRunning': '评估进行中…',
-  'systemPrompt.evaluationRunningBanner': '正在排队或分析工作区引导内容，请稍候。完成后结果会出现在下方。',
+  'systemPrompt.evaluationRunningBanner':
+    '正在排队或分析工作区引导内容，请稍候。完成后结果会出现在下方。',
   'systemPrompt.evaluationSubmittedAsync':
     '评估已提交，后台处理中。完成后请刷新页面，或切换到其他标签页再切回本页；也可稍后点击「刷新结果」。',
   'systemPrompt.evaluationPendingBanner':

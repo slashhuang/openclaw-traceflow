@@ -15,7 +15,6 @@
  */
 
 import * as path from 'path';
-import * as os from 'os';
 
 const HOME = process.env.HOME || process.env.USERPROFILE || '/root';
 
@@ -84,15 +83,6 @@ export function resolveAuditDir(): string {
     return resolveUserPath(process.env.OPENCLAW_AUDIT_DIR);
   }
   return path.join(resolveWorkspaceDir(), '.openclawAudits');
-}
-
-/**
- * 解析反思目录（reflections，alias for auditDir）
- *
- * @returns 反思目录路径
- */
-export function resolveReflectionsDir(): string {
-  return resolveAuditDir();
 }
 
 /**

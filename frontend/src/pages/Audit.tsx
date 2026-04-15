@@ -91,7 +91,9 @@ export const Audit: React.FC = () => {
 
   if (data.loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div
+        style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}
+      >
         <Spin size="large" tip={intl.formatMessage({ id: 'audit.loadingSnapshot' })} />
       </div>
     );
@@ -106,17 +108,18 @@ export const Audit: React.FC = () => {
           showIcon
           description={
             <div>
-              <p style={{ marginBottom: 12 }}>{intl.formatMessage({ id: 'audit.onboarding.lead' })}</p>
+              <p style={{ marginBottom: 12 }}>
+                {intl.formatMessage({ id: 'audit.onboarding.lead' })}
+              </p>
               <ol style={{ marginBottom: 16, paddingLeft: 20 }}>
                 <li>{intl.formatMessage({ id: 'audit.onboarding.step1' })}</li>
                 <li>{intl.formatMessage({ id: 'audit.onboarding.step2' })}</li>
                 <li>{intl.formatMessage({ id: 'audit.onboarding.step3' })}</li>
               </ol>
               <Space wrap>
-                <Link to="/traceflow-skills#agent-audit">
-                  <Button type="primary">{intl.formatMessage({ id: 'audit.onboarding.openSkills' })}</Button>
-                </Link>
-                <Button onClick={() => void fetchSnapshot()}>{intl.formatMessage({ id: 'common.retry' })}</Button>
+                <Button onClick={() => void fetchSnapshot()}>
+                  {intl.formatMessage({ id: 'common.retry' })}
+                </Button>
               </Space>
             </div>
           }
@@ -152,16 +155,9 @@ export const Audit: React.FC = () => {
           type="info"
           showIcon
           action={
-            <Space>
-              <Link to="/traceflow-skills#agent-audit">
-                <Button size="small" type="primary">
-                  {intl.formatMessage({ id: 'audit.onboarding.openSkills' })}
-                </Button>
-              </Link>
-              <Button size="small" onClick={() => void fetchSnapshot()}>
-                {intl.formatMessage({ id: 'common.retry' })}
-              </Button>
-            </Space>
+            <Button size="small" onClick={() => void fetchSnapshot()}>
+              {intl.formatMessage({ id: 'common.retry' })}
+            </Button>
           }
         />
       </div>
@@ -271,41 +267,41 @@ export const Audit: React.FC = () => {
       {/* 审计明细入口卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={8}>
-          <Card 
-            title="代码交付明细" 
+          <Card
+            title="代码交付明细"
             extra={<Link to="/audit/code">查看详情 →</Link>}
-            onClick={() => window.location.href = '/audit/code'}
+            onClick={() => (window.location.href = '/audit/code')}
           >
-            <Statistic 
-              title="MR 数量" 
-              value={snapshot.codeDelivery.totalMRs} 
-              valueStyle={{ color: '#1890ff' }} 
+            <Statistic
+              title="MR 数量"
+              value={snapshot.codeDelivery.totalMRs}
+              valueStyle={{ color: '#1890ff' }}
             />
           </Card>
         </Col>
         <Col span={8}>
-          <Card 
-            title="问答服务明细" 
+          <Card
+            title="问答服务明细"
             extra={<Link to="/audit/qa">查看详情 →</Link>}
-            onClick={() => window.location.href = '/audit/qa'}
+            onClick={() => (window.location.href = '/audit/qa')}
           >
-            <Statistic 
-              title="问题总数" 
-              value={snapshot.qaService.totalQuestions} 
-              valueStyle={{ color: '#52c41a' }} 
+            <Statistic
+              title="问题总数"
+              value={snapshot.qaService.totalQuestions}
+              valueStyle={{ color: '#52c41a' }}
             />
           </Card>
         </Col>
         <Col span={8}>
-          <Card 
-            title="自动化明细" 
+          <Card
+            title="自动化明细"
             extra={<Link to="/audit/automation">查看详情 →</Link>}
-            onClick={() => window.location.href = '/audit/automation'}
+            onClick={() => (window.location.href = '/audit/automation')}
           >
-            <Statistic 
-              title="运行次数" 
-              value={snapshot.automation.totalRuns} 
-              valueStyle={{ color: '#fa8c16' }} 
+            <Statistic
+              title="运行次数"
+              value={snapshot.automation.totalRuns}
+              valueStyle={{ color: '#fa8c16' }}
             />
           </Card>
         </Col>
@@ -356,8 +352,18 @@ interface CodeDeliveryTableProps {
 const CodeDeliveryTable: React.FC<CodeDeliveryTableProps> = ({ data }) => {
   const initiatorColumns = [
     { title: '发起人', dataIndex: 'name', key: 'name' },
-    { title: 'MR 数量', dataIndex: 'total', key: 'total', sorter: (a: any, b: any) => a.total - b.total },
-    { title: '涉及仓库', dataIndex: 'repos', key: 'repos', render: (repos: string[]) => repos.join(', ') },
+    {
+      title: 'MR 数量',
+      dataIndex: 'total',
+      key: 'total',
+      sorter: (a: any, b: any) => a.total - b.total,
+    },
+    {
+      title: '涉及仓库',
+      dataIndex: 'repos',
+      key: 'repos',
+      render: (repos: string[]) => repos.join(', '),
+    },
   ];
 
   const initiatorData = Object.entries(data.byInitiator).map(([userId, stats]) => ({
@@ -369,7 +375,12 @@ const CodeDeliveryTable: React.FC<CodeDeliveryTableProps> = ({ data }) => {
 
   const repoColumns = [
     { title: '仓库', dataIndex: 'repo', key: 'repo' },
-    { title: 'MR 数量', dataIndex: 'count', key: 'count', sorter: (a: any, b: any) => a.count - b.count },
+    {
+      title: 'MR 数量',
+      dataIndex: 'count',
+      key: 'count',
+      sorter: (a: any, b: any) => a.count - b.count,
+    },
   ];
 
   const repoData = Object.entries(data.byRepo).map(([repo, count]) => ({
@@ -382,7 +393,12 @@ const CodeDeliveryTable: React.FC<CodeDeliveryTableProps> = ({ data }) => {
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       <div>
         <Title level={5}>按发起人</Title>
-        <Table columns={initiatorColumns} dataSource={initiatorData} pagination={false} size="small" />
+        <Table
+          columns={initiatorColumns}
+          dataSource={initiatorData}
+          pagination={false}
+          size="small"
+        />
       </div>
       <div>
         <Title level={5}>按仓库</Title>
@@ -402,7 +418,12 @@ interface QaServiceTableProps {
 const QaServiceTable: React.FC<QaServiceTableProps> = ({ data }) => {
   const userColumns = [
     { title: '用户', dataIndex: 'name', key: 'name' },
-    { title: '问题数', dataIndex: 'questions', key: 'questions', sorter: (a: any, b: any) => a.questions - b.questions },
+    {
+      title: '问题数',
+      dataIndex: 'questions',
+      key: 'questions',
+      sorter: (a: any, b: any) => a.questions - b.questions,
+    },
     {
       title: 'Top 标签',
       dataIndex: 'topTags',
@@ -435,7 +456,12 @@ const QaServiceTable: React.FC<QaServiceTableProps> = ({ data }) => {
 
   const tagColumns = [
     { title: '标签', dataIndex: 'tag', key: 'tag' },
-    { title: '数量', dataIndex: 'count', key: 'count', sorter: (a: any, b: any) => a.count - b.count },
+    {
+      title: '数量',
+      dataIndex: 'count',
+      key: 'count',
+      sorter: (a: any, b: any) => a.count - b.count,
+    },
   ];
 
   const tagData = Object.entries(data.byTag).map(([tag, count]) => ({
@@ -468,7 +494,12 @@ interface AutomationTableProps {
 const AutomationTable: React.FC<AutomationTableProps> = ({ data }) => {
   const columns = [
     { title: '自动化类型', dataIndex: 'type', key: 'type' },
-    { title: '运行次数', dataIndex: 'count', key: 'count', sorter: (a: any, b: any) => a.count - b.count },
+    {
+      title: '运行次数',
+      dataIndex: 'count',
+      key: 'count',
+      sorter: (a: any, b: any) => a.count - b.count,
+    },
   ];
 
   const dataSource = Object.entries(data.byType).map(([type, count]) => ({

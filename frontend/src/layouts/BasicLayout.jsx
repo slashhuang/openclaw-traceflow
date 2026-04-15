@@ -10,8 +10,6 @@ import {
   GithubOutlined,
   FolderOutlined,
   DatabaseOutlined,
-  ThunderboltOutlined,
-  CodeOutlined,
   WifiOutlined,
   DisconnectOutlined,
 } from '@ant-design/icons';
@@ -105,7 +103,6 @@ export default function BasicLayout() {
     },
     { path: '/workspace', key: '/workspace', name: '工作区与记忆', icon: <FolderOutlined /> },
     { path: '/states', key: '/states', name: 'States', icon: <DatabaseOutlined /> },
-    { path: '/reflections', key: '/reflections', name: '反思列表', icon: <ThunderboltOutlined /> },
     {
       path: '/logs',
       key: '/logs',
@@ -117,12 +114,6 @@ export default function BasicLayout() {
       key: '/settings',
       name: intl.formatMessage({ id: 'menu.settings' }),
       icon: <SettingOutlined />,
-    },
-    {
-      path: '/traceflow-skills',
-      key: '/traceflow-skills',
-      name: intl.formatMessage({ id: 'menu.traceflowSkills' }),
-      icon: <CodeOutlined />,
     },
     // 贡献审计：路由保留，侧栏隐藏（直达 URL 仍可用）
   ];
@@ -224,7 +215,10 @@ export default function BasicLayout() {
               content={
                 <div style={{ maxWidth: 300 }}>
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                    {intl.formatMessage({ id: 'watchSession.title', defaultMessage: '会话监听状态' })}
+                    {intl.formatMessage({
+                      id: 'watchSession.title',
+                      defaultMessage: '会话监听状态',
+                    })}
                   </div>
                   {watchStatus.activeSessions > 0 ? (
                     <div>
@@ -246,7 +240,8 @@ export default function BasicLayout() {
                           >
                             <div style={{ fontWeight: 500 }}>{s.user}</div>
                             <div style={{ opacity: 0.7, fontSize: 11 }}>
-                              {s.messageCount} msgs · {new Date(s.lastActivity).toLocaleTimeString()}
+                              {s.messageCount} msgs ·{' '}
+                              {new Date(s.lastActivity).toLocaleTimeString()}
                             </div>
                           </div>
                         ))}
@@ -259,7 +254,10 @@ export default function BasicLayout() {
                     </div>
                   ) : (
                     <div style={{ opacity: 0.7 }}>
-                      {intl.formatMessage({ id: 'watchSession.noActive', defaultMessage: '暂无活跃会话' })}
+                      {intl.formatMessage({
+                        id: 'watchSession.noActive',
+                        defaultMessage: '暂无活跃会话',
+                      })}
                     </div>
                   )}
                 </div>
@@ -273,23 +271,22 @@ export default function BasicLayout() {
                   )}
                   {watchStatus.watching
                     ? intl.formatMessage({ id: 'watchSession.watching', defaultMessage: '监听中' })
-                    : intl.formatMessage({ id: 'watchSession.notWatching', defaultMessage: '未监听' })}
+                    : intl.formatMessage({
+                        id: 'watchSession.notWatching',
+                        defaultMessage: '未监听',
+                      })}
                 </Space>
               }
               trigger="hover"
             >
-              <Tag
-                color={watchStatus.watching ? 'green' : 'default'}
-                style={{ cursor: 'pointer' }}
-              >
-                {watchStatus.watching ? (
-                  <WifiOutlined />
-                ) : (
-                  <DisconnectOutlined />
-                )}
+              <Tag color={watchStatus.watching ? 'green' : 'default'} style={{ cursor: 'pointer' }}>
+                {watchStatus.watching ? <WifiOutlined /> : <DisconnectOutlined />}
                 {watchStatus.watching
                   ? intl.formatMessage({ id: 'watchSession.watching', defaultMessage: '监听中' })
-                  : intl.formatMessage({ id: 'watchSession.notWatching', defaultMessage: '未监听' })}
+                  : intl.formatMessage({
+                      id: 'watchSession.notWatching',
+                      defaultMessage: '未监听',
+                    })}
               </Tag>
             </Popover>
           ),
