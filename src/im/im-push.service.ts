@@ -8,6 +8,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '../config/config.service';
 import { MessageQueueService } from './message-queue.service';
 import { ChannelManager } from './channel-manager';
+import { CircuitBreakerOpenError } from './circuit-breaker.service';
 import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
 import type { FormattedMessage } from './channel.interface';
 
@@ -273,9 +274,16 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         }
       }
     } catch (error) {
-      this.logger.error(
-        `Feishu send error: ${messageType} for ${sessionId.slice(0, 8)}... - ${(error as Error).message}, dropping`,
-      );
+      if (error instanceof CircuitBreakerOpenError) {
+        // 熔断器打开是预期中的保护机制，用 warn 而非 error 级别，避免日志洪水
+        this.logger.warn(
+          `Feishu circuit breaker OPEN, dropping ${messageType} for ${sessionId.slice(0, 8)}...`,
+        );
+      } else {
+        this.logger.error(
+          `Feishu send error: ${messageType} for ${sessionId.slice(0, 8)}... - ${(error as Error).message}, dropping`,
+        );
+      }
       this.queueService.removeMessage(sessionId, queuedMsg.id);
       if (messageType === 'user') {
         this.sessionLatestUserMessage.delete(sessionId);
