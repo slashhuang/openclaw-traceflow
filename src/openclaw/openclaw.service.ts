@@ -528,7 +528,7 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 解析 OpenClaw 的 stateDir / configPath / workspaceDir（CLI + 环境变量 + 启发式）
+   * 解析 OpenClaw 的 stateDir / configPath / workspaceDir（配置 > 环境变量 > 默认回退）
    */
   async getResolvedPaths(forceRefresh = false): Promise<OpenClawResolvedPaths> {
     if (
@@ -549,8 +549,6 @@ export class OpenClawService implements OnModuleInit, OnModuleDestroy {
       this.logger.debug(
         `OpenClaw paths: stateDir=${paths.stateDir} config=${paths.configPath ?? 'n/a'} workspace=${paths.workspaceDir ?? 'n/a'} (${JSON.stringify(paths.source)})`,
       );
-    } else if (paths.cliHint) {
-      this.logger.warn(`OpenClaw path discovery: ${paths.cliHint}`);
     }
     return paths;
   }

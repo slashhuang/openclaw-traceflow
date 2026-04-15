@@ -102,7 +102,6 @@ export class SetupController {
           configPath: paths.configPath,
           workspaceDir: paths.workspaceDir,
           source: paths.source,
-          cliHint: paths.cliHint,
         },
         performance: {
           totalTimeMs: totalTime,

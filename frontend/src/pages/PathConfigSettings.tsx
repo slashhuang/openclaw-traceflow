@@ -225,11 +225,6 @@ const PathConfigSettings: React.FC = () => {
                     {config.resolved.workspaceDir || '未解析'}
                   </Tag>
                 </div>
-                {config.resolved.cliHint && (
-                  <div>
-                    <strong>提示:</strong> {config.resolved.cliHint}
-                  </div>
-                )}
               </Space>
             }
           />
