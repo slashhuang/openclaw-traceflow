@@ -6,15 +6,14 @@
  * 优先级：
  * 1. 显式配置（openclawStateDir / openclawWorkspaceDir / openclawConfigPath）
  * 2. 环境变量（OPENCLAW_STATE_DIR / OPENCLAW_WORKSPACE_DIR / OPENCLAW_CONFIG_PATH）
- * 3. 默认回退（~/.openclaw/state, ~/.openclaw/workspace）
+ * 3. null（不猜测、不嗅探，让调用方决定是否报错）
  */
-import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
 export type OpenClawPathsSource = {
-  stateDir: 'explicit' | 'env' | 'fallback';
-  workspaceDir: 'explicit' | 'env' | 'fallback';
+  stateDir: 'explicit' | 'env' | 'none';
+  workspaceDir: 'explicit' | 'env' | 'none';
 };
 
 export interface OpenClawResolvedPaths {
@@ -41,8 +40,8 @@ export async function resolveOpenClawPaths(options: {
   explicitConfigPath?: string;
 }): Promise<OpenClawResolvedPaths> {
   const source: OpenClawPathsSource = {
-    stateDir: 'fallback',
-    workspaceDir: 'fallback',
+    stateDir: 'none',
+    workspaceDir: 'none',
   };
 
   let stateDir: string | null = null;
@@ -51,42 +50,25 @@ export async function resolveOpenClawPaths(options: {
     ? expandHome(options.explicitConfigPath.trim())
     : null;
 
-  // --- stateDir ---
+  // --- stateDir：只认显式配置或环境变量，不做任何推断 ---
   if (options.explicitStateDir?.trim()) {
     stateDir = expandHome(options.explicitStateDir.trim());
     source.stateDir = 'explicit';
   } else if (process.env.OPENCLAW_STATE_DIR?.trim()) {
     stateDir = expandHome(process.env.OPENCLAW_STATE_DIR.trim());
     source.stateDir = 'env';
-  } else {
-    // 默认回退：优先 ~/.openclaw/state，若不存在但 agents 在 ~/.openclaw 根下则用后者
-    const homeState = path.join(os.homedir(), '.openclaw', 'state');
-    const legacyHome = path.join(os.homedir(), '.openclaw');
-    try {
-      if (
-        !fs.existsSync(homeState) &&
-        fs.existsSync(path.join(legacyHome, 'agents'))
-      ) {
-        stateDir = legacyHome;
-      }
-    } catch {
-      /* ignore */
-    }
-    if (!stateDir) {
-      stateDir = homeState;
-    }
   }
+  // 无显式配置时返回 null，不做 fs.existsSync 嗅探
 
-  // --- workspaceDir ---
+  // --- workspaceDir：只认显式配置或环境变量，不做任何推断 ---
   if (options.explicitWorkspaceDir?.trim()) {
     workspaceDir = expandHome(options.explicitWorkspaceDir.trim());
     source.workspaceDir = 'explicit';
   } else if (process.env.OPENCLAW_WORKSPACE_DIR?.trim()) {
     workspaceDir = expandHome(process.env.OPENCLAW_WORKSPACE_DIR.trim());
     source.workspaceDir = 'env';
-  } else {
-    workspaceDir = path.join(os.homedir(), '.openclaw', 'workspace');
   }
+  // 无显式配置时返回 null，不猜测默认路径
 
   return {
     configPath,
