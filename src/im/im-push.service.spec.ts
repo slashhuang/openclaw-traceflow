@@ -4,7 +4,7 @@ import { ImPushService } from './im-push.service';
 import { ConfigService } from '../config/config.service';
 import { MessageQueueService } from './message-queue.service';
 import { ChannelManager } from './channel-manager';
-import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
+import { CircuitBreakerOpenError } from './circuit-breaker.service';
 
 // Mock dependencies
 const mockConfigService = {
@@ -43,7 +43,6 @@ const mockFormatter = {
 
 describe('ImPushService', () => {
   let service: ImPushService;
-  let eventEmitter: EventEmitter2;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -57,7 +56,6 @@ describe('ImPushService', () => {
     }).compile();
 
     service = module.get<ImPushService>(ImPushService);
-    eventEmitter = module.get<EventEmitter2>(EventEmitter2);
 
     // Replace formatter with mock
     (service as any).formatter = mockFormatter;
@@ -86,14 +84,14 @@ describe('ImPushService', () => {
         message_id: 'msg_001',
       });
 
-      await (service as any).sendMessage('test-session-1', {
+      await (service as any).sendMessage(sessionId, {
         id: 'q1',
         message: { type: 'user', data: {} },
       });
 
       // Verify first user message is stored
       const latestMsg1 = (service as any).sessionLatestUserMessage.get(
-        'test-session-1',
+        sessionId,
       );
       expect(latestMsg1?.message_id).toBe('msg_001');
 
@@ -102,14 +100,14 @@ describe('ImPushService', () => {
         message_id: 'msg_002',
       });
 
-      await (service as any).sendMessage('test-session-1', {
+      await (service as any).sendMessage(sessionId, {
         id: 'q2',
         message: { type: 'user', data: {} },
       });
 
       // Verify latest user message is updated (overwritten)
       const latestMsg2 = (service as any).sessionLatestUserMessage.get(
-        'test-session-1',
+        sessionId,
       );
       expect(latestMsg2?.message_id).toBe('msg_002');
     });
@@ -813,6 +811,630 @@ describe('ImPushService', () => {
       await (service as any).processQueue(sessionId);
 
       expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // Edge cases: session end, multi-session, circuit breaker, etc.
+  // ============================================================
+
+  describe('edge case: session end flushes queue but user message map cleared', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      jest.clearAllMocks();
+    });
+
+    it('should skip queued assistant messages when session ends and clears state', async () => {
+      const sessionId = 'test-end-flush';
+
+      // Pre-condition: session has state, then ends
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_123',
+      });
+
+      // Queue has user + assistant messages
+      let dequeueCall = 0;
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        dequeue: () => {
+          dequeueCall++;
+          if (dequeueCall === 1) {
+            return {
+              id: 'q-user',
+              message: { type: 'user', data: { text: 'hello' } },
+            };
+          }
+          if (dequeueCall === 2) {
+            return {
+              id: 'q-assistant',
+              message: { type: 'assistant', data: { text: 'world' } },
+            };
+          }
+          return null;
+        },
+        size: () => 2,
+      });
+
+      mockFormatter.formatUserMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'hello' },
+      });
+      mockFormatter.formatAssistantMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'world' },
+      });
+
+      // User message succeeds
+      mockChannelManager.sendToChannel.mockResolvedValueOnce({
+        message_id: 'om_user_new',
+      });
+      // Assistant should succeed (sent in the same processQueue call)
+      mockChannelManager.sendToChannel.mockResolvedValueOnce({
+        message_id: 'om_ai_new',
+      });
+
+      // Process queue directly
+      await (service as any).processQueue(sessionId);
+
+      // Both messages should be sent in the same flush
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledTimes(2);
+    });
+
+    it('should skip assistant messages after handleSessionEnd clears reply_id map', () => {
+      const sessionId = 'test-end-clear';
+
+      // Set up state as if session was active
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_old',
+      });
+
+      // Session ends — clears all state
+      (service as any).handleSessionEnd({ sessionId });
+
+      // Verify state is fully cleared
+      expect((service as any).sessionLatestUserMessage.has(sessionId)).toBe(
+        false,
+      );
+
+      // Now if a new message event somehow arrives for this session,
+      // assistant should be skipped (no reply_id)
+      mockFormatter.formatAssistantMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'orphan assistant' },
+      });
+
+      // Call sendMessage directly (simulating late message after session end)
+      return (service as any)
+        .sendMessage(sessionId, {
+          id: 'q-orphan',
+          message: { type: 'assistant', data: {} },
+        })
+        .then(() => {
+          expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
+          expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
+            sessionId,
+            'q-orphan',
+          );
+        });
+    });
+  });
+
+  describe('edge case: circuit breaker opens mid-queue', () => {
+    it('should drop remaining messages when circuit breaker opens during processQueue', async () => {
+      const sessionId = 'test-cb-mid-queue';
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_base',
+      });
+
+      let callCount = 0;
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        dequeue: () => {
+          callCount++;
+          if (callCount <= 3) {
+            return {
+              id: `q${callCount}`,
+              message: {
+                type: 'assistant',
+                data: { text: `msg ${callCount}` },
+              },
+            };
+          }
+          return null;
+        },
+        size: () => 3,
+      });
+
+      mockFormatter.formatAssistantMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'assistant reply' },
+      });
+
+      // 1st succeeds, 2nd throws CircuitBreakerOpenError, 3rd still attempted
+      mockChannelManager.sendToChannel
+        .mockResolvedValueOnce({ message_id: 'om_1' })
+        .mockRejectedValueOnce(new CircuitBreakerOpenError('circuit open'))
+        .mockResolvedValueOnce({ message_id: 'om_3' });
+
+      await (service as any).processQueue(sessionId);
+
+      // All 3 messages attempted — CB error doesn't stop the queue
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledTimes(3);
+      // 1st & 3rd: markMessageSent (success)
+      expect(mockMessageQueueService.markMessageSent).toHaveBeenCalledTimes(2);
+      // 2nd: removeMessage (CB error = drop)
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('should continue processing queue after a single message failure (non-circuit-breaker)', async () => {
+      const sessionId = 'test-continue-after-fail';
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_base',
+      });
+
+      let dequeueCall = 0;
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        dequeue: () => {
+          dequeueCall++;
+          if (dequeueCall <= 3) {
+            return {
+              id: `q${dequeueCall}`,
+              message: { type: 'user', data: { text: `msg ${dequeueCall}` } },
+            };
+          }
+          return null;
+        },
+        size: () => 3,
+      });
+
+      mockFormatter.formatUserMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'user msg' },
+      });
+
+      // 1st succeeds, 2nd throws network error, 3rd succeeds
+      mockChannelManager.sendToChannel
+        .mockResolvedValueOnce({ message_id: 'om_1' })
+        .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+        .mockResolvedValueOnce({ message_id: 'om_3' });
+
+      await (service as any).processQueue(sessionId);
+
+      // All 3 messages attempted — failure doesn't stop the queue
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledTimes(3);
+      // All messages removed (success or failure = drop)
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledTimes(1); // only the failed one
+      expect(mockMessageQueueService.markMessageSent).toHaveBeenCalledTimes(2); // 1st and 3rd
+    });
+  });
+
+  describe('edge case: channel unavailable / disabled', () => {
+    it('should drop message when sendToChannel returns null (channel not found)', async () => {
+      const sessionId = 'test-channel-null';
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_base',
+      });
+
+      mockFormatter.formatAssistantMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'hello' },
+      });
+
+      // Channel returns null (e.g., disabled, not found)
+      mockChannelManager.sendToChannel.mockResolvedValue(null);
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: { type: 'assistant', data: {} },
+      });
+
+      // Message should be dropped (no message_id)
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
+        sessionId,
+        'q1',
+      );
+      expect(mockMessageQueueService.markMessageSent).not.toHaveBeenCalled();
+    });
+
+    it('should drop user message and clear reply_id map when channel returns null', async () => {
+      const sessionId = 'test-user-channel-null';
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_old',
+      });
+
+      mockFormatter.formatUserMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'user text' },
+      });
+
+      mockChannelManager.sendToChannel.mockResolvedValue(null);
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: { type: 'user', data: {} },
+      });
+
+      // User message failed → reply_id map cleared
+      expect((service as any).sessionLatestUserMessage.has(sessionId)).toBe(
+        false,
+      );
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
+        sessionId,
+        'q1',
+      );
+    });
+  });
+
+  describe('edge case: multi-session isolation', () => {
+    it('should maintain independent state for multiple concurrent sessions', async () => {
+      const sessionA = 'session-a';
+      const sessionB = 'session-b';
+
+      // Set up independent state for each session
+      (service as any).sessionLatestUserMessage.set(sessionA, {
+        message_id: 'om_a_user',
+      });
+      (service as any).sessionLatestUserMessage.set(sessionB, {
+        message_id: 'om_b_user',
+      });
+
+      mockFormatter.formatAssistantMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'assistant reply' },
+      });
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: 'om_ai',
+      });
+
+      // Send assistant for session A
+      await (service as any).sendMessage(sessionA, {
+        id: 'qa',
+        message: { type: 'assistant', data: {} },
+      });
+
+      // Verify session A used its own reply_id
+      expect(mockChannelManager.sendToChannel).toHaveBeenLastCalledWith(
+        'feishu',
+        expect.any(Object),
+        { reply_id: 'om_a_user' },
+      );
+
+      // Session B's state should be untouched
+      expect(
+        (service as any).sessionLatestUserMessage.get(sessionB).message_id,
+      ).toBe('om_b_user');
+
+      // Send assistant for session B
+      await (service as any).sendMessage(sessionB, {
+        id: 'qb',
+        message: { type: 'assistant', data: {} },
+      });
+
+      expect(mockChannelManager.sendToChannel).toHaveBeenLastCalledWith(
+        'feishu',
+        expect.any(Object),
+        { reply_id: 'om_b_user' },
+      );
+    });
+
+    it('should have independent debounce timers per session', async () => {
+      jest.useFakeTimers();
+
+      const sessionA = 'debounce-a';
+      const sessionB = 'debounce-b';
+
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        dequeue: () => null,
+        size: () => 1,
+      });
+
+      // Send message to session A
+      await (service as any).handleSessionMessage({
+        sessionId: sessionA,
+        message: { type: 'user', data: {} },
+        session: {},
+      });
+
+      // Advance 2s — timer should not have fired yet
+      jest.advanceTimersByTime(2000);
+
+      // Send message to session B — should have its own timer
+      await (service as any).handleSessionMessage({
+        sessionId: sessionB,
+        message: { type: 'user', data: {} },
+        session: {},
+      });
+
+      // Both sessions should have active timers
+      expect((service as any).sessionDebounceTimers.has(sessionA)).toBe(true);
+      expect((service as any).sessionDebounceTimers.has(sessionB)).toBe(true);
+
+      // Advance 1.5s more — session A's timer should fire (3.5s total)
+      jest.advanceTimersByTime(1500);
+
+      // Session A timer should have fired, session B still at 1.5s
+      expect((service as any).sessionDebounceTimers.has(sessionA)).toBe(false);
+      expect((service as any).sessionDebounceTimers.has(sessionB)).toBe(true);
+
+      jest.useRealTimers();
+    });
+
+    it('should isolate session start cleanup to only the target session', () => {
+      const sessionA = 'isolate-a';
+      const sessionB = 'isolate-b';
+
+      // Both sessions have state
+      (service as any).sessionLatestUserMessage.set(sessionA, {
+        message_id: 'om_a',
+      });
+      (service as any).sessionLatestUserMessage.set(sessionB, {
+        message_id: 'om_b',
+      });
+
+      // Session A restarts
+      (service as any).handleSessionStart({
+        sessionId: sessionA,
+        sessionKey: 'agent:main:main',
+        user: { id: 'ou_xxx', name: 'Test' },
+        account: 'feishu',
+      });
+
+      // Session A state cleared, session B untouched
+      expect((service as any).sessionLatestUserMessage.has(sessionA)).toBe(
+        false,
+      );
+      expect(
+        (service as any).sessionLatestUserMessage.get(sessionB).message_id,
+      ).toBe('om_b');
+    });
+  });
+
+  describe('edge case: user message failure blocks subsequent assistant', () => {
+    it('should skip assistant after user message send fails (reply_id map cleared)', async () => {
+      const sessionId = 'test-user-fail-blocks';
+
+      // No confirmed user message (user send failed, map was cleared)
+      // sessionLatestUserMessage does NOT have an entry for this session
+
+      mockFormatter.formatAssistantMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'orphan assistant' },
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q-orphan',
+        message: { type: 'assistant', data: {} },
+      });
+
+      expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
+        sessionId,
+        'q-orphan',
+      );
+    });
+
+    it('should handle user-then-assistant-then-user-then-assistant where first user fails', async () => {
+      const sessionId = 'test-alt-fail';
+
+      // Scenario: user1 enqueued (pending) → assistant1 skipped → user2 succeeds → assistant2 OK
+      // Step 1: __pending__ set by handleSessionMessage for user1
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: '__pending__',
+      });
+
+      // assistant1 arrives — should be skipped (__pending__)
+      mockFormatter.formatAssistantMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'orphan' },
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q-a1',
+        message: { type: 'assistant', data: {} },
+      });
+
+      expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
+
+      // Step 2: user2 succeeds
+      mockFormatter.formatUserMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'hello again' },
+      });
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: 'om_user2',
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q-u2',
+        message: { type: 'user', data: {} },
+      });
+
+      // reply_id updated to real user2 message_id
+      expect(
+        (service as any).sessionLatestUserMessage.get(sessionId).message_id,
+      ).toBe('om_user2');
+
+      // Step 3: assistant2 should now succeed with correct reply_id
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: 'om_ai2',
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q-a2',
+        message: { type: 'assistant', data: {} },
+      });
+
+      expect(mockChannelManager.sendToChannel).toHaveBeenLastCalledWith(
+        'feishu',
+        expect.any(Object),
+        { reply_id: 'om_user2' },
+      );
+    });
+  });
+
+  describe('edge case: skill message types', () => {
+    it('should send skill:start with reply_id to latest user message', async () => {
+      const sessionId = 'test-skill-start';
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_base',
+      });
+
+      mockFormatter.formatSkillStart.mockReturnValue({
+        msg_type: 'interactive',
+        content: { text: 'Skill: search_files' },
+      });
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: 'om_skill_start',
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: { type: 'skill:start', data: { skillName: 'search_files' } },
+      });
+
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledWith(
+        'feishu',
+        expect.any(Object),
+        { reply_id: 'om_user_base' },
+      );
+    });
+
+    it('should send skill:end with reply_id to latest user message', async () => {
+      const sessionId = 'test-skill-end';
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_base',
+      });
+
+      mockFormatter.formatSkillEnd.mockReturnValue({
+        msg_type: 'interactive',
+        content: { text: 'Skill: search_files completed' },
+      });
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: 'om_skill_end',
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: {
+          type: 'skill:end',
+          data: { skillName: 'search_files', status: 'success' },
+        },
+      });
+
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledWith(
+        'feishu',
+        expect.any(Object),
+        { reply_id: 'om_user_base' },
+      );
+    });
+
+    it('should skip skill message when no user message exists', async () => {
+      const sessionId = 'test-skill-no-user';
+
+      // No user message in sessionLatestUserMessage
+
+      mockFormatter.formatSkillStart.mockReturnValue({
+        msg_type: 'interactive',
+        content: { text: 'Skill: x' },
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: { type: 'skill:start', data: {} },
+      });
+
+      expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
+        sessionId,
+        'q1',
+      );
+    });
+
+    it('should handle unknown message type as fallback text', async () => {
+      const sessionId = 'test-unknown-type';
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_base',
+      });
+
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: 'om_unknown',
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: {
+          type: 'some_unknown_type',
+          data: { foo: 'bar' },
+        },
+      });
+
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledWith(
+        'feishu',
+        { msg_type: 'text', content: { text: '{"foo":"bar"}' } },
+        { reply_id: undefined }, // unknown types don't use reply_id
+      );
+    });
+  });
+
+  describe('edge case: watcher error message delivery', () => {
+    it('should send watcher error notification when IM is enabled', async () => {
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: 'om_alert',
+      });
+
+      await (service as any).handleWatcherError({
+        agentId: 'test-agent',
+        error: 'File watcher crashed',
+        timestamp: Date.now(),
+      });
+
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledWith(
+        'feishu',
+        expect.objectContaining({
+          msg_type: 'text',
+          content: expect.objectContaining({
+            text: expect.stringContaining('IM Push 告警'),
+          }),
+        }),
+      );
+    });
+
+    it('should skip watcher error when IM is disabled', async () => {
+      mockConfigService.getConfig.mockReturnValue({
+        im: { enabled: false },
+      });
+
+      await (service as any).handleWatcherError({
+        agentId: 'test-agent',
+        error: 'File watcher crashed',
+        timestamp: Date.now(),
+      });
+
+      expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('edge case: reloadFromConfig', () => {
+    it('should re-initialize event listeners on reload', () => {
+      // Spy on initializeEventListeners via checking eventListenersRegistered
+      const initSpy = jest.spyOn(service as any, 'initializeEventListeners');
+
+      (service as any).reloadFromConfig();
+
+      expect(initSpy).toHaveBeenCalled();
     });
   });
 });
