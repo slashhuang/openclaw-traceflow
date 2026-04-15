@@ -25,9 +25,9 @@ const mockMessageQueueService = {
   getQueue: jest.fn(),
   setProcessing: jest.fn(),
   markMessageSent: jest.fn(),
-  markMessageFailed: jest.fn(),
-  removeFailedMessage: jest.fn(),
+  removeMessage: jest.fn(),
   cleanupSession: jest.fn(),
+  markDone: jest.fn(),
 };
 
 const mockChannelManager = {
@@ -72,6 +72,12 @@ describe('ImPushService', () => {
       const sessionId = 'test-session-1';
 
       // Mock user message 1
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        dequeue: () => null,
+      });
+
+      // Direct user message 1
       mockFormatter.formatUserMessage.mockReturnValue({
         msg_type: 'text',
         content: { text: 'Hello 1' },
@@ -79,22 +85,15 @@ describe('ImPushService', () => {
       mockChannelManager.sendToChannel.mockResolvedValue({
         message_id: 'msg_001',
       });
-      mockMessageQueueService.getQueue.mockReturnValue({
-        isProcessing: () => false,
-        getOldestMessage: () => ({
-          id: 'q1',
-          message: { type: 'user', data: {} },
-        }),
-      });
 
-      await (service as any).sendMessage(sessionId, {
+      await (service as any).sendMessage('test-session-1', {
         id: 'q1',
         message: { type: 'user', data: {} },
       });
 
       // Verify first user message is stored
       const latestMsg1 = (service as any).sessionLatestUserMessage.get(
-        sessionId,
+        'test-session-1',
       );
       expect(latestMsg1?.message_id).toBe('msg_001');
 
@@ -103,14 +102,14 @@ describe('ImPushService', () => {
         message_id: 'msg_002',
       });
 
-      await (service as any).sendMessage(sessionId, {
+      await (service as any).sendMessage('test-session-1', {
         id: 'q2',
         message: { type: 'user', data: {} },
       });
 
       // Verify latest user message is updated (overwritten)
       const latestMsg2 = (service as any).sessionLatestUserMessage.get(
-        sessionId,
+        'test-session-1',
       );
       expect(latestMsg2?.message_id).toBe('msg_002');
     });
@@ -174,7 +173,7 @@ describe('ImPushService', () => {
 
       // Verify message was skipped
       expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
-      expect(mockMessageQueueService.markMessageSent).toHaveBeenCalledWith(
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
         sessionId,
         'q1',
       );
@@ -196,7 +195,7 @@ describe('ImPushService', () => {
 
       mockMessageQueueService.getQueue.mockReturnValue({
         isProcessing: () => false,
-        getOldestMessage: () => {
+        dequeue: () => {
           if (messageIndex < messages.length) {
             return messages[messageIndex++];
           }
@@ -355,7 +354,7 @@ describe('ImPushService', () => {
 
       // Assistant should be skipped (user still pending)
       expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
-      expect(mockMessageQueueService.markMessageSent).toHaveBeenCalledWith(
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
         sessionId,
         'q1',
       );
@@ -427,7 +426,7 @@ describe('ImPushService', () => {
       expect((service as any).sessionLatestUserMessage.has(sessionId)).toBe(
         false,
       );
-      expect(mockMessageQueueService.removeFailedMessage).toHaveBeenCalledWith(
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
         sessionId,
         'q1',
       );
@@ -514,7 +513,7 @@ describe('ImPushService', () => {
       let dequeueCall = 0;
       mockMessageQueueService.getQueue.mockReturnValue({
         isProcessing: () => false,
-        getOldestMessage: () => {
+        dequeue: () => {
           dequeueCall++;
           if (dequeueCall === 1) {
             return {
@@ -579,7 +578,7 @@ describe('ImPushService', () => {
 
       mockMessageQueueService.getQueue.mockReturnValue({
         isProcessing: () => false,
-        getOldestMessage: () => null,
+        dequeue: () => null,
         size: () => 5,
       });
 
@@ -611,7 +610,7 @@ describe('ImPushService', () => {
 
       mockMessageQueueService.getQueue.mockReturnValue({
         isProcessing: () => false,
-        getOldestMessage: () => null,
+        dequeue: () => null,
         size: () => 2,
       });
 
@@ -656,7 +655,7 @@ describe('ImPushService', () => {
 
       mockMessageQueueService.getQueue.mockReturnValue({
         isProcessing: () => false,
-        getOldestMessage: () => null,
+        dequeue: () => null,
         size: () => 1,
       });
 
@@ -682,7 +681,7 @@ describe('ImPushService', () => {
 
       mockMessageQueueService.getQueue.mockReturnValue({
         isProcessing: () => false,
-        getOldestMessage: () => null,
+        dequeue: () => null,
         size: () => 0,
       });
 
@@ -706,6 +705,114 @@ describe('ImPushService', () => {
 
       // Should NOT process queue because timer was cleared
       expect(mockMessageQueueService.setProcessing).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('message failure: drop immediately', () => {
+    it('should drop message and remove from queue when send throws', async () => {
+      const sessionId = 'test-fail-throw';
+
+      mockFormatter.formatUserMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'Hello' },
+      });
+      mockChannelManager.sendToChannel.mockRejectedValue(
+        new Error('Network error'),
+      );
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: { type: 'user', data: {} },
+      });
+
+      // Message should be removed from queue, not retried
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
+        sessionId,
+        'q1',
+      );
+      // Should NOT have called markMessageSent
+      expect(mockMessageQueueService.markMessageSent).not.toHaveBeenCalled();
+    });
+
+    it('should drop message and remove from queue when send returns no message_id', async () => {
+      const sessionId = 'test-fail-no-id';
+
+      mockFormatter.formatUserMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'Hello' },
+      });
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        code: 99999,
+        msg: 'error',
+      });
+
+      await (service as any).sendMessage(sessionId, {
+        id: 'q1',
+        message: { type: 'user', data: {} },
+      });
+
+      // Message should be removed from queue
+      expect(mockMessageQueueService.removeMessage).toHaveBeenCalledWith(
+        sessionId,
+        'q1',
+      );
+    });
+  });
+
+  describe('processQueue: dequeue prevents duplicate consumption', () => {
+    it('should consume each message exactly once via dequeue', async () => {
+      const sessionId = 'test-once';
+      let dequeueCount = 0;
+      const messages = [
+        { id: 'm1', message: { type: 'user', data: {} } },
+        { id: 'm2', message: { type: 'skill:start', data: {} } },
+      ];
+
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        dequeue: () => {
+          dequeueCount++;
+          return dequeueCount <= messages.length
+            ? messages[dequeueCount - 1]
+            : null;
+        },
+      });
+
+      (service as any).sessionLatestUserMessage.set(sessionId, {
+        message_id: 'om_user_base',
+      });
+
+      mockFormatter.formatUserMessage.mockReturnValue({
+        msg_type: 'text',
+        content: { text: 'Hello' },
+      });
+      mockFormatter.formatSkillStart.mockReturnValue({
+        msg_type: 'interactive',
+        content: { text: 'skill' },
+      });
+      mockChannelManager.sendToChannel.mockResolvedValue({
+        message_id: `msg_${Date.now()}`,
+      });
+
+      await (service as any).processQueue(sessionId);
+
+      // dequeue called 3 times: m1, m2, then null
+      expect(dequeueCount).toBe(3);
+      // Each message sent exactly once
+      expect(mockChannelManager.sendToChannel).toHaveBeenCalledTimes(2);
+    });
+
+    it('should process no messages when dequeue returns null', async () => {
+      const sessionId = 'test-empty';
+
+      mockMessageQueueService.getQueue.mockReturnValue({
+        isProcessing: () => false,
+        dequeue: () => null,
+      });
+
+      await (service as any).processQueue(sessionId);
+
+      expect(mockChannelManager.sendToChannel).not.toHaveBeenCalled();
     });
   });
 });

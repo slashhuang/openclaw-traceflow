@@ -9,20 +9,18 @@ export interface QueuedMessage {
   sessionId: string;
   message: any;
   timestamp: number;
-  retryCount: number;
-  status: 'pending' | 'sending' | 'sent' | 'failed';
-  error?: string;
+  status: 'pending' | 'sending' | 'sent';
 }
 
 /**
  * 每会话消息队列
  * 保证同一会话的消息按 FIFO 顺序串行发送
+ * 消息失败即丢弃，不重试
  */
 export class MessageQueue {
   private readonly sessionId: string;
   private readonly messages: QueuedMessage[] = [];
   private processing = false;
-  private paused = false;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -34,15 +32,16 @@ export class MessageQueue {
       sessionId: this.sessionId,
       message,
       timestamp: Date.now(),
-      retryCount: 0,
       status: 'pending',
     };
     this.messages.push(queuedMessage);
     return queuedMessage;
   }
 
+  /**
+   * 原子性地取出并标记一条待发送消息（防止并发重复领取）
+   */
   dequeue(): QueuedMessage | null {
-    if (this.paused) return null;
     const pending = this.messages.find((m) => m.status === 'pending');
     if (pending) {
       pending.status = 'sending';
@@ -51,65 +50,23 @@ export class MessageQueue {
     return null;
   }
 
-  markSent(messageId: string): void {
-    const msg = this.messages.find((m) => m.id === messageId);
-    if (msg) {
-      msg.status = 'sent';
-      // 从队列中移除已发送的消息
-      const index = this.messages.indexOf(msg);
-      if (index >= 0) {
-        this.messages.splice(index, 1);
-      }
-    }
-  }
-
-  markFailed(messageId: string, error: string): void {
-    const msg = this.messages.find((m) => m.id === messageId);
-    if (msg) {
-      msg.status = 'pending'; // 回退到 pending，等待重试
-      msg.error = error;
-      msg.retryCount++;
-    }
-  }
-
-  removeFailed(messageId: string): void {
+  /**
+   * 标记消息已处理（无论成功还是失败丢弃），并从队列移除
+   */
+  markDone(messageId: string): void {
     const index = this.messages.findIndex((m) => m.id === messageId);
     if (index >= 0) {
+      this.messages[index].status = 'sent';
       this.messages.splice(index, 1);
     }
-  }
-
-  getNextMessage(): QueuedMessage | null {
-    if (this.paused || this.processing) return null;
-    return this.dequeue();
-  }
-
-  setProcessing(value: boolean): void {
-    this.processing = value;
-  }
-
-  pause(): void {
-    this.paused = true;
-  }
-
-  resume(): void {
-    this.paused = false;
-  }
-
-  size(): number {
-    return this.messages.length;
   }
 
   isProcessing(): boolean {
     return this.processing;
   }
 
-  isPaused(): boolean {
-    return this.paused;
-  }
-
-  getOldestMessage(): QueuedMessage | undefined {
-    return this.messages.find((m) => m.status === 'pending');
+  size(): number {
+    return this.messages.length;
   }
 }
 
@@ -158,33 +115,23 @@ export class MessageQueueService {
   }
 
   /**
-   * 标记消息发送成功
+   * 标记消息已处理（无论成功还是失败丢弃）
    */
   markMessageSent(sessionId: string, messageId: string): void {
     const queue = this.queues.get(sessionId);
     if (queue) {
-      queue.markSent(messageId);
+      queue.markDone(messageId);
       this.emitMessageSentEvent(sessionId, messageId);
     }
   }
 
   /**
-   * 标记消息发送失败（等待重试）
+   * 标记消息已处理（失败丢弃场景，与 markMessageSent 语义相同，仅日志区分）
    */
-  markMessageFailed(sessionId: string, messageId: string, error: string): void {
+  removeMessage(sessionId: string, messageId: string): void {
     const queue = this.queues.get(sessionId);
     if (queue) {
-      queue.markFailed(messageId, error);
-    }
-  }
-
-  /**
-   * 移除失败消息（放弃重试）
-   */
-  removeFailedMessage(sessionId: string, messageId: string): void {
-    const queue = this.queues.get(sessionId);
-    if (queue) {
-      queue.removeFailed(messageId);
+      queue.markDone(messageId);
     }
   }
 
@@ -207,12 +154,12 @@ export class MessageQueueService {
   }
 
   /**
-   * 获取所有有待处理消息的会话
+   * 获取所有有消息的会话
    */
-  getSessionWithPendingMessages(): string[] {
+  getSessionsWithMessages(): string[] {
     const sessions: string[] = [];
     for (const [sessionId, queue] of this.queues.entries()) {
-      if (queue.size() > 0 && !queue.isPaused()) {
+      if (queue.size() > 0) {
         sessions.push(sessionId);
       }
     }
@@ -223,12 +170,8 @@ export class MessageQueueService {
    * 清理已完成的会话队列
    */
   cleanupSession(sessionId: string): void {
-    const queue = this.queues.get(sessionId);
-    if (queue) {
-      queue.pause();
-      this.queues.delete(sessionId);
-      this.logger.debug(`Cleaned up message queue for session ${sessionId}`);
-    }
+    this.queues.delete(sessionId);
+    this.logger.debug(`Cleaned up message queue for session ${sessionId}`);
   }
 
   /**

@@ -165,6 +165,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 处理消息队列（串行发送）
+   * 使用 dequeue() 原子性领取消息，防止并发重复消费
    */
   private async processQueue(sessionId: string): Promise<void> {
     const queue = this.queueService.getQueue(sessionId);
@@ -174,17 +175,15 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
 
     try {
       while (true) {
-        const queuedMsg = queue.getOldestMessage();
-        if (!queuedMsg) break;
+        const dequeuedMsg = queue.dequeue();
+        if (!dequeuedMsg) break;
 
-        // 等待前一条消息发送完成（串行锁）
         const lock = this.sessionSendingLock.get(sessionId);
         if (lock) {
           await lock;
         }
 
-        // 创建新的发送 Promise
-        const sendPromise = this.sendMessage(sessionId, queuedMsg);
+        const sendPromise = this.sendMessage(sessionId, dequeuedMsg);
         this.sessionSendingLock.set(sessionId, sendPromise);
         await sendPromise;
         this.sessionSendingLock.delete(sessionId);
@@ -195,8 +194,7 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 发送单条消息
-   * 弱依赖：发送失败直接丢弃，不重试
+   * 发送单条消息，失败直接丢弃
    */
   private async sendMessage(
     sessionId: string,
@@ -205,7 +203,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
     const messageType = queuedMsg.message.type;
     const messageData = queuedMsg.message.data;
 
-    // 格式化消息
     let formattedMessage: FormattedMessage;
     if (messageType === 'user') {
       formattedMessage = this.formatter.formatUserMessage(messageData);
@@ -228,7 +225,6 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
         : (formattedMessage.content as any)?.text || '';
     const contentLength = contentText.length;
 
-    // 获取 reply_id
     let replyId: string | undefined;
     if (
       messageType === 'assistant' ||
@@ -236,12 +232,11 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       messageType === 'skill:end'
     ) {
       const latestUserMsg = this.sessionLatestUserMessage.get(sessionId);
-      // 跳过还在防抖等待中的 user 消息（占位符）
       if (!latestUserMsg || latestUserMsg.message_id === '__pending__') {
-        this.logger.log(
+        this.logger.debug(
           `Skipping ${messageType} for ${sessionId}: no confirmed user message to reply to yet`,
         );
-        this.queueService.markMessageSent(sessionId, queuedMsg.id);
+        this.queueService.removeMessage(sessionId, queuedMsg.id);
         return;
       }
       replyId = latestUserMsg.message_id;
@@ -251,19 +246,15 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
       `Sending ${messageType} to Feishu: session=${sessionId.slice(0, 8)}..., type=${formattedMessage.msg_type}, content_length=${contentLength}, reply_to=${replyId?.slice(0, 12) || 'none'}`,
     );
 
-    // 发送，失败直接丢弃
     try {
       const result = await this.channelManager.sendToChannel(
         'feishu',
         formattedMessage,
-        {
-          reply_id: replyId,
-        },
+        { reply_id: replyId },
       );
 
       if (result?.message_id) {
         if (messageType === 'user') {
-          // 将占位符替换为真实的 message_id
           this.sessionLatestUserMessage.set(sessionId, {
             message_id: result.message_id,
           });
@@ -273,23 +264,19 @@ export class ImPushService implements OnModuleInit, OnModuleDestroy {
           `Feishu send OK: ${messageType} -> ${result.message_id.slice(0, 16)}...`,
         );
       } else {
-        // 发送失败，直接丢弃
         this.logger.warn(
           `Feishu send failed (no message_id): ${messageType} for ${sessionId.slice(0, 8)}..., dropping`,
         );
-        this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
-        // user 消息发送失败时清除占位，避免后续 assistant 消息永久跳过
+        this.queueService.removeMessage(sessionId, queuedMsg.id);
         if (messageType === 'user') {
           this.sessionLatestUserMessage.delete(sessionId);
         }
       }
     } catch (error) {
-      // 发送失败直接丢弃，不重试
       this.logger.error(
         `Feishu send error: ${messageType} for ${sessionId.slice(0, 8)}... - ${(error as Error).message}, dropping`,
       );
-      this.queueService.removeFailedMessage(sessionId, queuedMsg.id);
-      // user 消息发送异常时清除占位
+      this.queueService.removeMessage(sessionId, queuedMsg.id);
       if (messageType === 'user') {
         this.sessionLatestUserMessage.delete(sessionId);
       }
