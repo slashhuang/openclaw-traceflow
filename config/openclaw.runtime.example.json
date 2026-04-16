@@ -30,6 +30,19 @@
 
   "im": {
     "enabled": true,
+    "errorMonitor": {
+      "enabled": true,
+      "targetChatId": "oc_xxx",
+      "minSeverity": "warning",
+      "aggregateWindowMs": 30000,
+      "patterns": {
+        "promptError": true,
+        "toolStatusError": true,
+        "nonZeroExit": true,
+        "stackTrace": true,
+        "consecutiveFailures": true
+      }
+    },
     "channels": {
       "feishu": {
         "enabled": true,

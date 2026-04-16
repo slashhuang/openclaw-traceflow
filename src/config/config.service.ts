@@ -55,6 +55,20 @@ export interface Config {
    */
   im?: {
     enabled: boolean;
+    errorMonitor?: {
+      enabled: boolean;
+      minSeverity?: 'critical' | 'warning' | 'info';
+      aggregateWindowMs?: number;
+      /** 错误告警目标群聊 chat_id，不配置则发到 targetUserId（个人） */
+      targetChatId?: string;
+      patterns?: {
+        promptError?: boolean;
+        toolStatusError?: boolean;
+        nonZeroExit?: boolean;
+        stackTrace?: boolean;
+        consecutiveFailures?: boolean;
+      };
+    };
     channels?: {
       feishu?: {
         enabled: boolean;

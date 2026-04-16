@@ -10,6 +10,8 @@ import { DingTalkChannel } from './channels/dingtalk/dingtalk.channel';
 import { FeishuMessageFormatter } from './channels/feishu/feishu.formatter';
 import { MessageQueueService } from './message-queue.service';
 import { CircuitBreakerService } from './circuit-breaker.service';
+import { ErrorDetector } from './error-detector';
+import { ErrorAlertService } from './error-alert.service';
 
 /**
  * IM 推送模块（简化版 - 内存队列）
@@ -25,6 +27,8 @@ import { CircuitBreakerService } from './circuit-breaker.service';
     FeishuMessageFormatter,
     MessageQueueService,
     CircuitBreakerService,
+    ErrorDetector,
+    ErrorAlertService,
     // 注册所有 Channel 插件
     {
       provide: 'CHANNEL_PLUGINS',
@@ -48,6 +52,8 @@ import { CircuitBreakerService } from './circuit-breaker.service';
     SessionStateService,
     MessageQueueService,
     CircuitBreakerService,
+    ErrorDetector,
+    ErrorAlertService,
   ],
 })
 export class ImModule {}

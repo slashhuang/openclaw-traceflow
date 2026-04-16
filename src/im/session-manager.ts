@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '../config/config.service';
 import { SessionStateService } from './session-state.service';
+import { ErrorDetector } from './error-detector';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as chokidar from 'chokidar';
@@ -63,6 +64,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
     private eventEmitter: EventEmitter2,
     private configService: ConfigService,
     sessionState: SessionStateService,
+    private errorDetector: ErrorDetector,
   ) {
     this.sessionState = sessionState;
     this.startCleanupTimer();
@@ -266,6 +268,7 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
 
         // Reset 会话：清空 position 记录
         this.sessionFilePositions.delete(sessionId);
+        this.errorDetector.clearSession(sessionId);
         this.logger.log(`Session reset: ${sessionId}`);
         return;
       }
@@ -354,6 +357,22 @@ export class SessionManager implements OnModuleInit, OnModuleDestroy {
       for (const line of newLines) {
         try {
           const entry = JSON.parse(line);
+
+          // 错误检测：对所有行运行错误检测引擎（不仅是 message 类型）
+          const detectedErrors = this.errorDetector.analyzeLine(
+            entry,
+            sessionId,
+          );
+          if (detectedErrors.length > 0) {
+            this.logger.log(
+              `Error detection: ${detectedErrors.length} error(s) found in session ${sessionId.slice(0, 8)}...`,
+            );
+            this.eventEmitter.emit('audit.session.error', {
+              sessionId,
+              errors: detectedErrors,
+              timestamp: Date.now(),
+            });
+          }
 
           if (entry.type !== 'message') {
             continue;

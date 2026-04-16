@@ -10,6 +10,19 @@
   "workspaceWriteWhenAccessNoneEnabled": false,
   "im": {
     "enabled": true,
+    "errorMonitor": {
+      "enabled": true,
+      "targetChatId": "oc_1cc098e4fccdb74cc9d85d2a627392f8",
+      "minSeverity": "warning",
+      "aggregateWindowMs": 30000,
+      "patterns": {
+        "promptError": true,
+        "toolStatusError": true,
+        "nonZeroExit": true,
+        "stackTrace": true,
+        "consecutiveFailures": true
+      }
+    },
     "channels": {
       "feishu": {
         "enabled": true,

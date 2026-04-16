@@ -155,6 +155,12 @@ export class FeishuChannel implements ImChannel {
     try {
       const receiveIdType = this.config.receiveIdType || 'open_id';
 
+      // 支持自定义接收者（如群聊 chat_id）
+      const effectiveReceiveId =
+        options?.receive_id || this.config.targetUserId;
+      const effectiveReceiveIdType =
+        (options?.receive_id_type as string) || receiveIdType;
+
       // 如果有 reply_id，使用飞书官方的回复消息接口
       if (options?.reply_id) {
         return await this.sendReply(options.reply_id, content);
@@ -167,13 +173,13 @@ export class FeishuChannel implements ImChannel {
           : JSON.stringify(content.content);
 
       this.logger.log(
-        `Sending message: msg_type=${content.msg_type}, receive_id=${this.config.targetUserId}, content_length=${contentStr.length}`,
+        `Sending message: msg_type=${content.msg_type}, receive_id=${effectiveReceiveId}, receive_id_type=${effectiveReceiveIdType}, content_length=${contentStr.length}`,
       );
 
       const response = await this.client.im.message.create(
         {
           params: {
-            receive_id_type: receiveIdType as
+            receive_id_type: effectiveReceiveIdType as
               | 'open_id'
               | 'user_id'
               | 'union_id'
@@ -181,7 +187,7 @@ export class FeishuChannel implements ImChannel {
               | 'chat_id',
           },
           data: {
-            receive_id: this.config.targetUserId,
+            receive_id: effectiveReceiveId,
             msg_type: content.msg_type,
             content: contentStr,
           },
